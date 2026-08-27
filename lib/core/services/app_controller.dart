@@ -748,6 +748,25 @@ class AppController extends ChangeNotifier {
       online = true;
       notifyListeners();
     }
+    if (force) {
+      final delayed = queue
+          .where((item) => item.nextAttemptAt != null)
+          .toList();
+      if (delayed.isNotEmpty) {
+        queue = queue
+            .map(
+              (item) => item.nextAttemptAt == null
+                  ? item
+                  : item.copyWith(clearNextAttempt: true),
+            )
+            .toList();
+        for (final item in queue.where(
+          (candidate) => delayed.any((previous) => previous.id == candidate.id),
+        )) {
+          await local.saveQueue(item);
+        }
+      }
+    }
     syncing = true;
     notifyListeners();
     try {

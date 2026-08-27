@@ -69,7 +69,10 @@ class HomePage extends StatelessWidget {
           const SizedBox(height: 20),
           Card(
             child: ListTile(
-              leading: Icon(app.online ? Icons.cloud_done : Icons.cloud_off),
+              leading: _SyncStatusIcon(
+                syncing: app.syncing,
+                online: app.online,
+              ),
               title: Text(
                 app.syncing
                     ? 'Sincronizando'
@@ -87,6 +90,78 @@ class HomePage extends StatelessWidget {
                     : null,
                 icon: const Icon(Icons.sync),
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SyncStatusIcon extends StatefulWidget {
+  const _SyncStatusIcon({required this.syncing, required this.online});
+
+  final bool syncing;
+  final bool online;
+
+  @override
+  State<_SyncStatusIcon> createState() => _SyncStatusIconState();
+}
+
+class _SyncStatusIconState extends State<_SyncStatusIcon>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    );
+    if (widget.syncing) _controller.repeat();
+  }
+
+  @override
+  void didUpdateWidget(covariant _SyncStatusIcon oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.syncing && !oldWidget.syncing) {
+      _controller.repeat();
+    } else if (!widget.syncing && oldWidget.syncing) {
+      _controller
+        ..stop()
+        ..reset();
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!widget.syncing) {
+      return Icon(widget.online ? Icons.cloud_done : Icons.cloud_off);
+    }
+    return SizedBox(
+      width: 36,
+      height: 36,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          const Positioned(bottom: 2, child: Icon(Icons.cloud, size: 30)),
+          AnimatedBuilder(
+            animation: _controller,
+            builder: (context, child) => Transform.translate(
+              offset: Offset(0, 7 - (_controller.value * 12)),
+              child: child,
+            ),
+            child: Icon(
+              Icons.arrow_upward,
+              size: 17,
+              color: Theme.of(context).colorScheme.onPrimary,
             ),
           ),
         ],

@@ -429,7 +429,14 @@ void main() {
       'manual retry probes server even when connectivity state is stale',
       () async {
         app.surveys = [baseSurvey(surveyA)];
-        app.queue = [job(QueueOperation.openStep, step: 1)];
+        app.queue = [
+          job(
+            QueueOperation.openStep,
+            step: 1,
+            attempts: 6,
+            nextAttemptAt: DateTime.now().add(const Duration(hours: 1)),
+          ),
+        ];
         app.online = false;
 
         await app.synchronize(force: true);
