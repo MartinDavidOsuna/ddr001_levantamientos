@@ -118,13 +118,17 @@ void main() {
     expect(locationConfidence(100), LocationConfidence.weak);
   });
 
-  test('early acceptance requires excellent and temporally close fix', () {
+  test('early acceptance accepts good or excellent temporally close fix', () {
     expect(
       canEarlyAcceptLocationFix(fix(accuracy: 10, deltaSeconds: 30), capture),
       isTrue,
     );
     expect(
-      canEarlyAcceptLocationFix(fix(accuracy: 11, deltaSeconds: 5), capture),
+      canEarlyAcceptLocationFix(fix(accuracy: 25, deltaSeconds: 30), capture),
+      isTrue,
+    );
+    expect(
+      canEarlyAcceptLocationFix(fix(accuracy: 26, deltaSeconds: 5), capture),
       isFalse,
     );
     expect(

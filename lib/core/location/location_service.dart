@@ -140,7 +140,7 @@ double scoreLocationFix(
 
 bool canEarlyAcceptLocationFix(LocationFix fix, DateTime capturedAt) =>
     fix.validFor(capturedAt) &&
-    fix.horizontalAccuracy <= LocationEvidencePolicy.excellentAccuracy &&
+    fix.horizontalAccuracy <= LocationEvidencePolicy.goodAccuracy &&
     fix.ageAt(capturedAt).abs() <=
         LocationEvidencePolicy.preferredTemporalDelta;
 

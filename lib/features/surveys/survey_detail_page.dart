@@ -284,7 +284,8 @@ class _StepCard extends StatelessWidget {
                                     fit: BoxFit.cover,
                                   ),
                                 ),
-                                if (photo.locationPending)
+                                if (photo.locationState ==
+                                    PhotoLocationState.pending)
                                   const Positioned(
                                     right: 4,
                                     bottom: 4,
@@ -296,13 +297,33 @@ class _StepCard extends StatelessWidget {
                                       ),
                                     ),
                                   ),
+                                if (photo.locationState ==
+                                    PhotoLocationState.provisional)
+                                  const Positioned(
+                                    right: 4,
+                                    bottom: 4,
+                                    child: CircleAvatar(
+                                      radius: 12,
+                                      backgroundColor: Colors.amber,
+                                      child: Icon(
+                                        Icons.location_on_outlined,
+                                        color: Colors.black87,
+                                        size: 14,
+                                      ),
+                                    ),
+                                  ),
                                 if (photo.locationConfirmed)
                                   const Positioned(
                                     right: 4,
                                     bottom: 4,
                                     child: CircleAvatar(
                                       radius: 12,
-                                      child: Icon(Icons.location_on, size: 14),
+                                      backgroundColor: Colors.green,
+                                      child: Icon(
+                                        Icons.location_on,
+                                        color: Colors.white,
+                                        size: 14,
+                                      ),
                                     ),
                                   ),
                                 if (photo.locationUnresolved ||
