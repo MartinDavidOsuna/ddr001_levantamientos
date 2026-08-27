@@ -1,4 +1,5 @@
 import 'package:ddr001_levantamientos/domain/construction/construction_models.dart';
+import 'package:ddr001_levantamientos/features/surveys/surveys_page.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -16,6 +17,22 @@ void main() {
     const step = SurveyStep(number: 6, state: StepState.open);
     expect(step.minimumPhotos, 4);
     expect(step.maximumPhotos, isNull);
+  });
+  test('single En proceso filter includes created and in progress', () {
+    expect(surveyMatchesFilter(_survey(), SurveyListFilter.inProgress), isTrue);
+    expect(
+      surveyMatchesFilter(
+        _survey(status: SurveyStatus.inProgress),
+        SurveyListFilter.inProgress,
+      ),
+      isTrue,
+    );
+    expect(
+      SurveyListFilter.values
+          .map(surveyFilterLabel)
+          .where((label) => label == 'En proceso'),
+      hasLength(1),
+    );
   });
   test('location pending distinguishes missing and poor GPS', () {
     final photo = ConstructionPhoto(
@@ -41,6 +58,23 @@ void main() {
           )
           .locationPending,
       isFalse,
+    );
+  });
+  test('step 6 cardinal purpose survives local serialization', () {
+    final photo = ConstructionPhoto(
+      id: 'north',
+      surveyId: 's',
+      localPath: 'x',
+      thumbnailPath: 't',
+      sha256: List.filled(64, '0').join(),
+      capturedAt: DateTime.utc(2026),
+      stepNumber: 6,
+      purpose: PhotoPurpose.north,
+      syncState: PhotoSyncState.localOnly,
+    );
+    expect(
+      ConstructionPhoto.fromJson(photo.toJson()).purpose,
+      PhotoPurpose.north,
     );
   });
   test('completed state round-trips immutable marker', () {
@@ -104,13 +138,14 @@ void main() {
 BaseSurvey _survey({
   GeoPoint? canonical,
   List<CorrectionRound> corrections = const [],
+  SurveyStatus status = SurveyStatus.created,
 }) => BaseSurvey(
   id: 's',
   displayIdentifier: 'Losa 1',
   contractorName: 'A',
   createdAt: DateTime.utc(2026),
   updatedAt: DateTime.utc(2026),
-  status: SurveyStatus.created,
+  status: status,
   localState: LocalSurveyState.createdLocal,
   syncState: SyncState.pending,
   currentStep: 0,

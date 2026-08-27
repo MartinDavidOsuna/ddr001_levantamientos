@@ -8,12 +8,15 @@ import 'package:ddr001_levantamientos/domain/construction/construction_models.da
 import 'package:ddr001_levantamientos/features/auth/login_page.dart';
 import 'package:ddr001_levantamientos/features/home/home_page.dart';
 import 'package:ddr001_levantamientos/features/map/construction_map_page.dart';
+import 'package:ddr001_levantamientos/features/map/map_status_legend.dart';
 import 'package:ddr001_levantamientos/features/profile/profile_page.dart';
 import 'package:ddr001_levantamientos/features/surveys/new_survey_page.dart';
 import 'package:ddr001_levantamientos/features/surveys/survey_detail_page.dart';
 import 'package:ddr001_levantamientos/features/surveys/surveys_page.dart';
+import 'package:ddr001_levantamientos/features/shell/main_shell.dart';
+import 'package:ddr001_levantamientos/shared/widgets/optional_comment_field.dart';
 import 'package:dio/dio.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide StepState;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive_ce/hive.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -78,6 +81,8 @@ Widget page(AppController app, Widget child) => ChangeNotifierProvider.value(
   child: MaterialApp(home: child),
 );
 
+void ignoreComment(String _) {}
+
 void main() {
   testWidgets('login renders exact field auth inputs', (tester) async {
     final (app, root) = (await tester.runAsync(
@@ -103,6 +108,21 @@ void main() {
     expect(find.text('INICIAR NUEVO LEVANTAMIENTO'), findsOneWidget);
     expect(find.text('MIS LEVANTAMIENTOS'), findsOneWidget);
   });
+  testWidgets('home Mis levantamientos selects shared surveys tab', (
+    tester,
+  ) async {
+    final (app, root) = (await tester.runAsync(
+      () => controller(ConstructionRole.contractor),
+    ))!;
+    addTearDown(() async {
+      await Hive.close();
+      await root.delete(recursive: true);
+    });
+    await tester.pumpWidget(page(app, const MainShell()));
+    await tester.tap(find.byKey(const Key('my_surveys_action')));
+    await tester.pumpAndSettle();
+    expect(find.text('Mis levantamientos'), findsOneWidget);
+  });
   testWidgets('new survey requires display identifier UI', (tester) async {
     final (app, root) = (await tester.runAsync(
       () => controller(ConstructionRole.contractor),
@@ -113,7 +133,7 @@ void main() {
     });
     await tester.pumpWidget(page(app, const NewSurveyPage()));
     expect(find.byKey(const Key('display_identifier')), findsOneWidget);
-    expect(find.textContaining('cuenta se asignará'), findsOneWidget);
+    expect(find.byKey(const Key('account_number')), findsOneWidget);
   });
   testWidgets('survey step capture shows camera-only action', (tester) async {
     final (app, root) = (await tester.runAsync(
@@ -128,6 +148,41 @@ void main() {
     expect(find.byKey(const Key('camera_1')), findsOneWidget);
     expect(find.text('Tomar foto'), findsOneWidget);
   });
+  testWidgets('step 6 requests cardinal directions before additional photos', (
+    tester,
+  ) async {
+    final (app, root) = (await tester.runAsync(
+      () => controller(ConstructionRole.contractor),
+    ))!;
+    addTearDown(() async {
+      await Hive.close();
+      await root.delete(recursive: true);
+    });
+    final survey = (await tester.runAsync(() => app.createSurvey('Final')))!;
+    app.surveys = [
+      survey.copyWith(
+        currentStep: 5,
+        steps: List.generate(
+          6,
+          (index) => SurveyStep(
+            number: index + 1,
+            state: index == 5 ? StepState.open : StepState.completedLocal,
+          ),
+        ),
+      ),
+    ];
+    await tester.pumpWidget(page(app, SurveyDetailPage(surveyId: survey.id)));
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('step6_next_photo')),
+      400,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('Foto requerida: NORTE'), findsOneWidget);
+    expect(find.text('NORTE'), findsOneWidget);
+    expect(find.text('ESTE'), findsOneWidget);
+    expect(find.text('SUR'), findsOneWidget);
+    expect(find.text('OESTE'), findsOneWidget);
+  });
   testWidgets('surveys offers search and filters', (tester) async {
     final (app, root) = (await tester.runAsync(
       () => controller(ConstructionRole.contractor),
@@ -139,6 +194,90 @@ void main() {
     await tester.pumpWidget(page(app, const SurveysPage()));
     expect(find.byKey(const Key('survey_search')), findsOneWidget);
     expect(find.text('Todos'), findsOneWidget);
+    expect(find.widgetWithText(FilterChip, 'En proceso'), findsOneWidget);
+  });
+  testWidgets('survey account is rendered instead of Sin cuenta', (
+    tester,
+  ) async {
+    final (app, root) = (await tester.runAsync(
+      () => controller(ConstructionRole.contractor),
+    ))!;
+    addTearDown(() async {
+      await Hive.close();
+      await root.delete(recursive: true);
+    });
+    await tester.runAsync(
+      () => app.createSurvey('Losa cuenta', accountNumber: '890'),
+    );
+    await tester.pumpWidget(page(app, const SurveysPage()));
+    expect(find.textContaining('890 ·'), findsOneWidget);
+    expect(find.textContaining('Sin cuenta'), findsNothing);
+  });
+  testWidgets('completion feedback supports continue and home choices', (
+    tester,
+  ) async {
+    StepSavedAction? result;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => TextButton(
+            onPressed: () async =>
+                result = await showStepSavedDialog(context, step: 1),
+            child: const Text('open'),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    expect(find.text('Información guardada'), findsOneWidget);
+    expect(find.textContaining('guardada en el dispositivo'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('saved_continue')));
+    await tester.pumpAndSettle();
+    expect(result, StepSavedAction.continueSurvey);
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('saved_home')));
+    await tester.pumpAndSettle();
+    expect(result, StepSavedAction.home);
+  });
+  testWidgets('optional comment label remains visible while focused', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: OptionalCommentField(
+            initialValue: null,
+            enabled: true,
+            onChanged: ignoreComment,
+          ),
+        ),
+      ),
+    );
+    expect(find.text('Comentario opcional'), findsOneWidget);
+    await tester.enterText(
+      find.byKey(const Key('optional_comment_field')),
+      'Comentario',
+    );
+    await tester.pump();
+    expect(find.text('Comentario opcional'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets('map legend is visible, collapses and reopens', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(body: Stack(children: [MapStatusLegend()])),
+      ),
+    );
+    expect(find.text('Aceptado / Entregable'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('collapse_map_legend')));
+    await tester.pump();
+    expect(find.text('Ejecutado'), findsNothing);
+    await tester.tap(find.byKey(const Key('expand_map_legend')));
+    await tester.pump();
+    expect(find.text('En proceso'), findsOneWidget);
+    expect(find.text('Entregado'), findsOneWidget);
   });
   testWidgets('map and profile have graceful empty and identity states', (
     tester,
