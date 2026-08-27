@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:uuid/uuid.dart';
+import '../identity/uuid_identity.dart';
 
 class FieldSession {
   const FieldSession({
@@ -47,11 +48,11 @@ class FieldSession {
     'crew': crew,
   };
   factory FieldSession.fromJson(Map<String, dynamic> j) => FieldSession(
-    sessionId: '${j['sessionId']}',
-    userId: '${j['userId']}',
+    sessionId: canonicalUuid('${j['sessionId']}'),
+    userId: canonicalUuid('${j['userId']}'),
     accessToken: '${j['accessToken']}',
     refreshToken: '${j['refreshToken']}',
-    installationId: '${j['installationId']}',
+    installationId: canonicalUuid('${j['installationId']}'),
     name: '${j['name']}',
     email: '${j['email']}',
     phone: '${j['phone']}',
@@ -90,8 +91,8 @@ class SecureSessionStore implements SessionStore {
   @override
   Future<String> installationId() async {
     final found = await _storage.read(key: _installation);
-    if (found?.isNotEmpty == true) return found!;
-    final id = const Uuid().v4();
+    if (found?.isNotEmpty == true) return canonicalUuid(found!);
+    final id = canonicalUuid(const Uuid().v4());
     await _storage.write(key: _installation, value: id);
     return id;
   }

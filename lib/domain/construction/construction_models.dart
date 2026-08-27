@@ -1,3 +1,5 @@
+import '../../core/identity/uuid_identity.dart';
+
 enum ConstructionRole { contractor, resident }
 
 enum SurveyStatus {
@@ -146,14 +148,14 @@ class ConstructionPhoto {
   };
   factory ConstructionPhoto.fromJson(Map<String, dynamic> j) =>
       ConstructionPhoto(
-        id: j['id'] as String,
-        surveyId: j['surveyId'] as String,
+        id: canonicalUuid(j['id'] as String),
+        surveyId: canonicalUuid(j['surveyId'] as String),
         localPath: j['localPath'] as String,
         thumbnailPath: j['thumbnailPath'] as String,
         sha256: j['sha256'] as String,
         capturedAt: DateTime.parse(j['capturedAt'] as String),
         stepNumber: j['stepNumber'] as int?,
-        correctionId: j['correctionId'] as String?,
+        correctionId: canonicalUuidOrNull(j['correctionId'] as String?),
         location: j['location'] == null
             ? null
             : GeoPoint.fromJson(
@@ -199,7 +201,9 @@ class SurveyStep {
     number: j['number'] as int,
     state: StepState.values.byName(j['state'] as String),
     comment: j['comment'] as String?,
-    photoIds: List<String>.from(j['photoIds'] as List? ?? const []),
+    photoIds: canonicalUuidList(
+      List<String>.from(j['photoIds'] as List? ?? const []),
+    ),
   );
 }
 
@@ -224,11 +228,13 @@ class CorrectionRound {
     'photoIds': photoIds,
   };
   factory CorrectionRound.fromJson(Map<String, dynamic> j) => CorrectionRound(
-    id: j['id'] as String,
+    id: canonicalUuid(j['id'] as String),
     round: j['round'] as int,
     state: StepState.values.byName(j['state'] as String),
     comment: j['comment'] as String?,
-    photoIds: List<String>.from(j['photoIds'] as List? ?? const []),
+    photoIds: canonicalUuidList(
+      List<String>.from(j['photoIds'] as List? ?? const []),
+    ),
   );
 }
 
@@ -303,7 +309,7 @@ class BaseSurvey {
     'rejectionReason': rejectionReason,
   };
   factory BaseSurvey.fromJson(Map<String, dynamic> j) => BaseSurvey(
-    id: j['id'] as String,
+    id: canonicalUuid(j['id'] as String),
     displayIdentifier: j['displayIdentifier'] as String,
     accountNumber: j['accountNumber'] as String?,
     contractorName: j['contractorName'] as String? ?? '',
@@ -351,7 +357,7 @@ class ConstructionProfile {
   };
   factory ConstructionProfile.fromJson(Map<String, dynamic> j) =>
       ConstructionProfile(
-        userId: '${j['userId']}',
+        userId: canonicalUuid('${j['userId']}'),
         displayName: '${j['displayName'] ?? ''}',
         email: '${j['email'] ?? ''}',
         phone: '${j['phone'] ?? ''}',
@@ -409,11 +415,11 @@ class SyncQueueItem {
   };
   factory SyncQueueItem.fromJson(Map<String, dynamic> j) => SyncQueueItem(
     id: j['id'] as String,
-    surveyId: j['surveyId'] as String,
+    surveyId: canonicalUuid(j['surveyId'] as String),
     operation: QueueOperation.values.byName(j['operation'] as String),
-    photoId: j['photoId'] as String?,
+    photoId: canonicalUuidOrNull(j['photoId'] as String?),
     step: j['step'] as int?,
-    correctionId: j['correctionId'] as String?,
+    correctionId: canonicalUuidOrNull(j['correctionId'] as String?),
     attempts: j['attempts'] as int? ?? 0,
     createdAt: DateTime.parse(j['createdAt'] as String),
     nextAttemptAt: j['nextAttemptAt'] == null

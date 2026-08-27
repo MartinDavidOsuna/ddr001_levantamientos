@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 import '../../domain/construction/construction_models.dart';
+import '../identity/uuid_identity.dart';
 
 class PhotoCaptureService {
   Future<ConstructionPhoto?> capture({
@@ -19,12 +20,13 @@ class PhotoCaptureService {
       imageQuality: 95,
     );
     if (picked == null) return null;
-    final id = const Uuid().v4(),
+    final id = canonicalUuid(const Uuid().v4()),
+        canonicalSurveyId = canonicalUuid(surveyId),
         root = Directory(
           p.join(
             (await getApplicationDocumentsDirectory()).path,
             'construction',
-            surveyId,
+            canonicalSurveyId,
           ),
         );
     await root.create(recursive: true);
@@ -55,13 +57,13 @@ class PhotoCaptureService {
         .toString();
     return ConstructionPhoto(
       id: id,
-      surveyId: surveyId,
+      surveyId: canonicalSurveyId,
       localPath: normalized.path,
       thumbnailPath: thumb.path,
       sha256: digest,
       capturedAt: DateTime.now().toUtc(),
       stepNumber: step,
-      correctionId: correctionId,
+      correctionId: canonicalUuidOrNull(correctionId),
       purpose: purpose,
       syncState: PhotoSyncState.localOnly,
     );

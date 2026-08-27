@@ -8,10 +8,12 @@ import 'package:uuid/uuid.dart';
 import '../../data/remote/construction_api.dart';
 import '../../domain/construction/construction_models.dart';
 import '../config/app_config.dart';
+import '../identity/uuid_identity.dart';
 import '../location/location_service.dart';
 import '../media/photo_capture_service.dart';
 import '../network/api_client.dart';
 import '../persistence/local_store.dart';
+import '../persistence/uuid_hive_migration.dart';
 import '../security/session_store.dart';
 
 class AppController extends ChangeNotifier {
@@ -156,7 +158,7 @@ class AppController extends ChangeNotifier {
     }
     final now = DateTime.now().toUtc();
     final survey = BaseSurvey(
-      id: const Uuid().v4(),
+      id: canonicalUuid(const Uuid().v4()),
       displayIdentifier: clean,
       accountNumber: cleanAccount == null || cleanAccount.isEmpty
           ? null
@@ -183,11 +185,12 @@ class AppController extends ChangeNotifier {
     return survey;
   }
 
-  BaseSurvey survey(String id) => surveys.firstWhere((s) => s.id == id);
+  BaseSurvey survey(String id) =>
+      surveys.firstWhere((s) => uuidEquals(s.id, id));
   List<ConstructionPhoto> photosForStep(String surveyId, int step) => photos
       .where(
         (p) =>
-            p.surveyId == surveyId &&
+            uuidEquals(p.surveyId, surveyId) &&
             p.stepNumber == step &&
             p.syncState != PhotoSyncState.deleted,
       )
@@ -255,7 +258,7 @@ class AppController extends ChangeNotifier {
   Future<void> _resolveLocation(String photoId) async {
     try {
       final point = await locations.capture(),
-          photo = photos.firstWhere((p) => p.id == photoId),
+          photo = photos.firstWhere((p) => uuidEquals(p.id, photoId)),
           updated = photo.copyWith(
             location: point,
             syncState: PhotoSyncState.queued,
@@ -282,7 +285,7 @@ class AppController extends ChangeNotifier {
     if (current.state != StepState.open) {
       throw StateError('La evidencia finalizada es inmutable.');
     }
-    final photo = photos.firstWhere((p) => p.id == photoId);
+    final photo = photos.firstWhere((p) => uuidEquals(p.id, photoId));
     final needsRemoteDelete = const {
       PhotoSyncState.uploadedUnverified,
       PhotoSyncState.verifying,
@@ -290,22 +293,26 @@ class AppController extends ChangeNotifier {
       PhotoSyncState.retryRequired,
       PhotoSyncState.mappingConflict,
     }.contains(photo.syncState);
-    final photoQueue = queue.where((item) => item.photoId == photoId).toList();
+    final photoQueue = queue
+        .where((item) => uuidEquals(item.photoId, photoId))
+        .toList();
     for (final item in photoQueue) {
       await local.deleteQueue(item.id);
     }
-    queue = queue.where((item) => item.photoId != photoId).toList();
+    queue = queue.where((item) => !uuidEquals(item.photoId, photoId)).toList();
     await File(
       photo.localPath,
     ).delete().catchError((_) => File(photo.localPath));
     await File(
       photo.thumbnailPath,
     ).delete().catchError((_) => File(photo.thumbnailPath));
-    photos = photos.where((p) => p.id != photoId).toList();
-    await local.deletePhoto(photoId);
+    photos = photos.where((p) => !uuidEquals(p.id, photoId)).toList();
+    await local.deletePhoto(canonicalUuid(photoId));
     final steps = [...s.steps];
     steps[step - 1] = current.copyWith(
-      photoIds: current.photoIds.where((id) => id != photoId).toList(),
+      photoIds: current.photoIds
+          .where((id) => !uuidEquals(id, photoId))
+          .toList(),
     );
     await _replaceSurvey(s.copyWith(steps: steps));
     if (needsRemoteDelete) {
@@ -370,6 +377,8 @@ class AppController extends ChangeNotifier {
     String correctionId,
     int round,
   ) async {
+    surveyId = canonicalUuid(surveyId);
+    correctionId = canonicalUuid(correctionId);
     final s = survey(surveyId);
     if (s.status != SurveyStatus.rejected) {
       throw StateError('Sólo un levantamiento rechazado puede corregirse.');
@@ -391,7 +400,7 @@ class AppController extends ChangeNotifier {
   List<ConstructionPhoto> photosForCorrection(String correctionId) => photos
       .where(
         (p) =>
-            p.correctionId == correctionId &&
+            uuidEquals(p.correctionId, correctionId) &&
             p.syncState != PhotoSyncState.deleted,
       )
       .toList();
@@ -401,7 +410,9 @@ class AppController extends ChangeNotifier {
     String correctionId,
   ) async {
     final s = survey(surveyId);
-    final correction = s.corrections.firstWhere((c) => c.id == correctionId);
+    final correction = s.corrections.firstWhere(
+      (c) => uuidEquals(c.id, correctionId),
+    );
     if (correction.state != StepState.open) {
       throw StateError('La corrección está cerrada.');
     }
@@ -414,7 +425,7 @@ class AppController extends ChangeNotifier {
     await local.savePhoto(pending);
     final corrections = s.corrections
         .map(
-          (c) => c.id == correctionId
+          (c) => uuidEquals(c.id, correctionId)
               ? CorrectionRound(
                   id: c.id,
                   round: c.round,
@@ -433,7 +444,7 @@ class AppController extends ChangeNotifier {
 
   Future<void> finalizeCorrection(String surveyId, String correctionId) async {
     final related = photos
-        .where((p) => p.correctionId == correctionId)
+        .where((p) => uuidEquals(p.correctionId, correctionId))
         .toList();
     if (related.isEmpty || related.any((p) => p.locationPending)) {
       throw StateError('La corrección requiere foto con GPS.');
@@ -441,7 +452,7 @@ class AppController extends ChangeNotifier {
     final s = survey(surveyId);
     final corrections = s.corrections
         .map(
-          (c) => c.id == correctionId
+          (c) => uuidEquals(c.id, correctionId)
               ? CorrectionRound(
                   id: c.id,
                   round: c.round,
@@ -476,7 +487,7 @@ class AppController extends ChangeNotifier {
       current.copyWith(
         corrections: current.corrections
             .map(
-              (c) => c.id == correctionId
+              (c) => uuidEquals(c.id, correctionId)
                   ? CorrectionRound(
                       id: c.id,
                       round: c.round,
@@ -553,7 +564,7 @@ class AppController extends ChangeNotifier {
           s.steps[item.step! - 1].comment,
         );
       case QueueOperation.uploadPhoto:
-        final p = photos.firstWhere((x) => x.id == item.photoId);
+        final p = photos.firstWhere((x) => uuidEquals(x.id, item.photoId));
         await _replacePhoto(p.copyWith(syncState: PhotoSyncState.uploading));
         await remote.upload(p);
         await _replacePhoto(
@@ -581,13 +592,13 @@ class AppController extends ChangeNotifier {
         );
       case QueueOperation.completeCorrection:
         final related = photos
-            .where((p) => p.correctionId == item.correctionId)
+            .where((p) => uuidEquals(p.correctionId, item.correctionId))
             .toList();
         if (related.any((p) => p.syncState != PhotoSyncState.confirmed)) {
           throw StateError('EVIDENCE_NOT_SYNCED');
         }
         final correction = s.corrections.firstWhere(
-          (c) => c.id == item.correctionId,
+          (c) => uuidEquals(c.id, item.correctionId),
         );
         await remote.correctionComment(s.id, correction.id, correction.comment);
         await remote.completeCorrection(s.id, item.correctionId!);
@@ -595,12 +606,12 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> _verify(String id) async {
-    final p = photos.firstWhere((x) => x.id == id);
+    final p = photos.firstWhere((x) => uuidEquals(x.id, id));
     await _replacePhoto(p.copyWith(syncState: PhotoSyncState.verifying));
     final raw = await remote.verify([id]),
         items = raw['items'] as List? ?? raw['results'] as List? ?? const [];
     final row = items.whereType<Map>().cast<Map>().firstWhere(
-          (x) => '${x['photoId'] ?? x['photo_id']}' == id,
+          (x) => uuidEquals('${x['photoId'] ?? x['photo_id']}', id),
           orElse: () => {'status': 'not_found'},
         ),
         status = '${row['status'] ?? row['integrityStatus']}';
@@ -647,8 +658,8 @@ class AppController extends ChangeNotifier {
         status: status,
       );
       for (final row in rows) {
-        final id = '${row['survey_id'] ?? row['surveyId']}';
-        final index = surveys.indexWhere((s) => s.id == id);
+        final id = canonicalUuid('${row['survey_id'] ?? row['surveyId']}');
+        final index = surveys.indexWhere((s) => uuidEquals(s.id, id));
         if (index >= 0) {
           final localSurvey = surveys[index],
               wireStatus = _status('${row['status']}');
@@ -660,7 +671,7 @@ class AppController extends ChangeNotifier {
             ) {
               final correction = Map<String, dynamic>.from(value as Map);
               return CorrectionRound(
-                id: '${correction['correction_id']}',
+                id: canonicalUuid('${correction['correction_id']}'),
                 round: (correction['round_number'] as num).toInt(),
                 state: '${correction['status']}' == 'completed'
                     ? StepState.completedServer
@@ -752,17 +763,25 @@ class AppController extends ChangeNotifier {
     int? step,
     String? correctionId,
   }) async {
-    final key =
-        '$surveyId-${operation.name}-${photoId ?? step ?? correctionId ?? ''}';
+    final normalized = SyncQueueItem(
+      id: '',
+      surveyId: canonicalUuid(surveyId),
+      operation: operation,
+      createdAt: DateTime.now().toUtc(),
+      photoId: canonicalUuidOrNull(photoId),
+      step: step,
+      correctionId: canonicalUuidOrNull(correctionId),
+    );
+    final key = canonicalQueueItemId(normalized);
     if (queue.any((q) => q.id == key)) return;
     final item = SyncQueueItem(
       id: key,
-      surveyId: surveyId,
+      surveyId: normalized.surveyId,
       operation: operation,
       createdAt: DateTime.now().toUtc(),
-      photoId: photoId,
+      photoId: normalized.photoId,
       step: step,
-      correctionId: correctionId,
+      correctionId: normalized.correctionId,
     );
     queue = [...queue, item];
     await local.saveQueue(item);
@@ -770,13 +789,15 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> _replaceSurvey(BaseSurvey value) async {
-    surveys = surveys.map((s) => s.id == value.id ? value : s).toList();
+    surveys = surveys
+        .map((s) => uuidEquals(s.id, value.id) ? value : s)
+        .toList();
     await local.saveSurvey(value);
     notifyListeners();
   }
 
   Future<void> _replacePhoto(ConstructionPhoto value) async {
-    photos = photos.map((p) => p.id == value.id ? value : p).toList();
+    photos = photos.map((p) => uuidEquals(p.id, value.id) ? value : p).toList();
     await local.savePhoto(value);
     notifyListeners();
   }

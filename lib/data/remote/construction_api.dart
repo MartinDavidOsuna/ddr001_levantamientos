@@ -5,9 +5,10 @@ import 'package:package_info_plus/package_info_plus.dart';
 import '../../core/network/api_client.dart';
 import '../../core/security/session_store.dart';
 import '../../domain/construction/construction_models.dart';
+import '../../core/identity/uuid_identity.dart';
 
 Map<String, dynamic> surveyCreatePayload(BaseSurvey survey) => {
-  'surveyId': survey.id,
+  'surveyId': canonicalUuid(survey.id),
   'displayIdentifier': survey.displayIdentifier,
   'accountNumber': survey.accountNumber,
 };
@@ -58,8 +59,8 @@ class ConstructionApi {
     );
     final j = response.data ?? const {};
     final value = FieldSession(
-      sessionId: '${j['sessionId']}',
-      userId: '${j['userId']}',
+      sessionId: canonicalUuid('${j['sessionId']}'),
+      userId: canonicalUuid('${j['userId']}'),
       accessToken: '${j['accessToken']}',
       refreshToken: '${j['refreshToken']}',
       installationId: installation,
@@ -105,25 +106,30 @@ class ConstructionApi {
       )).data ??
       const {};
   Future<void> openStep(String survey, int step) => client.dio.post<void>(
-    '/construction/base-surveys/$survey/steps/$step/open',
-    options: Options(headers: {'Idempotency-Key': 'open-$survey-$step'}),
+    '/construction/base-surveys/${canonicalUuid(survey)}/steps/$step/open',
+    options: Options(
+      headers: {'Idempotency-Key': 'open-${canonicalUuid(survey)}-$step'},
+    ),
   );
   Future<void> commentStep(String survey, int step, String? comment) =>
       client.dio.patch<void>(
-        '/construction/base-surveys/$survey/steps/$step',
+        '/construction/base-surveys/${canonicalUuid(survey)}/steps/$step',
         data: {'comment': comment},
       );
   Future<void> completeStep(String survey, int step) => client.dio.post<void>(
-    '/construction/base-surveys/$survey/steps/$step/complete',
-    options: Options(headers: {'Idempotency-Key': 'complete-$survey-$step'}),
+    '/construction/base-surveys/${canonicalUuid(survey)}/steps/$step/complete',
+    options: Options(
+      headers: {'Idempotency-Key': 'complete-${canonicalUuid(survey)}-$step'},
+    ),
   );
   Future<void> upload(ConstructionPhoto photo) async {
     final location = photo.location!;
-    final path = photo.correctionId == null
-        ? '/construction/base-surveys/${photo.surveyId}/steps/${photo.stepNumber}/photos'
-        : '/construction/base-surveys/${photo.surveyId}/corrections/${photo.correctionId}/photos';
+    final surveyId = canonicalUuid(photo.surveyId),
+        path = photo.correctionId == null
+            ? '/construction/base-surveys/$surveyId/steps/${photo.stepNumber}/photos'
+            : '/construction/base-surveys/$surveyId/corrections/${canonicalUuid(photo.correctionId!)}/photos';
     final form = FormData.fromMap({
-      'photoId': photo.id,
+      'photoId': canonicalUuid(photo.id),
       'clientSha256': photo.sha256,
       'capturedAt': photo.capturedAt.toUtc().toIso8601String(),
       'latitude': location.latitude,
@@ -144,16 +150,20 @@ class ConstructionApi {
     );
   }
 
-  Future<void> deletePhoto(String surveyId, String photoId) =>
-      client.dio.delete<void>(
-        '/construction/base-surveys/$surveyId/photos/$photoId',
-        options: Options(headers: {'Idempotency-Key': 'delete-photo-$photoId'}),
-      );
+  Future<void> deletePhoto(
+    String surveyId,
+    String photoId,
+  ) => client.dio.delete<void>(
+    '/construction/base-surveys/${canonicalUuid(surveyId)}/photos/${canonicalUuid(photoId)}',
+    options: Options(
+      headers: {'Idempotency-Key': 'delete-photo-${canonicalUuid(photoId)}'},
+    ),
+  );
 
   Future<Map<String, dynamic>> verify(List<String> ids) async =>
       (await client.dio.post<Map<String, dynamic>>(
         '/construction/photos/verify-batch',
-        data: {'photoIds': ids.take(100).toList()},
+        data: {'photoIds': ids.take(100).map(canonicalUuid).toList()},
       )).data ??
       const {};
   Future<List<Map<String, dynamic>>> list({
@@ -194,19 +204,21 @@ class ConstructionApi {
 
   Future<Map<String, dynamic>> detail(String surveyId) async =>
       (await client.dio.get<Map<String, dynamic>>(
-        '/construction/base-surveys/$surveyId',
+        '/construction/base-surveys/${canonicalUuid(surveyId)}',
       )).data ??
       const {};
 
-  Future<void> residentUpdate(String id, Map<String, dynamic> values) => client
-      .dio
-      .patch<void>('/construction/resident/base-surveys/$id', data: values);
+  Future<void> residentUpdate(String id, Map<String, dynamic> values) =>
+      client.dio.patch<void>(
+        '/construction/resident/base-surveys/${canonicalUuid(id)}',
+        data: values,
+      );
   Future<void> residentAction(
     String id,
     String action, [
     Map<String, dynamic>? body,
   ]) => client.dio.post<void>(
-    '/construction/resident/base-surveys/$id/$action',
+    '/construction/resident/base-surveys/${canonicalUuid(id)}/$action',
     data: body,
     options: Options(headers: {'Idempotency-Key': '$action-$id'}),
   );
@@ -215,7 +227,7 @@ class ConstructionApi {
     GeoPoint point,
     String reason,
   ) => client.dio.post<void>(
-    '/construction/resident/base-surveys/$id/canonical-location',
+    '/construction/resident/base-surveys/${canonicalUuid(id)}/canonical-location',
     data: {
       'latitude': point.latitude,
       'longitude': point.longitude,
@@ -229,14 +241,16 @@ class ConstructionApi {
     String correction,
     String? comment,
   ) => client.dio.patch<void>(
-    '/construction/base-surveys/$survey/corrections/$correction',
+    '/construction/base-surveys/${canonicalUuid(survey)}/corrections/${canonicalUuid(correction)}',
     data: {'comment': comment},
   );
-  Future<void> completeCorrection(String survey, String correction) =>
-      client.dio.post<void>(
-        '/construction/base-surveys/$survey/corrections/$correction/complete',
-        options: Options(
-          headers: {'Idempotency-Key': 'correction-$correction'},
-        ),
-      );
+  Future<void> completeCorrection(
+    String survey,
+    String correction,
+  ) => client.dio.post<void>(
+    '/construction/base-surveys/${canonicalUuid(survey)}/corrections/${canonicalUuid(correction)}/complete',
+    options: Options(
+      headers: {'Idempotency-Key': 'correction-${canonicalUuid(correction)}'},
+    ),
+  );
 }

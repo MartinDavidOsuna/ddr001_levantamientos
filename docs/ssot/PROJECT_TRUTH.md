@@ -1,5 +1,12 @@
 # Project Truth
 
+## UUID identity
+
+SQL Server puede serializar `UNIQUEIDENTIFIER` en mayúsculas. Flutter usa siempre
+lowercase como representación canónica para todos los UUID Construction. Una
+diferencia de case jamás crea otra entidad. Storage schema v2 repara de forma
+silenciosa instalaciones legacy sin borrar carpetas ni archivos fotográficos.
+
 - Proyecto: `ddr001_levantamientos`, versión `0.1.0+1`.
 - Android applicationId e iOS bundle id: `com.aquafim.ddr001levantamientos`.
 - Nombre visible: DDR001 Levantamientos.
