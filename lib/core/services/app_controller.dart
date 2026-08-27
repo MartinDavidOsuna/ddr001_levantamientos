@@ -46,6 +46,7 @@ class AppController extends ChangeNotifier {
   String? message;
   String? pendingTakeoverToken;
   StreamSubscription<List<ConnectivityResult>>? _connectivity;
+  Timer? _offlineConnectivityPoll;
   StreamSubscription<LocationFix>? _locationFixes;
   final Map<String, Timer> _locationDeadlines = {};
   int _locationFlowDepth = 0;
@@ -59,11 +60,9 @@ class AppController extends ChangeNotifier {
     profile = local.profile();
     session = await sessions.read();
     await _recoverPendingLocations();
-    _connectivity = Connectivity().onConnectivityChanged.listen((values) {
-      online = !values.contains(ConnectivityResult.none);
-      notifyListeners();
-      if (online && session != null) unawaited(synchronize());
-    });
+    final connectivity = Connectivity();
+    _setConnectivity(await connectivity.checkConnectivity());
+    _connectivity = connectivity.onConnectivityChanged.listen(_setConnectivity);
     if (session != null) {
       try {
         profile = await remote.profile();
@@ -77,9 +76,40 @@ class AppController extends ChangeNotifier {
     }
   }
 
+  void _setConnectivity(List<ConnectivityResult> values) {
+    final wasOnline = online;
+    online = values.any((result) => result != ConnectivityResult.none);
+    if (online) {
+      _offlineConnectivityPoll?.cancel();
+      _offlineConnectivityPoll = null;
+    } else {
+      _startOfflineConnectivityPoll();
+    }
+    notifyListeners();
+    if (online && session != null && (!wasOnline || queue.isNotEmpty)) {
+      unawaited(synchronize());
+    }
+  }
+
+  void _startOfflineConnectivityPoll() {
+    _offlineConnectivityPoll ??= Timer.periodic(const Duration(seconds: 3), (
+      _,
+    ) async {
+      try {
+        final values = await Connectivity().checkConnectivity();
+        if (values.any((result) => result != ConnectivityResult.none)) {
+          _setConnectivity(values);
+        }
+      } catch (_) {
+        // The next tick retries; queue and offline capture remain untouched.
+      }
+    });
+  }
+
   @override
   void dispose() {
     _connectivity?.cancel();
+    _offlineConnectivityPoll?.cancel();
     _locationFixes?.cancel();
     for (final timer in _locationDeadlines.values) {
       timer.cancel();
@@ -712,8 +742,12 @@ class AppController extends ChangeNotifier {
     );
   }
 
-  Future<void> synchronize() async {
-    if (syncing || !online || session == null) return;
+  Future<void> synchronize({bool force = false}) async {
+    if (syncing || session == null || (!online && !force)) return;
+    if (force && !online) {
+      online = true;
+      notifyListeners();
+    }
     syncing = true;
     notifyListeners();
     try {

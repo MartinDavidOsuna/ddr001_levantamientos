@@ -425,6 +425,21 @@ void main() {
       await root.delete(recursive: true);
     });
 
+    test(
+      'manual retry probes server even when connectivity state is stale',
+      () async {
+        app.surveys = [baseSurvey(surveyA)];
+        app.queue = [job(QueueOperation.openStep, step: 1)];
+        app.online = false;
+
+        await app.synchronize(force: true);
+
+        expect(app.online, isTrue);
+        expect(app.queue, isEmpty);
+        expect(remote.events, contains('${surveyA.toLowerCase()}:open:1'));
+      },
+    );
+
     test('legacy step 1 to 2 replay drains pending count', () async {
       app.surveys = [baseSurvey(surveyA)];
       app.photos = [

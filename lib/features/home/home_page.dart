@@ -81,7 +81,10 @@ class HomePage extends StatelessWidget {
               ),
               subtitle: Text('${app.queue.length} operaciones pendientes'),
               trailing: IconButton(
-                onPressed: app.online ? app.synchronize : null,
+                tooltip: 'Intentar sincronizar',
+                onPressed: app.session != null && !app.syncing
+                    ? () => app.synchronize(force: true)
+                    : null,
                 icon: const Icon(Icons.sync),
               ),
             ),
