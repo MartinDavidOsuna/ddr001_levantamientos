@@ -6,6 +6,12 @@ import '../../core/network/api_client.dart';
 import '../../core/security/session_store.dart';
 import '../../domain/construction/construction_models.dart';
 
+Map<String, dynamic> surveyCreatePayload(BaseSurvey survey) => {
+  'surveyId': survey.id,
+  'displayIdentifier': survey.displayIdentifier,
+  'accountNumber': survey.accountNumber,
+};
+
 class ConstructionApi {
   ConstructionApi(this.client, this.sessions, this.packageInfo);
   final ApiClient client;
@@ -94,11 +100,7 @@ class ConstructionApi {
   Future<Map<String, dynamic>> createSurvey(BaseSurvey survey) async =>
       (await client.dio.post<Map<String, dynamic>>(
         '/construction/base-surveys',
-        data: {
-          'surveyId': survey.id,
-          'displayIdentifier': survey.displayIdentifier,
-          'accountNumber': survey.accountNumber,
-        },
+        data: surveyCreatePayload(survey),
         options: Options(headers: {'Idempotency-Key': 'survey-${survey.id}'}),
       )).data ??
       const {};
@@ -128,6 +130,7 @@ class ConstructionApi {
       'longitude': location.longitude,
       'accuracy': location.accuracy,
       if (location.altitude != null) 'altitude': location.altitude,
+      if (photo.purpose != null) 'photoPurpose': photo.purpose!.name,
       'photo': await MultipartFile.fromFile(
         photo.localPath,
         filename: '${photo.id}.jpg',
@@ -140,6 +143,12 @@ class ConstructionApi {
       options: Options(headers: {'Idempotency-Key': 'photo-${photo.id}'}),
     );
   }
+
+  Future<void> deletePhoto(String surveyId, String photoId) =>
+      client.dio.delete<void>(
+        '/construction/base-surveys/$surveyId/photos/$photoId',
+        options: Options(headers: {'Idempotency-Key': 'delete-photo-$photoId'}),
+      );
 
   Future<Map<String, dynamic>> verify(List<String> ids) async =>
       (await client.dio.post<Map<String, dynamic>>(

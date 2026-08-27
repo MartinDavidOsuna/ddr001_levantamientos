@@ -12,6 +12,7 @@ class PhotoCaptureService {
     required String surveyId,
     int? step,
     String? correctionId,
+    PhotoPurpose? purpose,
   }) async {
     final picked = await ImagePicker().pickImage(
       source: ImageSource.camera,
@@ -61,6 +62,7 @@ class PhotoCaptureService {
       capturedAt: DateTime.now().toUtc(),
       stepNumber: step,
       correctionId: correctionId,
+      purpose: purpose,
       syncState: PhotoSyncState.localOnly,
     );
   }

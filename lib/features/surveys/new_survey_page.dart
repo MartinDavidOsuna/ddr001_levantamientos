@@ -11,6 +11,7 @@ class NewSurveyPage extends StatefulWidget {
 
 class _NewSurveyPageState extends State<NewSurveyPage> {
   final controller = TextEditingController();
+  final accountController = TextEditingController();
   String? error;
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -35,8 +36,18 @@ class _NewSurveyPageState extends State<NewSurveyPage> {
               hintText: 'Ej. Losa parcela 18',
             ),
           ),
+          const SizedBox(height: 12),
+          TextField(
+            key: const Key('account_number'),
+            controller: accountController,
+            maxLength: 50,
+            decoration: const InputDecoration(
+              labelText: 'Número de cuenta (opcional)',
+              hintText: 'Ej. 890',
+            ),
+          ),
           const Text(
-            'La cuenta se asignará posteriormente si aún no se conoce.',
+            'Puede dejarse vacío y ser asignado posteriormente por un residente.',
           ),
           if (error != null)
             Padding(
@@ -53,6 +64,7 @@ class _NewSurveyPageState extends State<NewSurveyPage> {
               try {
                 final survey = await context.read<AppController>().createSurvey(
                   controller.text,
+                  accountNumber: accountController.text,
                 );
                 if (context.mounted) {
                   Navigator.pushReplacement(

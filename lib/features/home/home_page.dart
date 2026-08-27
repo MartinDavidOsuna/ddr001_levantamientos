@@ -6,7 +6,8 @@ import '../surveys/new_survey_page.dart';
 import '../resident/resident_review_page.dart';
 
 class HomePage extends StatelessWidget {
-  const HomePage({super.key});
+  const HomePage({super.key, this.onSurveysTap});
+  final VoidCallback? onSurveysTap;
   @override
   Widget build(BuildContext context) {
     final app = context.watch<AppController>(),
@@ -38,10 +39,11 @@ class HomePage extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             _ActionCard(
+              key: const Key('my_surveys_action'),
               icon: Icons.list_alt,
               title: 'MIS LEVANTAMIENTOS',
               subtitle: '${app.surveys.length} guardados en este dispositivo',
-              onTap: () {},
+              onTap: onSurveysTap ?? () {},
             ),
           ] else ...[
             _ActionCard(

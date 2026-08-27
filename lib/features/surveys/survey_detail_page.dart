@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../core/services/app_controller.dart';
 import '../../domain/construction/construction_models.dart';
 import 'surveys_page.dart';
+import '../../shared/widgets/optional_comment_field.dart';
 
 class SurveyDetailPage extends StatelessWidget {
   const SurveyDetailPage({super.key, required this.surveyId});
@@ -63,6 +64,37 @@ class SurveyDetailPage extends StatelessWidget {
   }
 }
 
+enum StepSavedAction { continueSurvey, home }
+
+Future<StepSavedAction?> showStepSavedDialog(
+  BuildContext context, {
+  required int step,
+}) => showDialog<StepSavedAction>(
+  context: context,
+  barrierDismissible: false,
+  builder: (dialogContext) => AlertDialog(
+    title: const Text('Información guardada'),
+    content: const Text(
+      'Tu información quedó guardada en el dispositivo y se sincronizará automáticamente.',
+    ),
+    actions: [
+      TextButton(
+        key: const Key('saved_home'),
+        onPressed: () => Navigator.pop(dialogContext, StepSavedAction.home),
+        child: const Text('SALIR AL INICIO'),
+      ),
+      FilledButton(
+        key: const Key('saved_continue'),
+        onPressed: () =>
+            Navigator.pop(dialogContext, StepSavedAction.continueSurvey),
+        child: Text(
+          step == 6 ? 'VER LEVANTAMIENTO' : 'CONTINUAR LEVANTAMIENTO',
+        ),
+      ),
+    ],
+  ),
+);
+
 class _CorrectionCard extends StatelessWidget {
   const _CorrectionCard({required this.surveyId, required this.correction});
   final String surveyId;
@@ -86,11 +118,9 @@ class _CorrectionCard extends StatelessWidget {
               '${evidence.length} fotos · ${open ? 'Abierta' : 'Finalizada localmente'}',
             ),
             if (open) ...[
-              TextFormField(
+              OptionalCommentField(
                 initialValue: correction.comment,
-                decoration: const InputDecoration(
-                  labelText: 'Comentario opcional',
-                ),
+                enabled: open,
                 onChanged: (value) =>
                     app.updateCorrectionComment(surveyId, correction.id, value),
               ),
@@ -125,6 +155,12 @@ class _StepCard extends StatelessWidget {
     final app = context.watch<AppController>();
     final evidence = app.photosForStep(surveyId, step.number);
     final open = step.state == StepState.open;
+    final nextPurpose = step.number == 6
+        ? cardinalPhotoPurposes.cast<PhotoPurpose?>().firstWhere(
+            (purpose) => !evidence.any((photo) => photo.purpose == purpose),
+            orElse: () => PhotoPurpose.additional,
+          )
+        : null;
     return Card(
       child: ExpansionTile(
         key: Key('step_${step.number}'),
@@ -142,15 +178,9 @@ class _StepCard extends StatelessWidget {
         children: step.state == StepState.locked
             ? const []
             : [
-                TextFormField(
+                OptionalCommentField(
                   initialValue: step.comment,
                   enabled: open,
-                  maxLength: 2000,
-                  minLines: 2,
-                  maxLines: 4,
-                  decoration: const InputDecoration(
-                    labelText: 'Comentario opcional',
-                  ),
                   onChanged: (value) =>
                       app.updateComment(surveyId, step.number, value),
                 ),
@@ -210,6 +240,30 @@ class _StepCard extends StatelessWidget {
                                       ),
                                     ),
                                   ),
+                                if (photo.purpose != null)
+                                  Positioned(
+                                    left: 3,
+                                    top: 3,
+                                    child: DecoratedBox(
+                                      decoration: BoxDecoration(
+                                        color: Colors.black87,
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 4,
+                                          vertical: 2,
+                                        ),
+                                        child: Text(
+                                          photoPurposeLabel(photo.purpose!),
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 10,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
                               ],
                             ),
                           ),
@@ -218,6 +272,28 @@ class _StepCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 12),
+                if (open && step.number == 6) ...[
+                  ...cardinalPhotoPurposes.map(
+                    (purpose) => ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(
+                        evidence.any((photo) => photo.purpose == purpose)
+                            ? Icons.check_circle
+                            : Icons.radio_button_unchecked,
+                      ),
+                      title: Text(photoPurposeLabel(purpose)),
+                    ),
+                  ),
+                  Text(
+                    nextPurpose == PhotoPurpose.additional
+                        ? 'Fotografías adicionales'
+                        : 'Foto requerida: ${photoPurposeLabel(nextPurpose!)}',
+                    key: const Key('step6_next_photo'),
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                ],
                 if (open)
                   Row(
                     children: [
@@ -228,9 +304,17 @@ class _StepCard extends StatelessWidget {
                               step.maximumPhotos != null &&
                                   evidence.length >= step.maximumPhotos!
                               ? null
-                              : () => app.capturePhoto(surveyId, step.number),
+                              : () => app.capturePhoto(
+                                  surveyId,
+                                  step.number,
+                                  purpose: nextPurpose,
+                                ),
                           icon: const Icon(Icons.camera_alt),
-                          label: const Text('Tomar foto'),
+                          label: Text(
+                            nextPurpose == PhotoPurpose.additional
+                                ? 'Agregar fotografía'
+                                : 'Tomar foto',
+                          ),
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -238,7 +322,32 @@ class _StepCard extends StatelessWidget {
                         child: FilledButton(
                           key: Key('finalize_${step.number}'),
                           onPressed: app.canFinalize(surveyId, step.number)
-                              ? () => app.finalizeStep(surveyId, step.number)
+                              ? () async {
+                                  await app.finalizeStep(surveyId, step.number);
+                                  if (!context.mounted) return;
+                                  final action = await showStepSavedDialog(
+                                    context,
+                                    step: step.number,
+                                  );
+                                  if (!context.mounted) return;
+                                  if (action == StepSavedAction.home) {
+                                    Navigator.popUntil(
+                                      context,
+                                      (route) => route.isFirst,
+                                    );
+                                  } else if (action ==
+                                          StepSavedAction.continueSurvey &&
+                                      step.number < 6) {
+                                    Navigator.pushReplacement(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => SurveyDetailPage(
+                                          surveyId: surveyId,
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                }
                               : null,
                           child: const Text('Finalizar etapa'),
                         ),

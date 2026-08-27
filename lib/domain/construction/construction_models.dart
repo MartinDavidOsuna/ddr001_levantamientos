@@ -29,10 +29,28 @@ enum PhotoSyncState {
   deleted,
 }
 
+enum PhotoPurpose { north, east, south, west, additional }
+
+const cardinalPhotoPurposes = <PhotoPurpose>[
+  PhotoPurpose.north,
+  PhotoPurpose.east,
+  PhotoPurpose.south,
+  PhotoPurpose.west,
+];
+
+String photoPurposeLabel(PhotoPurpose purpose) => switch (purpose) {
+  PhotoPurpose.north => 'NORTE',
+  PhotoPurpose.east => 'ESTE',
+  PhotoPurpose.south => 'SUR',
+  PhotoPurpose.west => 'OESTE',
+  PhotoPurpose.additional => 'ADICIONAL',
+};
+
 enum QueueOperation {
   ensureProfile,
   createSurvey,
   openStep,
+  deletePhoto,
   uploadPhoto,
   verifyPhotos,
   updateComment,
@@ -89,12 +107,14 @@ class ConstructionPhoto {
     this.stepNumber,
     this.correctionId,
     this.location,
+    this.purpose,
   });
   final String id, surveyId, localPath, thumbnailPath, sha256;
   final int? stepNumber;
   final String? correctionId;
   final DateTime capturedAt;
   final GeoPoint? location;
+  final PhotoPurpose? purpose;
   final PhotoSyncState syncState;
   bool get locationPending => location == null || !location!.isValid;
   ConstructionPhoto copyWith({GeoPoint? location, PhotoSyncState? syncState}) =>
@@ -108,6 +128,7 @@ class ConstructionPhoto {
         stepNumber: stepNumber,
         correctionId: correctionId,
         location: location ?? this.location,
+        purpose: purpose,
         syncState: syncState ?? this.syncState,
       );
   Map<String, dynamic> toJson() => {
@@ -121,6 +142,7 @@ class ConstructionPhoto {
     'correctionId': correctionId,
     'location': location?.toJson(),
     'syncState': syncState.name,
+    'purpose': purpose?.name,
   };
   factory ConstructionPhoto.fromJson(Map<String, dynamic> j) =>
       ConstructionPhoto(
@@ -138,6 +160,9 @@ class ConstructionPhoto {
                 Map<String, dynamic>.from(j['location'] as Map),
               ),
         syncState: PhotoSyncState.values.byName(j['syncState'] as String),
+        purpose: j['purpose'] == null
+            ? null
+            : PhotoPurpose.values.byName(j['purpose'] as String),
       );
 }
 
@@ -244,10 +269,11 @@ class BaseSurvey {
     GeoPoint? canonicalLocation,
     String? rejectionReason,
     DateTime? updatedAt,
+    String? accountNumber,
   }) => BaseSurvey(
     id: id,
     displayIdentifier: displayIdentifier,
-    accountNumber: accountNumber,
+    accountNumber: accountNumber ?? this.accountNumber,
     contractorName: contractorName,
     createdAt: createdAt,
     updatedAt: updatedAt ?? this.updatedAt,

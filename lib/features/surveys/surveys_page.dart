@@ -10,9 +10,31 @@ class SurveysPage extends StatefulWidget {
   State<SurveysPage> createState() => _SurveysPageState();
 }
 
+enum SurveyListFilter { inProgress, executed, rejected, accepted, delivered }
+
+bool surveyMatchesFilter(BaseSurvey survey, SurveyListFilter? filter) =>
+    switch (filter) {
+      null => true,
+      SurveyListFilter.inProgress =>
+        survey.status == SurveyStatus.created ||
+            survey.status == SurveyStatus.inProgress,
+      SurveyListFilter.executed => survey.status == SurveyStatus.executed,
+      SurveyListFilter.rejected => survey.status == SurveyStatus.rejected,
+      SurveyListFilter.accepted => survey.status == SurveyStatus.accepted,
+      SurveyListFilter.delivered => survey.status == SurveyStatus.delivered,
+    };
+
+String surveyFilterLabel(SurveyListFilter filter) => switch (filter) {
+  SurveyListFilter.inProgress => 'En proceso',
+  SurveyListFilter.executed => 'Ejecutados',
+  SurveyListFilter.rejected => 'Rechazados',
+  SurveyListFilter.accepted => 'Aceptados',
+  SurveyListFilter.delivered => 'Entregados',
+};
+
 class _SurveysPageState extends State<SurveysPage> {
   String search = '';
-  SurveyStatus? filter;
+  SurveyListFilter? filter;
   @override
   Widget build(BuildContext context) {
     final app = context.watch<AppController>(),
@@ -22,7 +44,7 @@ class _SurveysPageState extends State<SurveysPage> {
                   query.isEmpty ||
                   s.displayIdentifier.toLowerCase().contains(query) ||
                   (s.accountNumber ?? '').toLowerCase().contains(query);
-          return matches && (filter == null || s.status == filter);
+          return matches && surveyMatchesFilter(s, filter);
         }).toList()..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
     return Scaffold(
       appBar: AppBar(title: const Text('Mis levantamientos')),
@@ -50,11 +72,11 @@ class _SurveysPageState extends State<SurveysPage> {
                   selected: filter == null,
                   onSelected: (_) => setState(() => filter = null),
                 ),
-                ...SurveyStatus.values.map(
+                ...SurveyListFilter.values.map(
                   (s) => Padding(
                     padding: const EdgeInsets.only(left: 8),
                     child: FilterChip(
-                      label: Text(statusLabel(s)),
+                      label: Text(surveyFilterLabel(s)),
                       selected: filter == s,
                       onSelected: (_) => setState(() => filter = s),
                     ),

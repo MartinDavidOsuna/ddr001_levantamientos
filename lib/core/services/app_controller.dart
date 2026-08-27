@@ -142,8 +142,12 @@ class AppController extends ChangeNotifier {
     );
   }
 
-  Future<BaseSurvey> createSurvey(String identifier) async {
+  Future<BaseSurvey> createSurvey(
+    String identifier, {
+    String? accountNumber,
+  }) async {
     final clean = identifier.trim().replaceAll(RegExp(r'\s+'), ' ');
+    final cleanAccount = accountNumber?.trim();
     if (clean.isEmpty) throw StateError('El identificador es obligatorio.');
     if (duplicateKnown(clean)) {
       throw StateError(
@@ -154,6 +158,9 @@ class AppController extends ChangeNotifier {
     final survey = BaseSurvey(
       id: const Uuid().v4(),
       displayIdentifier: clean,
+      accountNumber: cleanAccount == null || cleanAccount.isEmpty
+          ? null
+          : cleanAccount,
       contractorName: profile?.displayName ?? session?.name ?? '',
       createdAt: now,
       updatedAt: now,
@@ -197,7 +204,11 @@ class AppController extends ChangeNotifier {
     await _enqueue(surveyId, QueueOperation.updateComment, step: step);
   }
 
-  Future<void> capturePhoto(String surveyId, int step) async {
+  Future<void> capturePhoto(
+    String surveyId,
+    int step, {
+    PhotoPurpose? purpose,
+  }) async {
     final s = survey(surveyId),
         current = s.steps[step - 1],
         existing = photosForStep(surveyId, step);
@@ -208,7 +219,21 @@ class AppController extends ChangeNotifier {
         existing.length >= current.maximumPhotos!) {
       throw StateError('Esta etapa admite máximo 4 fotos.');
     }
-    final pending = await camera.capture(surveyId: surveyId, step: step);
+    if (step == 6 && purpose == null) {
+      throw StateError('Selecciona la dirección de la fotografía.');
+    }
+    if (purpose != null &&
+        purpose != PhotoPurpose.additional &&
+        existing.any((photo) => photo.purpose == purpose)) {
+      throw StateError(
+        'Ya existe la fotografía ${photoPurposeLabel(purpose)}.',
+      );
+    }
+    final pending = await camera.capture(
+      surveyId: surveyId,
+      step: step,
+      purpose: purpose,
+    );
     if (pending == null) return;
     photos = [...photos, pending];
     await local.savePhoto(pending);
@@ -258,6 +283,18 @@ class AppController extends ChangeNotifier {
       throw StateError('La evidencia finalizada es inmutable.');
     }
     final photo = photos.firstWhere((p) => p.id == photoId);
+    final needsRemoteDelete = const {
+      PhotoSyncState.uploadedUnverified,
+      PhotoSyncState.verifying,
+      PhotoSyncState.confirmed,
+      PhotoSyncState.retryRequired,
+      PhotoSyncState.mappingConflict,
+    }.contains(photo.syncState);
+    final photoQueue = queue.where((item) => item.photoId == photoId).toList();
+    for (final item in photoQueue) {
+      await local.deleteQueue(item.id);
+    }
+    queue = queue.where((item) => item.photoId != photoId).toList();
     await File(
       photo.localPath,
     ).delete().catchError((_) => File(photo.localPath));
@@ -271,14 +308,28 @@ class AppController extends ChangeNotifier {
       photoIds: current.photoIds.where((id) => id != photoId).toList(),
     );
     await _replaceSurvey(s.copyWith(steps: steps));
+    if (needsRemoteDelete) {
+      await _enqueue(
+        surveyId,
+        QueueOperation.deletePhoto,
+        photoId: photoId,
+        step: step,
+      );
+    }
   }
 
   bool canFinalize(String surveyId, int step) {
     final s = survey(surveyId),
         current = s.steps[step - 1],
         evidence = photosForStep(surveyId, step);
+    final hasCardinals =
+        step != 6 ||
+        cardinalPhotoPurposes.every(
+          (purpose) => evidence.any((photo) => photo.purpose == purpose),
+        );
     return current.state == StepState.open &&
         evidence.length >= current.minimumPhotos &&
+        hasCardinals &&
         (current.maximumPhotos == null ||
             evidence.length <= current.maximumPhotos!) &&
         evidence.every(
@@ -493,6 +544,8 @@ class AppController extends ChangeNotifier {
         }
       case QueueOperation.openStep:
         await remote.openStep(s.id, item.step!);
+      case QueueOperation.deletePhoto:
+        await remote.deletePhoto(s.id, item.photoId!);
       case QueueOperation.updateComment:
         await remote.commentStep(
           s.id,
@@ -617,6 +670,7 @@ class AppController extends ChangeNotifier {
             }).toList();
           }
           surveys[index] = localSurvey.copyWith(
+            accountNumber: mergeAccountNumber(localSurvey.accountNumber, row),
             status: wireStatus,
             rejectionReason: row['rejection_reason']?.toString(),
             syncState: localSurvey.syncState == SyncState.requiresReview
@@ -727,3 +781,11 @@ class AppController extends ChangeNotifier {
     notifyListeners();
   }
 }
+
+String? mergeAccountNumber(
+  String? localAccount,
+  Map<String, dynamic> serverRow,
+) =>
+    serverRow['account_number']?.toString() ??
+    serverRow['accountNumber']?.toString() ??
+    localAccount;
