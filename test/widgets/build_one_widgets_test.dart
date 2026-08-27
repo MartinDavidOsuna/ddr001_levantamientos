@@ -10,6 +10,7 @@ import 'package:ddr001_levantamientos/features/home/home_page.dart';
 import 'package:ddr001_levantamientos/features/map/construction_map_page.dart';
 import 'package:ddr001_levantamientos/features/map/map_status_legend.dart';
 import 'package:ddr001_levantamientos/features/profile/profile_page.dart';
+import 'package:ddr001_levantamientos/features/resident/resident_review_page.dart';
 import 'package:ddr001_levantamientos/features/surveys/new_survey_page.dart';
 import 'package:ddr001_levantamientos/features/surveys/survey_detail_page.dart';
 import 'package:ddr001_levantamientos/features/surveys/surveys_page.dart';
@@ -83,6 +84,23 @@ Widget page(AppController app, Widget child) => ChangeNotifierProvider.value(
 );
 
 void ignoreComment(String _) {}
+
+BaseSurvey reviewSurvey() => BaseSurvey(
+  id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  displayIdentifier: 'Base Norte',
+  accountNumber: '890',
+  contractorName: 'Juan Pérez',
+  createdAt: DateTime.utc(2026, 8, 1),
+  updatedAt: DateTime.utc(2026, 8, 2),
+  status: SurveyStatus.executed,
+  localState: LocalSurveyState.executedLocal,
+  syncState: SyncState.synchronized,
+  currentStep: 6,
+  steps: List.generate(
+    6,
+    (index) => SurveyStep(number: index + 1, state: StepState.completedServer),
+  ),
+);
 
 void main() {
   testWidgets('login renders exact field auth inputs', (tester) async {
@@ -307,7 +325,7 @@ void main() {
         home: Scaffold(body: Stack(children: [MapStatusLegend()])),
       ),
     );
-    expect(find.text('Aceptado / Entregable'), findsOneWidget);
+    expect(find.text('Entregable'), findsOneWidget);
     await tester.tap(find.byKey(const Key('collapse_map_legend')));
     await tester.pump();
     expect(find.text('Ejecutado'), findsNothing);
@@ -349,4 +367,62 @@ void main() {
     expect(find.text('REGISTRAR INSTALACIÓN'), findsOneWidget);
     expect(find.text('Próximamente'), findsOneWidget);
   });
+
+  testWidgets(
+    'reviewer list and detail identify contractor and survey fields',
+    (tester) async {
+      final (app, root) = (await tester.runAsync(
+        () => controller(ConstructionRole.resident),
+      ))!;
+      addTearDown(() async {
+        await Hive.close();
+        await root.delete(recursive: true);
+      });
+      app.surveys = [reviewSurvey()];
+      await tester.pumpWidget(page(app, const ResidentReviewPage()));
+      expect(find.textContaining('Contratista: Juan Pérez'), findsOneWidget);
+      await tester.tap(find.text('Base Norte'));
+      await tester.pumpAndSettle();
+      for (final label in const [
+        'IDENTIFICADOR DE LA BASE',
+        'NÚMERO DE CUENTA',
+        'CONTRATISTA',
+        'ESTADO',
+        'ETAPA',
+        'FECHA DE CREACIÓN',
+        'ÚLTIMA ACTUALIZACIÓN',
+      ]) {
+        expect(find.text(label), findsOneWidget);
+      }
+      expect(find.text('Ejecutado'), findsOneWidget);
+      expect(find.text('6/6'), findsOneWidget);
+
+      await tester.tap(find.text('Rechazar'));
+      await tester.pumpAndSettle();
+      final field = tester.widget<TextField>(find.byType(TextField).last);
+      expect(field.minLines, 4);
+      expect(field.maxLines, 8);
+      expect(
+        find.text('Describe qué debe corregir el contratista.'),
+        findsOneWidget,
+      );
+    },
+  );
+
+  testWidgets(
+    'reviewer survey title is global and contractor title remains own',
+    (tester) async {
+      final (reviewer, reviewerRoot) = (await tester.runAsync(
+        () => controller(ConstructionRole.superadmin),
+      ))!;
+      addTearDown(() async {
+        await Hive.close();
+        await reviewerRoot.delete(recursive: true);
+      });
+      reviewer.surveys = [reviewSurvey()];
+      await tester.pumpWidget(page(reviewer, const SurveysPage()));
+      expect(find.text('Levantamientos'), findsOneWidget);
+      expect(find.textContaining('Contratista: Juan Pérez'), findsOneWidget);
+    },
+  );
 }

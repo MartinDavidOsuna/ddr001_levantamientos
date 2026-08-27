@@ -28,7 +28,7 @@ String surveyFilterLabel(SurveyListFilter filter) => switch (filter) {
   SurveyListFilter.inProgress => 'En proceso',
   SurveyListFilter.executed => 'Ejecutados',
   SurveyListFilter.rejected => 'Rechazados',
-  SurveyListFilter.accepted => 'Aceptados',
+  SurveyListFilter.accepted => 'Entregables',
   SurveyListFilter.delivered => 'Entregados',
 };
 
@@ -47,7 +47,11 @@ class _SurveysPageState extends State<SurveysPage> {
           return matches && surveyMatchesFilter(s, filter);
         }).toList()..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
     return Scaffold(
-      appBar: AppBar(title: const Text('Mis levantamientos')),
+      appBar: AppBar(
+        title: Text(
+          (app.profile?.role ?? ConstructionRole.contractor).surveyListTitle,
+        ),
+      ),
       body: Column(
         children: [
           Padding(
@@ -105,7 +109,8 @@ class _SurveysPageState extends State<SurveysPage> {
                         style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
                       subtitle: Text(
-                        '${s.accountNumber ?? 'Sin cuenta'} · ${statusLabel(s.status)} · Etapa ${s.currentStep}/6',
+                        '${s.accountNumber ?? 'Sin cuenta'} · ${surveyStatusLabel(s.status)} · Etapa ${s.currentStep}/6'
+                        '${app.profile?.role.isReviewer == true ? '\nContratista: ${s.contractorName}' : ''}',
                       ),
                       trailing: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -132,14 +137,6 @@ class _SurveysPageState extends State<SurveysPage> {
   }
 }
 
-String statusLabel(SurveyStatus status) => switch (status) {
-  SurveyStatus.created => 'En proceso',
-  SurveyStatus.inProgress => 'En proceso',
-  SurveyStatus.executed => 'Ejecutado',
-  SurveyStatus.rejected => 'Rechazado',
-  SurveyStatus.accepted => 'Aceptado',
-  SurveyStatus.delivered => 'Entregado',
-};
 IconData syncIcon(SyncState state) => switch (state) {
   SyncState.synchronized => Icons.cloud_done,
   SyncState.syncing => Icons.sync,

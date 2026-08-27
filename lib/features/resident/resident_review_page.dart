@@ -48,7 +48,10 @@ class _ResidentReviewPageState extends State<ResidentReviewPage> {
             items: [
               const DropdownMenuItem(value: null, child: Text('Todos')),
               ...SurveyStatus.values.map(
-                (s) => DropdownMenuItem(value: s, child: Text(s.name)),
+                (s) => DropdownMenuItem(
+                  value: s,
+                  child: Text(surveyStatusLabel(s)),
+                ),
               ),
             ],
             onChanged: (v) => setState(() => filter = v),
@@ -61,7 +64,8 @@ class _ResidentReviewPageState extends State<ResidentReviewPage> {
                       child: ListTile(
                         title: Text(s.displayIdentifier),
                         subtitle: Text(
-                          '${s.contractorName} · ${s.status.name}',
+                          '${surveyStatusLabel(s.status)} · Etapa ${s.currentStep}/6\n'
+                          'Contratista: ${s.contractorName}',
                         ),
                         onTap: () => Navigator.push(
                           context,
@@ -86,81 +90,158 @@ class _ResidentDetail extends StatelessWidget {
   final String surveyId;
   @override
   Widget build(BuildContext context) {
-    final app = context.watch<AppController>(), survey = app.survey(surveyId);
+    final app = context.watch<AppController>(),
+        survey = app.survey(surveyId),
+        submitting = app.reviewSubmitting(surveyId);
     return Scaffold(
       appBar: AppBar(title: Text(survey.displayIdentifier)),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          ListTile(
-            title: Text(survey.displayIdentifier),
-            subtitle: Text(
-              '${survey.contractorName}\n${survey.accountNumber ?? 'Sin cuenta'}',
-            ),
+          _ReviewValue(
+            label: 'IDENTIFICADOR DE LA BASE',
+            value: survey.displayIdentifier,
           ),
+          _ReviewValue(
+            label: 'NÚMERO DE CUENTA',
+            value: survey.accountNumber ?? 'Sin cuenta asignada',
+          ),
+          _ReviewValue(label: 'CONTRATISTA', value: survey.contractorName),
+          _ReviewValue(
+            label: 'ESTADO',
+            value: surveyStatusLabel(survey.status),
+          ),
+          _ReviewValue(label: 'ETAPA', value: '${survey.currentStep}/6'),
+          _ReviewValue(
+            label: 'FECHA DE CREACIÓN',
+            value: _dateLabel(survey.createdAt),
+          ),
+          _ReviewValue(
+            label: 'ÚLTIMA ACTUALIZACIÓN',
+            value: _dateLabel(survey.updatedAt),
+          ),
+          if (survey.rejectionReason?.isNotEmpty == true)
+            _ReviewValue(
+              label: 'MOTIVO DEL RECHAZO',
+              value: survey.rejectionReason!,
+            ),
+          if (submitting)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: LinearProgressIndicator(),
+            ),
           FilledButton(
-            onPressed: survey.status == SurveyStatus.executed
-                ? () => app.remote.residentAction(survey.id, 'accept')
+            onPressed: survey.status == SurveyStatus.executed && !submitting
+                ? () => _mutate(
+                    context,
+                    app.acceptSurvey(survey.id),
+                    title: 'Levantamiento aceptado',
+                    message:
+                        'La base fue validada correctamente y ahora está disponible como entregable.',
+                  )
                 : null,
             child: const Text('Aceptar'),
           ),
           OutlinedButton(
-            onPressed: survey.status == SurveyStatus.executed
+            onPressed: survey.status == SurveyStatus.executed && !submitting
                 ? () async {
-                    final reason = await _prompt(context, 'Motivo de rechazo');
+                    final reason = await _rejectionPrompt(context);
                     if (reason != null) {
-                      await app.remote.residentAction(survey.id, 'reject', {
-                        'rejectionReason': reason,
-                      });
+                      if (!context.mounted) return;
+                      await _mutate(
+                        context,
+                        app.rejectSurvey(survey.id, reason),
+                        title: 'Levantamiento rechazado',
+                        message:
+                            'El contratista podrá consultar el motivo y registrar una corrección.',
+                      );
                     }
                   }
                 : null,
             child: const Text('Rechazar'),
           ),
           OutlinedButton(
-            onPressed: survey.status == SurveyStatus.accepted
-                ? () => app.remote.residentAction(survey.id, 'deliver')
+            onPressed: survey.status == SurveyStatus.accepted && !submitting
+                ? () => _mutate(
+                    context,
+                    app.deliverSurvey(survey.id),
+                    title: 'Levantamiento entregado',
+                    message: 'La base fue marcada como entregada.',
+                  )
                 : null,
             child: const Text('Marcar entregado'),
           ),
           OutlinedButton(
-            onPressed: () async {
-              final value = await _prompt(context, 'Nuevo identificador');
-              if (value != null) {
-                await app.remote.residentUpdate(survey.id, {
-                  'displayIdentifier': value,
-                });
-              }
-            },
+            onPressed: submitting
+                ? null
+                : () async {
+                    final value = await _prompt(context, 'Nuevo identificador');
+                    if (value != null) {
+                      if (!context.mounted) return;
+                      await _mutate(
+                        context,
+                        app.updateSurveyIdentity(
+                          survey.id,
+                          displayIdentifier: value,
+                        ),
+                        title: 'Identificador actualizado',
+                        message:
+                            'El identificador fue actualizado correctamente.',
+                      );
+                    }
+                  },
             child: const Text('Editar identificador'),
           ),
           OutlinedButton(
-            onPressed: () async {
-              final value = await _prompt(context, 'Número de cuenta');
-              if (value != null) {
-                await app.remote.residentUpdate(survey.id, {
-                  'accountNumber': value.isEmpty ? null : value,
-                });
-              }
-            },
+            onPressed: submitting
+                ? null
+                : () async {
+                    final value = await _prompt(context, 'Número de cuenta');
+                    if (value != null) {
+                      if (!context.mounted) return;
+                      await _mutate(
+                        context,
+                        app.updateSurveyIdentity(
+                          survey.id,
+                          accountNumber: value.isEmpty ? null : value,
+                          updateAccount: true,
+                        ),
+                        title: 'Cuenta actualizada',
+                        message:
+                            'El número de cuenta fue actualizado correctamente.',
+                      );
+                    }
+                  },
             child: const Text('Asignar cuenta'),
           ),
           OutlinedButton(
-            onPressed: () async {
-              final reason = await _prompt(context, 'Motivo de corrección GPS');
-              if (reason == null || reason.length < 3) return;
-              final point = await app.locations.capture();
-              await app.remote.correctCanonicalLocation(
-                survey.id,
-                point,
-                reason,
-              );
-            },
+            onPressed: submitting
+                ? null
+                : () async {
+                    final reason = await _prompt(
+                      context,
+                      'Motivo de corrección GPS',
+                    );
+                    if (reason == null || reason.length < 3) return;
+                    final point = await app.locations.capture();
+                    if (!context.mounted) return;
+                    await _mutate(
+                      context,
+                      app.correctSurveyCanonicalLocation(
+                        survey.id,
+                        point,
+                        reason,
+                      ),
+                      title: 'Ubicación actualizada',
+                      message:
+                          'La ubicación canónica fue corregida y auditada.',
+                    );
+                  },
             child: const Text('Corregir ubicación canónica'),
           ),
           const Divider(),
           const Text(
-            'El residente puede revisar estados y metadatos, pero no editar evidencia.',
+            'El reviewer puede revisar estados y metadatos, pero no editar evidencia histórica.',
           ),
           TextButton(
             onPressed: () => Navigator.push(
@@ -175,6 +256,106 @@ class _ResidentDetail extends StatelessWidget {
       ),
     );
   }
+}
+
+class _ReviewValue extends StatelessWidget {
+  const _ReviewValue({required this.label, required this.value});
+  final String label, value;
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: 14),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: Theme.of(context).textTheme.labelSmall),
+        const SizedBox(height: 3),
+        Text(value, style: Theme.of(context).textTheme.titleMedium),
+      ],
+    ),
+  );
+}
+
+String _dateLabel(DateTime value) {
+  final local = value.toLocal();
+  String two(int number) => number.toString().padLeft(2, '0');
+  return '${two(local.day)}/${two(local.month)}/${local.year} '
+      '${two(local.hour)}:${two(local.minute)}';
+}
+
+Future<void> _mutate(
+  BuildContext context,
+  Future<void> operation, {
+  required String title,
+  required String message,
+}) async {
+  try {
+    await operation;
+    if (!context.mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('CERRAR'),
+          ),
+        ],
+      ),
+    );
+  } on Object catch (error) {
+    if (!context.mounted) return;
+    final message = error is StateError
+        ? error.message.toString()
+        : 'No fue posible completar la operación.';
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+}
+
+Future<String?> _rejectionPrompt(BuildContext context) {
+  final controller = TextEditingController();
+  String? error;
+  return showDialog<String>(
+    context: context,
+    builder: (dialogContext) => StatefulBuilder(
+      builder: (context, setState) => AlertDialog(
+        title: const Text('Rechazar levantamiento'),
+        content: TextField(
+          key: const Key('rejection_reason'),
+          controller: controller,
+          autofocus: true,
+          minLines: 4,
+          maxLines: 8,
+          decoration: InputDecoration(
+            labelText: 'Motivo del rechazo',
+            hintText: 'Describe qué debe corregir el contratista.',
+            alignLabelWithHint: true,
+            errorText: error,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final value = controller.text.trim();
+              if (value.length < 3) {
+                setState(() => error = 'Escribe un motivo válido.');
+                return;
+              }
+              Navigator.pop(dialogContext, value);
+            },
+            child: const Text('RECHAZAR'),
+          ),
+        ],
+      ),
+    ),
+  );
 }
 
 Future<String?> _prompt(BuildContext context, String label) {

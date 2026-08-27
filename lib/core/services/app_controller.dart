@@ -43,8 +43,113 @@ class AppController extends ChangeNotifier {
   List<ConstructionPhoto> photos = [];
   List<SyncQueueItem> queue = [];
   bool busy = false, online = true, syncing = false;
+  String? reviewMutationSurveyId;
   String? message;
   String? pendingTakeoverToken;
+
+  bool reviewSubmitting(String surveyId) =>
+      reviewMutationSurveyId != null &&
+      uuidEquals(reviewMutationSurveyId, surveyId);
+
+  Future<void> acceptSurvey(String surveyId) => _reviewMutation(
+    surveyId,
+    () => remote.residentAction(surveyId, 'accept'),
+    (survey) => survey.copyWith(
+      status: SurveyStatus.accepted,
+      updatedAt: DateTime.now().toUtc(),
+      syncState: SyncState.synchronized,
+    ),
+  );
+
+  Future<void> rejectSurvey(String surveyId, String reason) {
+    final normalized = reason.trim();
+    if (normalized.length < 3) {
+      throw StateError('El motivo del rechazo es obligatorio.');
+    }
+    return _reviewMutation(
+      surveyId,
+      () => remote.residentAction(surveyId, 'reject', {
+        'rejectionReason': normalized,
+      }),
+      (survey) => survey.copyWith(
+        status: SurveyStatus.rejected,
+        rejectionReason: normalized,
+        updatedAt: DateTime.now().toUtc(),
+        syncState: SyncState.synchronized,
+      ),
+    );
+  }
+
+  Future<void> deliverSurvey(String surveyId) => _reviewMutation(
+    surveyId,
+    () => remote.residentAction(surveyId, 'deliver'),
+    (survey) => survey.copyWith(
+      status: SurveyStatus.delivered,
+      updatedAt: DateTime.now().toUtc(),
+      syncState: SyncState.synchronized,
+    ),
+  );
+
+  Future<void> updateSurveyIdentity(
+    String surveyId, {
+    String? displayIdentifier,
+    String? accountNumber,
+    bool updateAccount = false,
+  }) => _reviewMutation(
+    surveyId,
+    () => remote.residentUpdate(surveyId, {
+      'displayIdentifier': ?displayIdentifier,
+      if (updateAccount) 'accountNumber': accountNumber,
+    }),
+    (survey) => survey.copyWith(
+      displayIdentifier: displayIdentifier,
+      accountNumber: accountNumber,
+      clearAccountNumber: updateAccount && accountNumber == null,
+      updatedAt: DateTime.now().toUtc(),
+      syncState: SyncState.synchronized,
+    ),
+  );
+
+  Future<void> correctSurveyCanonicalLocation(
+    String surveyId,
+    GeoPoint point,
+    String reason,
+  ) => _reviewMutation(
+    surveyId,
+    () => remote.correctCanonicalLocation(surveyId, point, reason),
+    (survey) => survey.copyWith(
+      canonicalLocation: point,
+      updatedAt: DateTime.now().toUtc(),
+      syncState: SyncState.synchronized,
+    ),
+  );
+
+  Future<void> _reviewMutation(
+    String surveyId,
+    Future<void> Function() request,
+    BaseSurvey Function(BaseSurvey) apply,
+  ) async {
+    final role = profile?.role;
+    if (role == null || !role.isReviewer) {
+      throw StateError('No tienes permisos para realizar esta acción.');
+    }
+    if (reviewMutationSurveyId != null) return;
+    reviewMutationSurveyId = canonicalUuid(surveyId);
+    notifyListeners();
+    try {
+      await request();
+      await _replaceSurvey(apply(survey(surveyId)));
+      await refreshServer();
+    } on DioException catch (error) {
+      final data = error.response?.data;
+      final detail = data is Map ? data['detail']?.toString() : null;
+      throw StateError(detail ?? 'No fue posible completar la operación.');
+    } finally {
+      reviewMutationSurveyId = null;
+      notifyListeners();
+    }
+  }
+
   StreamSubscription<List<ConnectivityResult>>? _connectivity;
   Timer? _offlineConnectivityPoll;
   StreamSubscription<LocationFix>? _locationFixes;
@@ -173,6 +278,33 @@ class AppController extends ChangeNotifier {
             : 'Tu usuario está activo en otro dispositivo.';
       }
       return 'No fue posible iniciar sesión. Verifica conexión y datos.';
+    } finally {
+      busy = false;
+      notifyListeners();
+    }
+  }
+
+  Future<String?> adminLogin({
+    required String email,
+    required String password,
+  }) async {
+    if (!email.contains('@') || password.isEmpty) {
+      return 'Captura correo y contraseña.';
+    }
+    busy = true;
+    notifyListeners();
+    try {
+      session = await remote.adminLogin(email: email, password: password);
+      profile = await remote.profile();
+      await local.saveProfile(profile!);
+      online = true;
+      unawaited(refreshServer());
+      return null;
+    } on DioException catch (error) {
+      final data = error.response?.data;
+      return data is Map && data['detail'] != null
+          ? data['detail'].toString()
+          : 'No fue posible iniciar sesión administrativa.';
     } finally {
       busy = false;
       notifyListeners();
@@ -1157,7 +1289,7 @@ class AppController extends ChangeNotifier {
     if (session == null) return;
     try {
       final rows = await remote.list(
-        resident: profile?.role == ConstructionRole.resident,
+        resident: profile?.role.isReviewer ?? false,
         search: search,
         status: status,
       );
@@ -1186,6 +1318,8 @@ class AppController extends ChangeNotifier {
           }
           surveys[index] = localSurvey.copyWith(
             accountNumber: mergeAccountNumber(localSurvey.accountNumber, row),
+            contractorName:
+                '${row['contractor_name'] ?? row['contractorName'] ?? localSurvey.contractorName}',
             status: wireStatus,
             rejectionReason: row['rejection_reason']?.toString(),
             syncState: localSurvey.syncState == SyncState.requiresReview

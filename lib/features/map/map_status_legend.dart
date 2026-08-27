@@ -13,7 +13,7 @@ class _MapStatusLegendState extends State<MapStatusLegend> {
     ('En proceso', Color(0xff2878b5)),
     ('Ejecutado', Color(0xffe07a1f)),
     ('Rechazado', Color(0xffc93434)),
-    ('Aceptado / Entregable', Color(0xff5b4bb7)),
+    ('Entregable', Color(0xff5b4bb7)),
     ('Entregado', Color(0xff238653)),
   ];
 

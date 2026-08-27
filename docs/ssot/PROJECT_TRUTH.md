@@ -11,10 +11,18 @@ silenciosa instalaciones legacy sin borrar carpetas ni archivos fotográficos.
 - Android applicationId e iOS bundle id: `com.aquafim.ddr001levantamientos`.
 - Nombre visible: DDR001 Levantamientos.
 - Flutter 3.44.8, Dart 3.12.2, Android/iOS únicamente.
-- Auth: field sessions DDR001 existente; perfil Construction decide `contractor`/`resident`.
+- Auth: Field conserva sesiones DDR001. Reviewer administrativo usa el login/JWT
+  admin existente y un perfil Construction aditivo; no existe conversión de token.
 - Offline: Hive CE schema 3. Tokens: Secure Storage.
 - API configurable por `APP_ENV` y `API_BASE_URL`; producción requiere HTTPS.
 - Evidencia: cámara exclusivamente, GPS individual obligatorio, originales retenidos.
+
+## Construction reviewer-equivalent
+
+La aplicación modela `contractor` frente a capability `reviewer`. Resident Field,
+admin administrativo (`supervisor`) y superadmin administrativo (`admin`) tienen
+la misma experiencia funcional. El rol administrativo `viewer` no se proyecta.
+La evidencia histórica contractor es inmutable para todos los reviewers.
 
 ## Location Evidence Model
 

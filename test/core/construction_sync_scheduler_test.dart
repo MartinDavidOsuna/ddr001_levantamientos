@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:convert';
 
@@ -116,6 +117,15 @@ class FakeRemote implements ConstructionRemote {
   final serverPhotos = <String, Map<String, dynamic>>{};
   final failOpen = <String>{};
   final dependencyOpen = <String>{};
+  final reviewActions = <String>[];
+  Completer<void>? reviewGate;
+  Object? reviewFailure;
+
+  @override
+  Future<FieldSession> adminLogin({
+    required String email,
+    required String password,
+  }) => throw UnimplementedError();
 
   @override
   Future<Map<String, dynamic>> detail(String surveyId) async => {
@@ -238,7 +248,12 @@ class FakeRemote implements ConstructionRemote {
     String id,
     String action, [
     Map<String, dynamic>? body,
-  ]) async {}
+  ]) async {
+    reviewActions.add('$action:$id:${body ?? const {}}');
+    if (reviewFailure case final failure?) throw failure;
+    await reviewGate?.future;
+  }
+
   @override
   Future<void> residentUpdate(String id, Map<String, dynamic> values) async {}
   @override
@@ -531,6 +546,81 @@ void main() {
         await app.synchronize();
         expect(app.queue, isEmpty);
         expect(remote.events, isEmpty);
+      },
+    );
+
+    test(
+      'review accept fires once and immediately merges accepted state',
+      () async {
+        app.profile = const ConstructionProfile(
+          userId: 'user',
+          displayName: 'Reviewer',
+          email: 'reviewer@example.com',
+          phone: '',
+          crew: '',
+          role: ConstructionRole.resident,
+        );
+        app.surveys = [
+          baseSurvey(surveyA).copyWith(status: SurveyStatus.executed),
+        ];
+        remote.reviewGate = Completer<void>();
+
+        final first = app.acceptSurvey(surveyA);
+        final duplicate = app.acceptSurvey(surveyA);
+        expect(app.reviewSubmitting(surveyA), isTrue);
+        expect(remote.reviewActions, hasLength(1));
+        remote.reviewGate!.complete();
+        await Future.wait([first, duplicate]);
+
+        expect(app.survey(surveyA).status, SurveyStatus.accepted);
+        expect(app.reviewSubmitting(surveyA), isFalse);
+      },
+    );
+
+    test(
+      'review reject trims reason, merges state and surfaces request error',
+      () async {
+        app.profile = const ConstructionProfile(
+          userId: 'user',
+          displayName: 'Reviewer',
+          email: 'reviewer@example.com',
+          phone: '',
+          crew: '',
+          role: ConstructionRole.admin,
+        );
+        app.surveys = [
+          baseSurvey(surveyA).copyWith(status: SurveyStatus.executed),
+        ];
+
+        await app.rejectSurvey(surveyA, '  Corregir evidencia  ');
+        expect(app.survey(surveyA).status, SurveyStatus.rejected);
+        expect(app.survey(surveyA).rejectionReason, 'Corregir evidencia');
+        expect(remote.reviewActions.single, contains('Corregir evidencia'));
+
+        app.surveys = [
+          baseSurvey(surveyA).copyWith(status: SurveyStatus.executed),
+        ];
+        remote.reviewFailure = DioException(
+          requestOptions: RequestOptions(path: '/reject'),
+          response: Response(
+            requestOptions: RequestOptions(path: '/reject'),
+            statusCode: 409,
+            data: {'detail': 'La transición no es válida.'},
+          ),
+        );
+        await expectLater(
+          app.rejectSurvey(surveyA, 'Motivo válido'),
+          throwsA(
+            isA<StateError>().having(
+              (error) => error.message,
+              'message',
+              'La transición no es válida.',
+            ),
+          ),
+        );
+        expect(app.survey(surveyA).status, SurveyStatus.executed);
+        expect(app.reviewSubmitting(surveyA), isFalse);
+        expect(() => app.rejectSurvey(surveyA, '   '), throwsStateError);
       },
     );
   });

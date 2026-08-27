@@ -11,7 +11,7 @@ class HomePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final app = context.watch<AppController>(),
-        resident = app.profile?.role == ConstructionRole.resident;
+        reviewer = app.profile?.role.isReviewer ?? false;
     return Scaffold(
       appBar: AppBar(title: const Text('DDR001 Levantamientos')),
       body: ListView(
@@ -24,9 +24,9 @@ class HomePage extends StatelessWidget {
             ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 4),
-          Text(resident ? 'Residente' : 'Contratista'),
+          Text(app.profile?.role.displayLabel ?? 'Contratista'),
           const SizedBox(height: 24),
-          if (!resident) ...[
+          if (!reviewer) ...[
             _ActionCard(
               key: const Key('new_survey_action'),
               icon: Icons.add_location_alt,

@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:dio/dio.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:uuid/uuid.dart';
 import '../../core/network/api_client.dart';
 import '../../core/security/session_store.dart';
 import '../../domain/construction/construction_models.dart';
@@ -23,6 +24,10 @@ abstract interface class ConstructionRemote {
     required String email,
     required String phone,
     required String crew,
+  });
+  Future<FieldSession> adminLogin({
+    required String email,
+    required String password,
   });
   Future<void> revokeExisting(String takeoverToken);
   Future<ConstructionProfile> profile();
@@ -119,6 +124,42 @@ class ConstructionApi implements ConstructionRemote {
     return value;
   }
 
+  Future<FieldSession> adminLogin({
+    required String email,
+    required String password,
+  }) async {
+    final response = await client.dio.post<Map<String, dynamic>>(
+      '/admin/auth/login',
+      data: {'email': email.trim().toLowerCase(), 'password': password},
+      options: Options(extra: {'skipAuth': true}),
+    );
+    final tokens = response.data ?? const {};
+    final me =
+        (await client.dio.get<Map<String, dynamic>>(
+          '/admin/auth/me',
+          options: Options(
+            headers: {'Authorization': 'Bearer ${tokens['accessToken']}'},
+            extra: {'skipAuth': true},
+          ),
+        )).data ??
+        const {};
+    final value = FieldSession(
+      sessionId: canonicalUuid(const Uuid().v4()),
+      userId: canonicalUuid('${me['userId']}'),
+      accessToken: '${tokens['accessToken']}',
+      refreshToken: '${tokens['refreshToken']}',
+      installationId: await sessions.installationId(),
+      name: '',
+      email: email.trim().toLowerCase(),
+      phone: '',
+      crew: '',
+      kind: SessionKind.admin,
+      adminRole: me['role']?.toString(),
+    );
+    await sessions.save(value);
+    return value;
+  }
+
   Future<void> revokeExisting(String takeoverToken) => client.dio.post<void>(
     '/field-sessions/revoke-existing',
     data: {'takeoverToken': takeoverToken},
@@ -127,18 +168,27 @@ class ConstructionApi implements ConstructionRemote {
 
   Future<ConstructionProfile> profile() async => ConstructionProfile.fromJson(
     (await client.dio.get<Map<String, dynamic>>(
-          '/construction/profile',
+          (await sessions.read())?.kind == SessionKind.admin
+              ? '/construction/admin/profile'
+              : '/construction/profile',
         )).data ??
         const {},
   );
   Future<void> logout(FieldSession session) async {
     try {
-      await client.dio.post<void>(
-        '/field-sessions/${session.sessionId}/end',
-        options: Options(
-          headers: {'Idempotency-Key': 'end-${session.sessionId}'},
-        ),
-      );
+      if (session.kind == SessionKind.admin) {
+        await client.dio.post<void>(
+          '/admin/auth/logout',
+          data: {'refreshToken': session.refreshToken},
+        );
+      } else {
+        await client.dio.post<void>(
+          '/field-sessions/${session.sessionId}/end',
+          options: Options(
+            headers: {'Idempotency-Key': 'end-${session.sessionId}'},
+          ),
+        );
+      }
     } finally {
       await sessions.clear();
     }

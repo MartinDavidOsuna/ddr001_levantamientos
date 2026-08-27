@@ -12,7 +12,9 @@ class _LoginPageState extends State<LoginPage> {
   final name = TextEditingController(),
       email = TextEditingController(),
       phone = TextEditingController(),
-      crew = TextEditingController();
+      crew = TextEditingController(),
+      password = TextEditingController();
+  bool administrative = false;
   String? error;
   @override
   Widget build(BuildContext context) {
@@ -42,16 +44,31 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                   const SizedBox(height: 8),
                   const Text('Acceso de campo', textAlign: TextAlign.center),
-                  const SizedBox(height: 28),
-                  TextField(
-                    key: const Key('login_name'),
-                    controller: name,
-                    textCapitalization: TextCapitalization.words,
-                    decoration: const InputDecoration(
-                      labelText: 'Nombre completo',
-                    ),
+                  const SizedBox(height: 16),
+                  SegmentedButton<bool>(
+                    segments: const [
+                      ButtonSegment(value: false, label: Text('Campo')),
+                      ButtonSegment(value: true, label: Text('Administración')),
+                    ],
+                    selected: {administrative},
+                    onSelectionChanged: app.busy
+                        ? null
+                        : (value) => setState(() {
+                            administrative = value.single;
+                            error = null;
+                          }),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 28),
+                  if (!administrative)
+                    TextField(
+                      key: const Key('login_name'),
+                      controller: name,
+                      textCapitalization: TextCapitalization.words,
+                      decoration: const InputDecoration(
+                        labelText: 'Nombre completo',
+                      ),
+                    ),
+                  if (!administrative) const SizedBox(height: 12),
                   TextField(
                     key: const Key('login_email'),
                     controller: email,
@@ -59,19 +76,30 @@ class _LoginPageState extends State<LoginPage> {
                     decoration: const InputDecoration(labelText: 'Correo'),
                   ),
                   const SizedBox(height: 12),
-                  TextField(
-                    key: const Key('login_phone'),
-                    controller: phone,
-                    keyboardType: TextInputType.phone,
-                    maxLength: 10,
-                    decoration: const InputDecoration(labelText: 'Teléfono'),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    key: const Key('login_crew'),
-                    controller: crew,
-                    decoration: const InputDecoration(labelText: 'Cuadrilla'),
-                  ),
+                  if (!administrative)
+                    TextField(
+                      key: const Key('login_phone'),
+                      controller: phone,
+                      keyboardType: TextInputType.phone,
+                      maxLength: 10,
+                      decoration: const InputDecoration(labelText: 'Teléfono'),
+                    ),
+                  if (!administrative) const SizedBox(height: 12),
+                  if (!administrative)
+                    TextField(
+                      key: const Key('login_crew'),
+                      controller: crew,
+                      decoration: const InputDecoration(labelText: 'Cuadrilla'),
+                    ),
+                  if (administrative)
+                    TextField(
+                      key: const Key('admin_password'),
+                      controller: password,
+                      obscureText: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Contraseña',
+                      ),
+                    ),
                   if (error != null)
                     Padding(
                       padding: const EdgeInsets.only(top: 12),
@@ -102,14 +130,18 @@ class _LoginPageState extends State<LoginPage> {
                     onPressed: app.busy
                         ? null
                         : () async {
-                            final result = await context
-                                .read<AppController>()
-                                .login(
-                                  name: name.text,
-                                  email: email.text,
-                                  phone: phone.text,
-                                  crew: crew.text,
-                                );
+                            final controller = context.read<AppController>();
+                            final result = administrative
+                                ? await controller.adminLogin(
+                                    email: email.text,
+                                    password: password.text,
+                                  )
+                                : await controller.login(
+                                    name: name.text,
+                                    email: email.text,
+                                    phone: phone.text,
+                                    crew: crew.text,
+                                  );
                             if (mounted) setState(() => error = result);
                           },
                     child: app.busy

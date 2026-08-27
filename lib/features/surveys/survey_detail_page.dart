@@ -75,7 +75,7 @@ class _SurveyDetailPageState extends State<SurveyDetailPage>
           Card(
             child: ListTile(
               title: Text(
-                statusLabel(survey.status),
+                surveyStatusLabel(survey.status),
                 style: const TextStyle(fontWeight: FontWeight.bold),
               ),
               subtitle: Text(
@@ -160,6 +160,9 @@ class _CorrectionCard extends StatelessWidget {
     final app = context.watch<AppController>();
     final evidence = app.photosForCorrection(correction.id);
     final open = correction.state == StepState.open;
+    final editable =
+        open &&
+        (app.profile?.role ?? ConstructionRole.contractor).canMutateEvidence;
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(12),
@@ -167,13 +170,13 @@ class _CorrectionCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              'Correction Round ${correction.round}',
+              'Corrección ${correction.round}',
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
             Text(
               '${evidence.length} fotos · ${open ? 'Abierta' : 'Finalizada localmente'}',
             ),
-            if (open) ...[
+            if (editable) ...[
               OptionalCommentField(
                 initialValue: correction.comment,
                 enabled: open,
@@ -211,6 +214,9 @@ class _StepCard extends StatelessWidget {
     final app = context.watch<AppController>();
     final evidence = app.photosForStep(surveyId, step.number);
     final open = step.state == StepState.open;
+    final editable =
+        open &&
+        (app.profile?.role ?? ConstructionRole.contractor).canMutateEvidence;
     final nextPurpose = step.number == 6
         ? cardinalPhotoPurposes.cast<PhotoPurpose?>().firstWhere(
             (purpose) => !evidence.any((photo) => photo.purpose == purpose),
@@ -236,7 +242,7 @@ class _StepCard extends StatelessWidget {
             : [
                 OptionalCommentField(
                   initialValue: step.comment,
-                  enabled: open,
+                  enabled: editable,
                   onChanged: (value) =>
                       app.updateComment(surveyId, step.number, value),
                 ),
@@ -256,7 +262,7 @@ class _StepCard extends StatelessWidget {
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     Image.file(File(photo.localPath)),
-                                    if (open)
+                                    if (editable)
                                       TextButton.icon(
                                         onPressed: () {
                                           Navigator.pop(context);
@@ -374,7 +380,7 @@ class _StepCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 12),
-                if (open && step.number == 6) ...[
+                if (editable && step.number == 6) ...[
                   Row(
                     children: cardinalPhotoPurposes
                         .map(
@@ -413,7 +419,7 @@ class _StepCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                 ],
-                if (open)
+                if (editable)
                   Row(
                     children: [
                       Expanded(

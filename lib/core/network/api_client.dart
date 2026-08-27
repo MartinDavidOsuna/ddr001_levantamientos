@@ -54,7 +54,8 @@ class ApiClient {
     if (error.response?.statusCode != 401 ||
         request.extra['skipAuth'] == true ||
         request.extra['refreshed'] == true ||
-        request.path == '/field-sessions/refresh') {
+        request.path == '/field-sessions/refresh' ||
+        request.path == '/admin/auth/refresh') {
       handler.next(error);
       return;
     }
@@ -101,7 +102,9 @@ class ApiClient {
     final current = await _sessions.read();
     if (current == null) return null;
     final response = await dio.post<Map<String, dynamic>>(
-      '/field-sessions/refresh',
+      current.kind == SessionKind.admin
+          ? '/admin/auth/refresh'
+          : '/field-sessions/refresh',
       data: {'refreshToken': current.refreshToken},
       options: Options(extra: {'skipAuth': true}),
     );

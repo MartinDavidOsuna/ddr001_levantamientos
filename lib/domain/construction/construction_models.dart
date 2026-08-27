@@ -1,6 +1,26 @@
 import '../../core/identity/uuid_identity.dart';
 
-enum ConstructionRole { contractor, resident }
+enum ConstructionRole { contractor, resident, admin, superadmin }
+
+extension ConstructionCapabilities on ConstructionRole {
+  bool get isReviewer => this != ConstructionRole.contractor;
+  bool get canViewAllSurveys => isReviewer;
+  bool get canReviewBase => isReviewer;
+  bool get canAccept => isReviewer;
+  bool get canReject => isReviewer;
+  bool get canEditIdentity => isReviewer;
+  bool get canDeliver => isReviewer;
+  bool get canCorrectCanonicalLocation => isReviewer;
+  bool get canMutateEvidence => this == ConstructionRole.contractor;
+  String get surveyListTitle =>
+      isReviewer ? 'Levantamientos' : 'Mis levantamientos';
+  String get displayLabel => switch (this) {
+    ConstructionRole.contractor => 'Contratista',
+    ConstructionRole.resident => 'Residente',
+    ConstructionRole.admin => 'Administrador',
+    ConstructionRole.superadmin => 'Superadministrador',
+  };
+}
 
 enum SurveyStatus {
   created,
@@ -10,6 +30,15 @@ enum SurveyStatus {
   accepted,
   delivered,
 }
+
+String surveyStatusLabel(SurveyStatus status) => switch (status) {
+  SurveyStatus.created => 'Creado',
+  SurveyStatus.inProgress => 'En proceso',
+  SurveyStatus.executed => 'Ejecutado',
+  SurveyStatus.rejected => 'Rechazado',
+  SurveyStatus.accepted => 'Entregable',
+  SurveyStatus.delivered => 'Entregado',
+};
 
 enum LocalSurveyState { createdLocal, active, executedLocal }
 
@@ -379,6 +408,8 @@ class BaseSurvey {
   final List<CorrectionRound> corrections;
   final GeoPoint? canonicalLocation;
   BaseSurvey copyWith({
+    String? displayIdentifier,
+    String? contractorName,
     SurveyStatus? status,
     LocalSurveyState? localState,
     SyncState? syncState,
@@ -389,11 +420,14 @@ class BaseSurvey {
     String? rejectionReason,
     DateTime? updatedAt,
     String? accountNumber,
+    bool clearAccountNumber = false,
   }) => BaseSurvey(
     id: id,
-    displayIdentifier: displayIdentifier,
-    accountNumber: accountNumber ?? this.accountNumber,
-    contractorName: contractorName,
+    displayIdentifier: displayIdentifier ?? this.displayIdentifier,
+    accountNumber: clearAccountNumber
+        ? null
+        : accountNumber ?? this.accountNumber,
+    contractorName: contractorName ?? this.contractorName,
     createdAt: createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     status: status ?? this.status,

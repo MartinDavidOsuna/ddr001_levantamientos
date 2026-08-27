@@ -3,6 +3,8 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:uuid/uuid.dart';
 import '../identity/uuid_identity.dart';
 
+enum SessionKind { field, admin }
+
 class FieldSession {
   const FieldSession({
     required this.sessionId,
@@ -14,6 +16,8 @@ class FieldSession {
     required this.email,
     required this.phone,
     required this.crew,
+    this.kind = SessionKind.field,
+    this.adminRole,
   });
   final String sessionId,
       userId,
@@ -24,6 +28,8 @@ class FieldSession {
       email,
       phone,
       crew;
+  final SessionKind kind;
+  final String? adminRole;
   FieldSession copyWith({String? accessToken, String? refreshToken}) =>
       FieldSession(
         sessionId: sessionId,
@@ -35,6 +41,8 @@ class FieldSession {
         email: email,
         phone: phone,
         crew: crew,
+        kind: kind,
+        adminRole: adminRole,
       );
   Map<String, dynamic> toJson() => {
     'sessionId': sessionId,
@@ -46,6 +54,8 @@ class FieldSession {
     'email': email,
     'phone': phone,
     'crew': crew,
+    'kind': kind.name,
+    'adminRole': adminRole,
   };
   factory FieldSession.fromJson(Map<String, dynamic> j) => FieldSession(
     sessionId: canonicalUuid('${j['sessionId']}'),
@@ -57,6 +67,8 @@ class FieldSession {
     email: '${j['email']}',
     phone: '${j['phone']}',
     crew: '${j['crew']}',
+    kind: SessionKind.values.byName('${j['kind'] ?? 'field'}'),
+    adminRole: j['adminRole']?.toString(),
   );
 }
 

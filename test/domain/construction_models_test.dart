@@ -3,6 +3,40 @@ import 'package:ddr001_levantamientos/features/surveys/surveys_page.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('status mapper exposes every persistent status in Spanish', () {
+    expect(SurveyStatus.values.map(surveyStatusLabel), [
+      'Creado',
+      'En proceso',
+      'Ejecutado',
+      'Rechazado',
+      'Entregable',
+      'Entregado',
+    ]);
+  });
+
+  test(
+    'reviewer capabilities are identical for resident admin and superadmin',
+    () {
+      for (final role in const [
+        ConstructionRole.resident,
+        ConstructionRole.admin,
+        ConstructionRole.superadmin,
+      ]) {
+        expect(role.isReviewer, isTrue);
+        expect(role.canViewAllSurveys, isTrue);
+        expect(role.canAccept, isTrue);
+        expect(role.canReject, isTrue);
+        expect(role.canEditIdentity, isTrue);
+        expect(role.canDeliver, isTrue);
+        expect(role.canCorrectCanonicalLocation, isTrue);
+        expect(role.canMutateEvidence, isFalse);
+        expect(role.surveyListTitle, 'Levantamientos');
+      }
+      expect(ConstructionRole.contractor.isReviewer, isFalse);
+      expect(ConstructionRole.contractor.canMutateEvidence, isTrue);
+      expect(ConstructionRole.contractor.surveyListTitle, 'Mis levantamientos');
+    },
+  );
   test('duplicate normalization trims collapses and ignores case', () {
     expect(normalizeIdentifier('  Base   norte '), 'BASE NORTE');
   });

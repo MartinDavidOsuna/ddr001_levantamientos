@@ -1,3 +1,18 @@
 # Roles and Permissions
 
-La autoridad de rol es `GET /construction/profile`; móvil nunca envía role. Contractor sólo ve lo propio, crea evidencia secuencial y no edita etapas cerradas ni identifier/account. Resident ve universo autorizado, revisa metadatos/estado, edita identifier/account/canonical, acepta/rechaza/entrega y no edita fotos/comentarios. Ownership siempre deriva del JWT server, nunca de userId cliente.
+La autoridad de acceso es el perfil validado por API; móvil nunca envía role. La UI
+consume capabilities centralizadas, no comparaciones de roles dispersas.
+
+| Capability | Contractor | Resident | Admin | Superadmin |
+| --- | --- | --- | --- | --- |
+| Ver universo completo | No | Sí | Sí | Sí |
+| Revisar/aceptar/rechazar/entregar | No | Sí | Sí | Sí |
+| Editar identificador/cuenta/canonical auditado | No | Sí | Sí | Sí |
+| Crear o mutar evidencia contractor | Sí, sólo propia y abierta | No | No | No |
+
+`resident`, `admin` y `superadmin` son reviewer-equivalent dentro de Construction.
+Resident procede de Field (`rv.users` + `construction.app_users`). Admin y
+superadmin proceden del dominio administrativo (`rv.admin_users`) mediante JWT
+admin validado; no se copian sus IDs a `construction.app_users`. La proyección
+actual es `supervisor → admin` y `admin → superadmin`; `viewer` no obtiene acceso.
+Ownership siempre deriva del JWT server, nunca de un `userId` enviado por cliente.

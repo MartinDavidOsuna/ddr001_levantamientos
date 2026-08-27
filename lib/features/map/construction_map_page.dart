@@ -5,7 +5,6 @@ import 'package:provider/provider.dart';
 import '../../core/services/app_controller.dart';
 import '../../domain/construction/construction_models.dart';
 import '../surveys/survey_detail_page.dart';
-import '../surveys/surveys_page.dart';
 import 'map_status_legend.dart';
 
 class ConstructionMapPage extends StatelessWidget {
@@ -25,7 +24,7 @@ class ConstructionMapPage extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          app.profile?.role == ConstructionRole.resident
+          app.profile?.role.isReviewer == true
               ? 'Mapa de bases'
               : 'Mis bases en mapa',
         ),
@@ -68,9 +67,9 @@ class ConstructionMapPage extends StatelessWidget {
                                 child: Tooltip(
                                   message:
                                       '${s.displayIdentifier}\n'
-                                      '${s.accountNumber ?? 'Sin cuenta'} · ${statusLabel(s.status)}\n'
+                                      '${s.accountNumber ?? 'Sin cuenta'} · ${surveyStatusLabel(s.status)}\n'
                                       'Etapa ${s.currentStep} · ${s.updatedAt.toLocal()}\n'
-                                      '${app.profile?.role == ConstructionRole.resident ? s.contractorName : ''}',
+                                      '${app.profile?.role.isReviewer == true ? 'Contratista: ${s.contractorName}' : ''}',
                                   child: IconButton(
                                     icon: Icon(
                                       Icons.location_pin,

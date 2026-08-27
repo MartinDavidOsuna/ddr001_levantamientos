@@ -4,7 +4,16 @@ Contractor usa Inicio, Levantamientos, Mapa y Perfil. Crea UUID, `displayIdentif
 
 Mis levantamientos mezcla local/servidor por UUID, busca identificador/cuenta y filtra estados. Rechazo muestra motivo y usa Correction Round sin modificar evidencia original.
 
-Resident ve revisión y mapa global; puede aceptar/rechazar/entregar, cambiar identificador/cuenta y corregir canonical mediante API, pero no evidencia. Registrar instalación permanece “Próximamente”.
+Resident/Admin/Superadmin comparten Inicio, Revisión de base, listados y mapa
+global. Pueden aceptar/rechazar/entregar, cambiar identificador/cuenta y corregir
+canonical mediante API, pero no evidencia. La revisión identifica explícitamente
+base, cuenta, contratista, estado, etapa y fechas. Aceptar cambia `executed` a
+`accepted`, mostrado como **Entregable**; rechazar exige motivo multiline sin sólo
+espacios. Todas las mutaciones muestran progreso, éxito o error y actualizan el
+estado en memoria sin reiniciar. Registrar instalación permanece “Próximamente”.
+
+Todos los estados se muestran mediante un mapper único: Creado, En proceso,
+Ejecutado, Rechazado, Entregable y Entregado. Los valores wire no cambian.
 
 ## Location Evidence Model
 

@@ -21,9 +21,7 @@ class ProfilePage extends StatelessWidget {
             style: Theme.of(context).textTheme.headlineSmall,
           ),
           Text(
-            profile?.role == ConstructionRole.resident
-                ? 'Residente'
-                : 'Contratista',
+            profile?.role.displayLabel ?? 'Contratista',
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 20),
