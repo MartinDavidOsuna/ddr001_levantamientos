@@ -6,16 +6,19 @@ import '../surveys/surveys_page.dart';
 
 class MainShell extends StatefulWidget {
   const MainShell({super.key});
+  static final shellKey = GlobalKey<MainShellState>();
+  static void selectTab(int value) => shellKey.currentState?.selectTab(value);
   @override
-  State<MainShell> createState() => _MainShellState();
+  State<MainShell> createState() => MainShellState();
 }
 
-class _MainShellState extends State<MainShell> {
+class MainShellState extends State<MainShell> {
   int index = 0;
+  void selectTab(int value) => setState(() => index = value);
   @override
   Widget build(BuildContext context) {
     final pages = [
-      HomePage(onSurveysTap: () => setState(() => index = 1)),
+      HomePage(onSurveysTap: () => selectTab(1)),
       const SurveysPage(),
       const ConstructionMapPage(),
       const ProfilePage(),
@@ -24,7 +27,7 @@ class _MainShellState extends State<MainShell> {
       body: IndexedStack(index: index, children: pages),
       bottomNavigationBar: NavigationBar(
         selectedIndex: index,
-        onDestinationSelected: (v) => setState(() => index = v),
+        onDestinationSelected: selectTab,
         destinations: const [
           NavigationDestination(
             icon: Icon(Icons.home_outlined),

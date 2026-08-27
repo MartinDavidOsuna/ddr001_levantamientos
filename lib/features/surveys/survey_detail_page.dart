@@ -5,6 +5,7 @@ import '../../core/services/app_controller.dart';
 import '../../domain/construction/construction_models.dart';
 import 'surveys_page.dart';
 import '../../shared/widgets/optional_comment_field.dart';
+import '../shell/main_shell.dart';
 
 class SurveyDetailPage extends StatelessWidget {
   const SurveyDetailPage({super.key, required this.surveyId});
@@ -331,6 +332,7 @@ class _StepCard extends StatelessWidget {
                                   );
                                   if (!context.mounted) return;
                                   if (action == StepSavedAction.home) {
+                                    MainShell.selectTab(0);
                                     Navigator.popUntil(
                                       context,
                                       (route) => route.isFirst,

@@ -22,8 +22,9 @@ class LevantamientosApp extends StatelessWidget {
       ),
     ),
     home: Consumer<AppController>(
-      builder: (_, state, _) =>
-          state.session == null ? const LoginPage() : const MainShell(),
+      builder: (_, state, _) => state.session == null
+          ? const LoginPage()
+          : MainShell(key: MainShell.shellKey),
     ),
   );
 }
