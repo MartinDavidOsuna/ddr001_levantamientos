@@ -7,13 +7,66 @@ import 'surveys_page.dart';
 import '../../shared/widgets/optional_comment_field.dart';
 import '../shell/main_shell.dart';
 
-class SurveyDetailPage extends StatelessWidget {
+class SurveyDetailPage extends StatefulWidget {
   const SurveyDetailPage({super.key, required this.surveyId});
   final String surveyId;
   @override
+  State<SurveyDetailPage> createState() => _SurveyDetailPageState();
+}
+
+class _SurveyDetailPageState extends State<SurveyDetailPage>
+    with WidgetsBindingObserver {
+  AppController? _app;
+  bool _locationActive = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_app != null) return;
+    _app = context.read<AppController>();
+    _activateLocation();
+  }
+
+  void _activateLocation() {
+    if (_locationActive) return;
+    _locationActive = true;
+    _app?.enterLocationFlow();
+  }
+
+  void _deactivateLocation() {
+    if (!_locationActive) return;
+    _locationActive = false;
+    _app?.leaveLocationFlow();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _activateLocation();
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.detached) {
+      _deactivateLocation();
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _deactivateLocation();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final app = context.watch<AppController>();
-    final survey = app.survey(surveyId);
+    final survey = app.survey(widget.surveyId);
     return Scaffold(
       appBar: AppBar(title: Text(survey.displayIdentifier)),
       body: ListView(
@@ -44,7 +97,7 @@ class SurveyDetailPage extends StatelessWidget {
               ),
             ),
           ...survey.steps.map(
-            (step) => _StepCard(surveyId: surveyId, step: step),
+            (step) => _StepCard(surveyId: widget.surveyId, step: step),
           ),
           if (survey.corrections.isNotEmpty) ...[
             const Padding(
@@ -55,8 +108,10 @@ class SurveyDetailPage extends StatelessWidget {
               ),
             ),
             ...survey.corrections.map(
-              (correction) =>
-                  _CorrectionCard(surveyId: surveyId, correction: correction),
+              (correction) => _CorrectionCard(
+                surveyId: widget.surveyId,
+                correction: correction,
+              ),
             ),
           ],
         ],
@@ -134,7 +189,7 @@ class _CorrectionCard extends StatelessWidget {
               FilledButton(
                 onPressed:
                     evidence.isNotEmpty &&
-                        evidence.every((photo) => !photo.locationPending)
+                        evidence.every((photo) => photo.locationConfirmed)
                     ? () => app.finalizeCorrection(surveyId, correction.id)
                     : null,
                 child: const Text('Finalizar corrección'),
@@ -241,6 +296,31 @@ class _StepCard extends StatelessWidget {
                                       ),
                                     ),
                                   ),
+                                if (photo.locationConfirmed)
+                                  const Positioned(
+                                    right: 4,
+                                    bottom: 4,
+                                    child: CircleAvatar(
+                                      radius: 12,
+                                      child: Icon(Icons.location_on, size: 14),
+                                    ),
+                                  ),
+                                if (photo.locationUnresolved ||
+                                    photo.locationConsistency ==
+                                        LocationConsistency.outlier)
+                                  const Positioned(
+                                    right: 4,
+                                    bottom: 4,
+                                    child: CircleAvatar(
+                                      radius: 12,
+                                      backgroundColor: Colors.red,
+                                      child: Icon(
+                                        Icons.location_off,
+                                        color: Colors.white,
+                                        size: 14,
+                                      ),
+                                    ),
+                                  ),
                                 if (photo.purpose != null)
                                   Positioned(
                                     left: 3,
@@ -322,9 +402,60 @@ class _StepCard extends StatelessWidget {
                       Expanded(
                         child: FilledButton(
                           key: Key('finalize_${step.number}'),
-                          onPressed: app.canFinalize(surveyId, step.number)
+                          onPressed:
+                              app.canAttemptFinalize(surveyId, step.number)
                               ? () async {
-                                  await app.finalizeStep(surveyId, step.number);
+                                  try {
+                                    await app.finalizeStep(
+                                      surveyId,
+                                      step.number,
+                                    );
+                                  } on StateError catch (error) {
+                                    if (!context.mounted) return;
+                                    final replace = await showDialog<bool>(
+                                      context: context,
+                                      builder: (dialogContext) => AlertDialog(
+                                        title: const Text(
+                                          'Ubicación de evidencia',
+                                        ),
+                                        content: Text(error.message.toString()),
+                                        actions: [
+                                          TextButton(
+                                            onPressed: () => Navigator.pop(
+                                              dialogContext,
+                                              false,
+                                            ),
+                                            child: const Text('VER FOTO'),
+                                          ),
+                                          FilledButton(
+                                            onPressed: () => Navigator.pop(
+                                              dialogContext,
+                                              true,
+                                            ),
+                                            child: const Text(
+                                              'REEMPLAZAR FOTO',
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                    if (replace == true) {
+                                      final target = evidence.firstWhere(
+                                        (photo) => !photo.locationConfirmed,
+                                      );
+                                      await app.deletePhoto(
+                                        surveyId,
+                                        step.number,
+                                        target.id,
+                                      );
+                                      await app.capturePhoto(
+                                        surveyId,
+                                        step.number,
+                                        purpose: target.purpose,
+                                      );
+                                    }
+                                    return;
+                                  }
                                   if (!context.mounted) return;
                                   final action = await showStepSavedDialog(
                                     context,
@@ -355,13 +486,6 @@ class _StepCard extends StatelessWidget {
                         ),
                       ),
                     ],
-                  ),
-                if (evidence.any((p) => p.locationPending))
-                  const Padding(
-                    padding: EdgeInsets.only(top: 8),
-                    child: Text(
-                      'Esperando ubicación válida para una o más fotos.',
-                    ),
                   ),
               ],
       ),

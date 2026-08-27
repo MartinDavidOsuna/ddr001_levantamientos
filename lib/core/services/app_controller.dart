@@ -46,6 +46,9 @@ class AppController extends ChangeNotifier {
   String? message;
   String? pendingTakeoverToken;
   StreamSubscription<List<ConnectivityResult>>? _connectivity;
+  StreamSubscription<LocationFix>? _locationFixes;
+  final Map<String, Timer> _locationDeadlines = {};
+  int _locationFlowDepth = 0;
   final ConstructionSyncScheduler _scheduler =
       const ConstructionSyncScheduler();
 
@@ -55,6 +58,7 @@ class AppController extends ChangeNotifier {
     queue = local.queue();
     profile = local.profile();
     session = await sessions.read();
+    await _recoverPendingLocations();
     _connectivity = Connectivity().onConnectivityChanged.listen((values) {
       online = !values.contains(ConnectivityResult.none);
       notifyListeners();
@@ -76,7 +80,32 @@ class AppController extends ChangeNotifier {
   @override
   void dispose() {
     _connectivity?.cancel();
+    _locationFixes?.cancel();
+    for (final timer in _locationDeadlines.values) {
+      timer.cancel();
+    }
+    unawaited(locations.dispose());
     super.dispose();
+  }
+
+  void enterLocationFlow() {
+    _locationFlowDepth++;
+    _ensureLocationListener();
+    unawaited(locations.startPrewarm());
+  }
+
+  void leaveLocationFlow() {
+    _locationFlowDepth = (_locationFlowDepth - 1).clamp(0, 1000);
+    if (_locationFlowDepth == 0 &&
+        !photos.any((photo) => photo.locationPending)) {
+      unawaited(locations.stopPrewarm());
+    }
+  }
+
+  void _ensureLocationListener() {
+    _locationFixes ??= locations.fixes.listen((_) {
+      unawaited(_applyBufferedFixes());
+    });
   }
 
   Future<String?> login({
@@ -256,21 +285,131 @@ class AppController extends ChangeNotifier {
       ),
     );
     notifyListeners();
-    unawaited(_resolveLocation(pending.id));
+    _beginLocationAcquisition(pending.id);
   }
 
-  Future<void> _resolveLocation(String photoId) async {
-    try {
-      final point = await locations.capture(),
-          photo = photos.firstWhere((p) => uuidEquals(p.id, photoId)),
-          updated = photo.copyWith(
-            location: point,
-            syncState: PhotoSyncState.queued,
-          );
-      await _replacePhoto(updated);
+  void _beginLocationAcquisition(String photoId) {
+    _ensureLocationListener();
+    unawaited(locations.startPrewarm());
+    unawaited(_considerBestFix(photoId));
+    _scheduleLocationDeadline(photoId);
+  }
+
+  Future<void> _recoverPendingLocations() async {
+    _ensureLocationListener();
+    final now = DateTime.now().toUtc();
+    for (final photo in [...photos]) {
+      if (!photo.locationPending) continue;
+      final expires = photo.capturedAt.add(
+        LocationEvidencePolicy.postCaptureWindow,
+      );
+      if (!now.isBefore(expires)) {
+        await _finalizeLocationWindow(photo.id);
+      } else {
+        _scheduleLocationDeadline(photo.id);
+      }
+    }
+    if (photos.any((photo) => photo.locationPending)) {
+      unawaited(locations.startPrewarm());
+    }
+  }
+
+  Future<void> _applyBufferedFixes() async {
+    for (final photo in [...photos].where((item) => item.locationPending)) {
+      await _considerBestFix(photo.id);
+    }
+  }
+
+  Future<void> _considerBestFix(String photoId) async {
+    final photo = photos
+        .where((item) => uuidEquals(item.id, photoId))
+        .firstOrNull;
+    if (photo == null || !photo.locationPending) return;
+    final s = survey(photo.surveyId);
+    final neighbors = photos
+        .where(
+          (item) =>
+              uuidEquals(item.surveyId, photo.surveyId) &&
+              !uuidEquals(item.id, photo.id) &&
+              item.locationConfirmed,
+        )
+        .map((item) => item.location!)
+        .toList();
+    final fix = locations.bestFix(
+      photo.capturedAt,
+      canonicalLocation: s.canonicalLocation,
+      neighboringFixes: neighbors,
+    );
+    if (fix == null) return;
+    if (photo.location != null) {
+      final previous = LocationFix(
+        latitude: photo.location!.latitude,
+        longitude: photo.location!.longitude,
+        horizontalAccuracy: photo.location!.accuracy,
+        altitude: photo.location!.altitude,
+        timestamp: photo.locationFixAt ?? photo.location!.capturedAt,
+        acquiredAt: photo.locationAcquiredAt ?? photo.location!.capturedAt,
+        isMocked: photo.locationIntegrityFlag == LocationIntegrityFlag.mocked,
+      );
+      if (scoreLocationFix(
+            previous,
+            photo.capturedAt,
+            canonicalLocation: s.canonicalLocation,
+            neighboringFixes: neighbors,
+          ) <=
+          scoreLocationFix(
+            fix,
+            photo.capturedAt,
+            canonicalLocation: s.canonicalLocation,
+            neighboringFixes: neighbors,
+          )) {
+        return;
+      }
+    }
+    final early = canEarlyAcceptLocationFix(fix, photo.capturedAt);
+    await _applyLocationFix(
+      photo,
+      fix,
+      early ? PhotoLocationState.confirmed : PhotoLocationState.provisional,
+      s.canonicalLocation,
+    );
+  }
+
+  Future<void> _applyLocationFix(
+    ConstructionPhoto photo,
+    LocationFix fix,
+    PhotoLocationState state,
+    GeoPoint? canonical,
+  ) async {
+    final consistency = locationConsistency(fix, canonical);
+    final updated = photo.copyWith(
+      location: fix.toGeoPoint(),
+      locationState: state,
+      locationFixAt: fix.timestamp,
+      locationAcquiredAt: fix.acquiredAt,
+      locationAltitudeAccuracy: fix.altitudeAccuracy,
+      locationHeading: fix.heading,
+      locationSpeed: fix.speed,
+      locationSource: fix.source,
+      locationTemporalDeltaMs: fix.ageAt(photo.capturedAt).inMilliseconds,
+      locationConfidence: locationConfidence(fix.horizontalAccuracy),
+      locationDistanceToCanonical: canonical == null
+          ? null
+          : distanceBetweenFixAndPoint(fix, canonical),
+      locationConsistency: consistency,
+      locationIntegrityFlag: fix.isMocked
+          ? LocationIntegrityFlag.mocked
+          : LocationIntegrityFlag.none,
+      syncState: state == PhotoLocationState.confirmed
+          ? PhotoSyncState.queued
+          : photo.syncState,
+    );
+    await _replacePhoto(updated);
+    if (state == PhotoLocationState.confirmed) {
+      _locationDeadlines.remove(photo.id)?.cancel();
       final s = survey(photo.surveyId);
       if (photo.stepNumber == 1 && s.canonicalLocation == null) {
-        await _replaceSurvey(s.copyWith(canonicalLocation: point));
+        await _replaceSurvey(s.copyWith(canonicalLocation: updated.location));
       }
       await _enqueue(
         photo.surveyId,
@@ -278,10 +417,58 @@ class AppController extends ChangeNotifier {
         photoId: photo.id,
         step: photo.stepNumber,
       );
-    } catch (_) {
-      message = 'Una foto sigue esperando ubicación válida.';
-      notifyListeners();
     }
+  }
+
+  void _scheduleLocationDeadline(String photoId) {
+    _locationDeadlines.remove(photoId)?.cancel();
+    final photo = photos
+        .where((item) => uuidEquals(item.id, photoId))
+        .firstOrNull;
+    if (photo == null || !photo.locationPending) return;
+    final wait = photo.capturedAt
+        .add(LocationEvidencePolicy.postCaptureWindow)
+        .difference(DateTime.now().toUtc());
+    _locationDeadlines[photo.id] = Timer(
+      wait.isNegative ? Duration.zero : wait,
+      () => unawaited(_finalizeLocationWindow(photo.id)),
+    );
+  }
+
+  Future<void> _finalizeLocationWindow(String photoId) async {
+    final photo = photos
+        .where((item) => uuidEquals(item.id, photoId))
+        .firstOrNull;
+    if (photo == null || !photo.locationPending) return;
+    await _considerBestFix(photo.id);
+    final latest = photos.where((item) => uuidEquals(item.id, photo.id)).first;
+    if (latest.location != null &&
+        latest.locationState == PhotoLocationState.provisional) {
+      final fix = LocationFix(
+        latitude: latest.location!.latitude,
+        longitude: latest.location!.longitude,
+        horizontalAccuracy: latest.location!.accuracy,
+        altitude: latest.location!.altitude,
+        altitudeAccuracy: latest.locationAltitudeAccuracy,
+        heading: latest.locationHeading,
+        speed: latest.locationSpeed,
+        timestamp: latest.locationFixAt ?? latest.location!.capturedAt,
+        acquiredAt: latest.locationAcquiredAt ?? latest.location!.capturedAt,
+        source: latest.locationSource,
+        isMocked: latest.locationIntegrityFlag == LocationIntegrityFlag.mocked,
+      );
+      await _applyLocationFix(
+        latest,
+        fix,
+        PhotoLocationState.confirmed,
+        survey(latest.surveyId).canonicalLocation,
+      );
+    } else {
+      await _replacePhoto(
+        latest.copyWith(locationState: PhotoLocationState.unresolved),
+      );
+    }
+    _locationDeadlines.remove(photo.id)?.cancel();
   }
 
   Future<void> deletePhoto(String surveyId, int step, String photoId) async {
@@ -345,15 +532,35 @@ class AppController extends ChangeNotifier {
             evidence.length <= current.maximumPhotos!) &&
         evidence.every(
           (p) =>
-              !p.locationPending &&
+              p.locationConfirmed &&
               File(p.localPath).existsSync() &&
               p.sha256.length == 64,
         );
   }
 
+  bool canAttemptFinalize(String surveyId, int step) {
+    final s = survey(surveyId), evidence = photosForStep(surveyId, step);
+    return s.steps[step - 1].state == StepState.open &&
+        evidence.length >= s.steps[step - 1].minimumPhotos;
+  }
+
   Future<void> finalizeStep(String surveyId, int step) async {
+    for (final photo in photosForStep(
+      surveyId,
+      step,
+    ).where((item) => item.locationState == PhotoLocationState.provisional)) {
+      await _finalizeLocationWindow(photo.id);
+    }
     if (!canFinalize(surveyId, step)) {
-      throw StateError('Completa fotos y ubicación antes de finalizar.');
+      final unresolved = photosForStep(
+        surveyId,
+        step,
+      ).any((photo) => photo.locationUnresolved);
+      throw StateError(
+        unresolved
+            ? 'No fue posible registrar una ubicación válida para una fotografía. Permanece en el sitio y vuelve a tomar esa evidencia.'
+            : 'La ubicación de una fotografía sigue pendiente. Permanece en el sitio antes de finalizar.',
+      );
     }
     final s = survey(surveyId), steps = [...s.steps];
     steps[step - 1] = steps[step - 1].copyWith(state: StepState.completedLocal);
@@ -443,14 +650,14 @@ class AppController extends ChangeNotifier {
     await _replaceSurvey(
       s.copyWith(corrections: corrections, syncState: SyncState.pending),
     );
-    unawaited(_resolveLocation(pending.id));
+    _beginLocationAcquisition(pending.id);
   }
 
   Future<void> finalizeCorrection(String surveyId, String correctionId) async {
     final related = photos
         .where((p) => uuidEquals(p.correctionId, correctionId))
         .toList();
-    if (related.isEmpty || related.any((p) => p.locationPending)) {
+    if (related.isEmpty || related.any((p) => !p.locationConfirmed)) {
       throw StateError('La corrección requiere foto con GPS.');
     }
     final s = survey(surveyId);

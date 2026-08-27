@@ -1,6 +1,6 @@
 # Local Data Model
 
-Schema `2`, boxes: `construction_surveys_v1`, `construction_photos_v1`, `construction_sync_queue_v1`, `construction_metadata_v1`.
+Schema `3`, boxes: `construction_surveys_v1`, `construction_photos_v1`, `construction_sync_queue_v1`, `construction_metadata_v1`.
 
 ## UUID canonicalization rule
 
@@ -27,3 +27,12 @@ locales. El estado confirmado, cuenta no-null, ubicación canónica, rechazo y
 timestamps provienen de la variante server. Si existen operaciones pendientes,
 se conserva el estado funcional local y `syncState=pending`. `remote null` no
 reemplaza una cuenta local pendiente.
+
+## Location Evidence Model
+
+`ConstructionPhoto` separa `capturedAt` de `locationFixAt` y persiste
+`locationAcquiredAt`, accuracy, altitude accuracy, heading, speed, source,
+delta temporal, confidence, distancia a canonical, consistency e integrity flag.
+`locationState` es `pending`, `provisional`, `confirmed` o `unresolved`.
+Fotos legacy con coordenadas migran como confirmed; fotos sin coordenadas como
+pending. La señal `mocked` se conserva para auditoría sin bloqueo automático.

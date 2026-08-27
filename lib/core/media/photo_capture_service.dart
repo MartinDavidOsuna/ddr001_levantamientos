@@ -20,7 +20,8 @@ class PhotoCaptureService {
       imageQuality: 95,
     );
     if (picked == null) return null;
-    final id = canonicalUuid(const Uuid().v4()),
+    final capturedAt = DateTime.now().toUtc(),
+        id = canonicalUuid(const Uuid().v4()),
         canonicalSurveyId = canonicalUuid(surveyId),
         root = Directory(
           p.join(
@@ -61,7 +62,7 @@ class PhotoCaptureService {
       localPath: normalized.path,
       thumbnailPath: thumb.path,
       sha256: digest,
-      capturedAt: DateTime.now().toUtc(),
+      capturedAt: capturedAt,
       stepNumber: step,
       correctionId: canonicalUuidOrNull(correctionId),
       purpose: purpose,

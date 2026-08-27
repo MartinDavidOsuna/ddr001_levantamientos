@@ -151,8 +151,57 @@ void main() {
       expect(app.canFinalize(survey.id, 6), isFalse);
       app.photos = [...app.photos, photo('w', PhotoPurpose.west)];
       expect(app.canFinalize(survey.id, 6), isTrue);
+      app.photos = [
+        ...app.photos,
+        photo(
+          'pending-additional',
+          PhotoPurpose.additional,
+        ).copyWith(locationState: PhotoLocationState.pending),
+      ];
+      expect(
+        app.canFinalize(survey.id, 6),
+        isFalse,
+        reason: 'additional evidence is also required to be georeferenced',
+      );
+      app.photos = app.photos
+          .where((item) => item.id != 'pending-additional')
+          .toList();
       await app.finalizeStep(survey.id, 6);
       await expectLater(app.deletePhoto(survey.id, 6, 'w'), throwsStateError);
+    },
+  );
+
+  test(
+    'finalization blocks pending location and allows confirmed location',
+    () async {
+      final survey = await app.createSurvey('Location gate');
+      final evidenceFile = File('${root.path}/location-gate.jpg')
+        ..writeAsStringSync('x');
+      ConstructionPhoto evidence(PhotoLocationState state) => ConstructionPhoto(
+        id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        surveyId: survey.id,
+        localPath: evidenceFile.path,
+        thumbnailPath: evidenceFile.path,
+        sha256: List.filled(64, 'a').join(),
+        capturedAt: DateTime.now().toUtc(),
+        stepNumber: 1,
+        location: state == PhotoLocationState.confirmed
+            ? GeoPoint(
+                latitude: 20,
+                longitude: -100,
+                accuracy: 5,
+                capturedAt: DateTime.now().toUtc(),
+              )
+            : null,
+        locationState: state,
+        syncState: PhotoSyncState.localOnly,
+      );
+      app.photos = [evidence(PhotoLocationState.pending)];
+      expect(app.canAttemptFinalize(survey.id, 1), isTrue);
+      expect(app.canFinalize(survey.id, 1), isFalse);
+      await expectLater(app.finalizeStep(survey.id, 1), throwsStateError);
+      app.photos = [evidence(PhotoLocationState.confirmed)];
+      expect(app.canFinalize(survey.id, 1), isTrue);
     },
   );
 }

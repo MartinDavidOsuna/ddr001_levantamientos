@@ -4,7 +4,7 @@
 
 SQL Server puede serializar `UNIQUEIDENTIFIER` en mayúsculas. Flutter usa siempre
 lowercase como representación canónica para todos los UUID Construction. Una
-diferencia de case jamás crea otra entidad. Storage schema v2 repara de forma
+diferencia de case jamás crea otra entidad. Storage schema v3 repara de forma
 silenciosa instalaciones legacy sin borrar carpetas ni archivos fotográficos.
 
 - Proyecto: `ddr001_levantamientos`, versión `0.1.0+1`.
@@ -12,6 +12,15 @@ silenciosa instalaciones legacy sin borrar carpetas ni archivos fotográficos.
 - Nombre visible: DDR001 Levantamientos.
 - Flutter 3.44.8, Dart 3.12.2, Android/iOS únicamente.
 - Auth: field sessions DDR001 existente; perfil Construction decide `contractor`/`resident`.
-- Offline: Hive CE schema 1. Tokens: Secure Storage.
+- Offline: Hive CE schema 3. Tokens: Secure Storage.
 - API configurable por `APP_ENV` y `API_BASE_URL`; producción requiere HTTPS.
 - Evidencia: cámara exclusivamente, GPS individual obligatorio, originales retenidos.
+
+## Location Evidence Model
+
+Geolocator solicita `LocationAccuracy.best`, que permite fused/GNSS/Wi-Fi/celda
+según disponibilidad del sistema; no se condiciona a Internet. Prewarm sólo vive
+durante flujos de levantamiento o ventanas pending. El buffer retiene fixes breves;
+el scoring pondera delta temporal (2 puntos/s) y accuracy (1.5 puntos/m), con
+penalizaciones secundarias por salir del radio canonical/vecinos. Ventanas:
+pre-captura 60 s, post-captura 120 s, early acceptance ≤10 m y ±30 s.

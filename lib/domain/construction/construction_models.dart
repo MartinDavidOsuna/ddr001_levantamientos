@@ -31,6 +31,14 @@ enum PhotoSyncState {
   deleted,
 }
 
+enum PhotoLocationState { pending, provisional, confirmed, unresolved }
+
+enum LocationConfidence { excellent, good, acceptable, weak, invalid }
+
+enum LocationConsistency { unknown, consistent, uncertain, outlier }
+
+enum LocationIntegrityFlag { none, mocked }
+
 enum PhotoPurpose { north, east, south, west, additional }
 
 const cardinalPhotoPurposes = <PhotoPurpose>[
@@ -110,7 +118,23 @@ class ConstructionPhoto {
     this.correctionId,
     this.location,
     this.purpose,
-  });
+    PhotoLocationState? locationState,
+    this.locationFixAt,
+    this.locationAcquiredAt,
+    this.locationAltitudeAccuracy,
+    this.locationHeading,
+    this.locationSpeed,
+    this.locationSource,
+    this.locationTemporalDeltaMs,
+    this.locationConfidence,
+    this.locationDistanceToCanonical,
+    this.locationConsistency = LocationConsistency.unknown,
+    this.locationIntegrityFlag = LocationIntegrityFlag.none,
+  }) : locationState =
+           locationState ??
+           (location == null
+               ? PhotoLocationState.pending
+               : PhotoLocationState.confirmed);
   final String id, surveyId, localPath, thumbnailPath, sha256;
   final int? stepNumber;
   final String? correctionId;
@@ -118,21 +142,73 @@ class ConstructionPhoto {
   final GeoPoint? location;
   final PhotoPurpose? purpose;
   final PhotoSyncState syncState;
-  bool get locationPending => location == null || !location!.isValid;
-  ConstructionPhoto copyWith({GeoPoint? location, PhotoSyncState? syncState}) =>
-      ConstructionPhoto(
-        id: id,
-        surveyId: surveyId,
-        localPath: localPath,
-        thumbnailPath: thumbnailPath,
-        sha256: sha256,
-        capturedAt: capturedAt,
-        stepNumber: stepNumber,
-        correctionId: correctionId,
-        location: location ?? this.location,
-        purpose: purpose,
-        syncState: syncState ?? this.syncState,
-      );
+  final PhotoLocationState locationState;
+  final DateTime? locationFixAt, locationAcquiredAt;
+  final double? locationAltitudeAccuracy, locationHeading, locationSpeed;
+  final String? locationSource;
+  final int? locationTemporalDeltaMs;
+  final LocationConfidence? locationConfidence;
+  final double? locationDistanceToCanonical;
+  final LocationConsistency locationConsistency;
+  final LocationIntegrityFlag locationIntegrityFlag;
+  bool get locationPending =>
+      locationState != PhotoLocationState.unresolved &&
+      (locationState == PhotoLocationState.pending ||
+          locationState == PhotoLocationState.provisional ||
+          location == null ||
+          !location!.isValid);
+  bool get locationConfirmed =>
+      locationState == PhotoLocationState.confirmed &&
+      location != null &&
+      location!.isValid;
+  bool get locationUnresolved => locationState == PhotoLocationState.unresolved;
+  ConstructionPhoto copyWith({
+    GeoPoint? location,
+    PhotoSyncState? syncState,
+    PhotoLocationState? locationState,
+    DateTime? locationFixAt,
+    DateTime? locationAcquiredAt,
+    double? locationAltitudeAccuracy,
+    double? locationHeading,
+    double? locationSpeed,
+    String? locationSource,
+    int? locationTemporalDeltaMs,
+    LocationConfidence? locationConfidence,
+    double? locationDistanceToCanonical,
+    LocationConsistency? locationConsistency,
+    LocationIntegrityFlag? locationIntegrityFlag,
+  }) => ConstructionPhoto(
+    id: id,
+    surveyId: surveyId,
+    localPath: localPath,
+    thumbnailPath: thumbnailPath,
+    sha256: sha256,
+    capturedAt: capturedAt,
+    stepNumber: stepNumber,
+    correctionId: correctionId,
+    location: location ?? this.location,
+    purpose: purpose,
+    syncState: syncState ?? this.syncState,
+    locationState:
+        locationState ??
+        (location != null && this.location == null
+            ? PhotoLocationState.confirmed
+            : this.locationState),
+    locationFixAt: locationFixAt ?? this.locationFixAt,
+    locationAcquiredAt: locationAcquiredAt ?? this.locationAcquiredAt,
+    locationAltitudeAccuracy:
+        locationAltitudeAccuracy ?? this.locationAltitudeAccuracy,
+    locationHeading: locationHeading ?? this.locationHeading,
+    locationSpeed: locationSpeed ?? this.locationSpeed,
+    locationSource: locationSource ?? this.locationSource,
+    locationTemporalDeltaMs:
+        locationTemporalDeltaMs ?? this.locationTemporalDeltaMs,
+    locationConfidence: locationConfidence ?? this.locationConfidence,
+    locationDistanceToCanonical:
+        locationDistanceToCanonical ?? this.locationDistanceToCanonical,
+    locationConsistency: locationConsistency ?? this.locationConsistency,
+    locationIntegrityFlag: locationIntegrityFlag ?? this.locationIntegrityFlag,
+  );
   Map<String, dynamic> toJson() => {
     'id': id,
     'surveyId': surveyId,
@@ -145,27 +221,64 @@ class ConstructionPhoto {
     'location': location?.toJson(),
     'syncState': syncState.name,
     'purpose': purpose?.name,
+    'locationState': locationState.name,
+    'locationFixAt': locationFixAt?.toIso8601String(),
+    'locationAcquiredAt': locationAcquiredAt?.toIso8601String(),
+    'locationAltitudeAccuracy': locationAltitudeAccuracy,
+    'locationHeading': locationHeading,
+    'locationSpeed': locationSpeed,
+    'locationSource': locationSource,
+    'locationTemporalDeltaMs': locationTemporalDeltaMs,
+    'locationConfidence': locationConfidence?.name,
+    'locationDistanceToCanonical': locationDistanceToCanonical,
+    'locationConsistency': locationConsistency.name,
+    'locationIntegrityFlag': locationIntegrityFlag.name,
   };
-  factory ConstructionPhoto.fromJson(Map<String, dynamic> j) =>
-      ConstructionPhoto(
-        id: canonicalUuid(j['id'] as String),
-        surveyId: canonicalUuid(j['surveyId'] as String),
-        localPath: j['localPath'] as String,
-        thumbnailPath: j['thumbnailPath'] as String,
-        sha256: j['sha256'] as String,
-        capturedAt: DateTime.parse(j['capturedAt'] as String),
-        stepNumber: j['stepNumber'] as int?,
-        correctionId: canonicalUuidOrNull(j['correctionId'] as String?),
-        location: j['location'] == null
-            ? null
-            : GeoPoint.fromJson(
-                Map<String, dynamic>.from(j['location'] as Map),
-              ),
-        syncState: PhotoSyncState.values.byName(j['syncState'] as String),
-        purpose: j['purpose'] == null
-            ? null
-            : PhotoPurpose.values.byName(j['purpose'] as String),
-      );
+  factory ConstructionPhoto.fromJson(
+    Map<String, dynamic> j,
+  ) => ConstructionPhoto(
+    id: canonicalUuid(j['id'] as String),
+    surveyId: canonicalUuid(j['surveyId'] as String),
+    localPath: j['localPath'] as String,
+    thumbnailPath: j['thumbnailPath'] as String,
+    sha256: j['sha256'] as String,
+    capturedAt: DateTime.parse(j['capturedAt'] as String),
+    stepNumber: j['stepNumber'] as int?,
+    correctionId: canonicalUuidOrNull(j['correctionId'] as String?),
+    location: j['location'] == null
+        ? null
+        : GeoPoint.fromJson(Map<String, dynamic>.from(j['location'] as Map)),
+    syncState: PhotoSyncState.values.byName(j['syncState'] as String),
+    purpose: j['purpose'] == null
+        ? null
+        : PhotoPurpose.values.byName(j['purpose'] as String),
+    locationState: j['locationState'] == null
+        ? j['location'] == null
+              ? PhotoLocationState.pending
+              : PhotoLocationState.confirmed
+        : PhotoLocationState.values.byName(j['locationState'] as String),
+    locationFixAt: DateTime.tryParse('${j['locationFixAt'] ?? ''}'),
+    locationAcquiredAt: DateTime.tryParse('${j['locationAcquiredAt'] ?? ''}'),
+    locationAltitudeAccuracy: (j['locationAltitudeAccuracy'] as num?)
+        ?.toDouble(),
+    locationHeading: (j['locationHeading'] as num?)?.toDouble(),
+    locationSpeed: (j['locationSpeed'] as num?)?.toDouble(),
+    locationSource: j['locationSource'] as String?,
+    locationTemporalDeltaMs: j['locationTemporalDeltaMs'] as int?,
+    locationConfidence: j['locationConfidence'] == null
+        ? null
+        : LocationConfidence.values.byName(j['locationConfidence'] as String),
+    locationDistanceToCanonical: (j['locationDistanceToCanonical'] as num?)
+        ?.toDouble(),
+    locationConsistency: j['locationConsistency'] == null
+        ? LocationConsistency.unknown
+        : LocationConsistency.values.byName(j['locationConsistency'] as String),
+    locationIntegrityFlag: j['locationIntegrityFlag'] == null
+        ? LocationIntegrityFlag.none
+        : LocationIntegrityFlag.values.byName(
+            j['locationIntegrityFlag'] as String,
+          ),
+  );
 }
 
 class SurveyStep {

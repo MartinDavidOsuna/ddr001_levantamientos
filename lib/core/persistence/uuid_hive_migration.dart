@@ -189,6 +189,24 @@ ConstructionPhoto mergeDuplicatePhotos(List<ConstructionPhoto> values) {
     location: located?.location ?? local.location,
     purpose: local.purpose,
     syncState: state,
+    locationState: located?.locationState ?? local.locationState,
+    locationFixAt: located?.locationFixAt ?? local.locationFixAt,
+    locationAcquiredAt: located?.locationAcquiredAt ?? local.locationAcquiredAt,
+    locationAltitudeAccuracy:
+        located?.locationAltitudeAccuracy ?? local.locationAltitudeAccuracy,
+    locationHeading: located?.locationHeading ?? local.locationHeading,
+    locationSpeed: located?.locationSpeed ?? local.locationSpeed,
+    locationSource: located?.locationSource ?? local.locationSource,
+    locationTemporalDeltaMs:
+        located?.locationTemporalDeltaMs ?? local.locationTemporalDeltaMs,
+    locationConfidence: located?.locationConfidence ?? local.locationConfidence,
+    locationDistanceToCanonical:
+        located?.locationDistanceToCanonical ??
+        local.locationDistanceToCanonical,
+    locationConsistency:
+        located?.locationConsistency ?? local.locationConsistency,
+    locationIntegrityFlag:
+        located?.locationIntegrityFlag ?? local.locationIntegrityFlag,
   );
 }
 
