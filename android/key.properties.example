@@ -1,0 +1,4 @@
+storePassword=REEMPLAZAR
+keyPassword=REEMPLAZAR
+keyAlias=ddr001-levantamientos
+storeFile=/RUTA/ABSOLUTA/ddr001-levantamientos-upload.jks
