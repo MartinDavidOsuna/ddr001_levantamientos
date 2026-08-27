@@ -1,0 +1,57 @@
+USE [master];
+SET NOCOUNT ON;
+IF CONVERT(sysname,SERVERPROPERTY('ServerName'))<>N'WIN-5RQE8N8NQ9V' THROW 51070,'STOP: servidor incorrecto.',1;
+IF DB_ID(N'DDR001_Hidrantes_TEST') IS NULL THROW 51071,'STOP: TEST no existe.',1;
+IF N'Agrienlace2001!' LIKE N'<%>' THROW 51072,'STOP: sustituya <RUNTIME_PASSWORD>.',1;
+IF SUSER_ID(N'DDR001_Levantamientos_TEST_Runtime') IS NOT NULL THROW 51073,'STOP: login Runtime ya existe; no se reemplazó.',1;
+CREATE LOGIN [DDR001_Levantamientos_TEST_Runtime] WITH PASSWORD=N'Agrienlace2001!',DEFAULT_DATABASE=[DDR001_Hidrantes_TEST],CHECK_POLICY=ON,CHECK_EXPIRATION=OFF;
+DENY VIEW ANY DATABASE TO [DDR001_Levantamientos_TEST_Runtime];
+
+USE [DDR001_Hidrantes_TEST];
+CREATE USER [DDR001_Levantamientos_TEST_Runtime] FOR LOGIN [DDR001_Levantamientos_TEST_Runtime] WITH DEFAULT_SCHEMA=[rv];
+GRANT CONNECT TO [DDR001_Levantamientos_TEST_Runtime];
+GRANT SELECT ON SCHEMA::[rv] TO [DDR001_Levantamientos_TEST_Runtime];
+GRANT EXECUTE ON SCHEMA::[rv] TO [DDR001_Levantamientos_TEST_Runtime];
+
+-- DML observado en src/**/*.ts del baseline feature/photo-sync-integrity-hardening.
+GRANT INSERT,UPDATE,DELETE ON OBJECT::rv.refresh_tokens TO [DDR001_Levantamientos_TEST_Runtime];
+GRANT INSERT,UPDATE ON OBJECT::rv.crews TO [DDR001_Levantamientos_TEST_Runtime];
+GRANT INSERT,UPDATE ON OBJECT::rv.users TO [DDR001_Levantamientos_TEST_Runtime];
+GRANT INSERT,UPDATE ON OBJECT::rv.devices TO [DDR001_Levantamientos_TEST_Runtime];
+GRANT INSERT,UPDATE ON OBJECT::rv.work_sessions TO [DDR001_Levantamientos_TEST_Runtime];
+GRANT INSERT,UPDATE ON OBJECT::rv.hydrants TO [DDR001_Levantamientos_TEST_Runtime];
+GRANT INSERT,UPDATE ON OBJECT::rv.inspections TO [DDR001_Levantamientos_TEST_Runtime];
+GRANT INSERT,UPDATE ON OBJECT::rv.photos TO [DDR001_Levantamientos_TEST_Runtime];
+GRANT INSERT,UPDATE,DELETE ON OBJECT::rv.inspection_answers TO [DDR001_Levantamientos_TEST_Runtime];
+GRANT INSERT ON OBJECT::rv.location_samples TO [DDR001_Levantamientos_TEST_Runtime];
+GRANT INSERT ON OBJECT::rv.signal_samples TO [DDR001_Levantamientos_TEST_Runtime];
+GRANT INSERT ON OBJECT::rv.audit_log TO [DDR001_Levantamientos_TEST_Runtime];
+GRANT INSERT,UPDATE,DELETE ON OBJECT::rv.idempotency_keys TO [DDR001_Levantamientos_TEST_Runtime];
+GRANT INSERT,UPDATE ON OBJECT::rv.inspection_status_history TO [DDR001_Levantamientos_TEST_Runtime];
+GRANT INSERT,UPDATE,DELETE ON OBJECT::rv.inspection_parcel_valve_configurations TO [DDR001_Levantamientos_TEST_Runtime];
+GRANT INSERT,UPDATE,DELETE ON OBJECT::rv.inspection_parcel_valves TO [DDR001_Levantamientos_TEST_Runtime];
+GRANT INSERT,UPDATE,DELETE ON OBJECT::rv.brands TO [DDR001_Levantamientos_TEST_Runtime];
+GRANT INSERT,UPDATE,DELETE ON OBJECT::rv.brand_client_aliases TO [DDR001_Levantamientos_TEST_Runtime];
+GRANT INSERT,UPDATE,DELETE ON OBJECT::rv.brand_element_types TO [DDR001_Levantamientos_TEST_Runtime];
+GRANT INSERT,UPDATE ON OBJECT::rv.diameters TO [DDR001_Levantamientos_TEST_Runtime];
+GRANT INSERT,UPDATE ON OBJECT::rv.pressure_ranges TO [DDR001_Levantamientos_TEST_Runtime];
+GRANT INSERT ON OBJECT::rv.pressure_range_client_aliases TO [DDR001_Levantamientos_TEST_Runtime];
+GRANT INSERT,UPDATE ON OBJECT::rv.import_batches TO [DDR001_Levantamientos_TEST_Runtime];
+GRANT INSERT,UPDATE ON OBJECT::rv.hydrant_rv_rounds TO [DDR001_Levantamientos_TEST_Runtime];
+GRANT INSERT,UPDATE ON OBJECT::rv.hydrant_rv_claims TO [DDR001_Levantamientos_TEST_Runtime];
+GRANT INSERT,UPDATE ON OBJECT::rv.hydrant_rv_status TO [DDR001_Levantamientos_TEST_Runtime];
+GRANT INSERT ON OBJECT::rv.inspection_conflicts TO [DDR001_Levantamientos_TEST_Runtime];
+GRANT INSERT,UPDATE ON OBJECT::rv.visual_reports TO [DDR001_Levantamientos_TEST_Runtime];
+GRANT INSERT,UPDATE ON OBJECT::rv.visual_report_versions TO [DDR001_Levantamientos_TEST_Runtime];
+GRANT INSERT,UPDATE,DELETE ON OBJECT::rv.visual_report_version_photos TO [DDR001_Levantamientos_TEST_Runtime];
+GRANT INSERT,UPDATE ON OBJECT::rv.visual_report_version_conflicts TO [DDR001_Levantamientos_TEST_Runtime];
+GRANT INSERT,UPDATE ON OBJECT::rv.visual_report_version_commands TO [DDR001_Levantamientos_TEST_Runtime];
+GRANT UPDATE ON OBJECT::rv.admin_users TO [DDR001_Levantamientos_TEST_Runtime];
+
+USE [master];
+EXECUTE AS LOGIN=N'DDR001_Levantamientos_TEST_Runtime';
+BEGIN TRY USE [DDR001_Hidrantes_TEST]; SELECT DB_NAME() AS database_name,'TEST_ACCESS_OK' result; END TRY BEGIN CATCH SELECT ERROR_MESSAGE() error,'TEST_ACCESS_FAILED_STOP' result; END CATCH;
+REVERT;
+EXECUTE AS LOGIN=N'DDR001_Levantamientos_TEST_Runtime';
+BEGIN TRY USE [DDR001_Hidrantes_Prod]; SELECT DB_NAME() AS database_name,'PROD_ACCESS_UNEXPECTED_STOP' result; END TRY BEGIN CATCH SELECT ERROR_MESSAGE() error,'PROD_ACCESS_DENIED_OK' result; END CATCH;
+REVERT;
