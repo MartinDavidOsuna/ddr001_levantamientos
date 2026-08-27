@@ -110,7 +110,8 @@ void main() {
       expect(queue.single.surveyId, lowerSurvey);
       expect(surveysBox.keys, [lowerSurvey]);
       expect(photosBox.keys, [lowerPhoto]);
-      expect(metadataBox.get('schemaVersion'), '2');
+      expect(metadataBox.get('schemaVersion'), '3');
+      expect(metadataBox.get(LocalStore.causalQueueRecoveryMarker), 'complete');
       expect(metadataBox.get(UuidHiveMigration.marker), 'complete');
     },
   );

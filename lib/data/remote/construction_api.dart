@@ -1,4 +1,6 @@
 import 'dart:io';
+// ConstructionApi intentionally keeps its compact one-line endpoint methods.
+// ignore_for_file: annotate_overrides
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:dio/dio.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -13,7 +15,51 @@ Map<String, dynamic> surveyCreatePayload(BaseSurvey survey) => {
   'accountNumber': survey.accountNumber,
 };
 
-class ConstructionApi {
+const constructionCausalIdempotencyVersion = 'causal-v1';
+
+abstract interface class ConstructionRemote {
+  Future<FieldSession> login({
+    required String name,
+    required String email,
+    required String phone,
+    required String crew,
+  });
+  Future<void> revokeExisting(String takeoverToken);
+  Future<ConstructionProfile> profile();
+  Future<void> logout(FieldSession session);
+  Future<Map<String, dynamic>> createSurvey(BaseSurvey survey);
+  Future<void> openStep(String survey, int step);
+  Future<void> commentStep(String survey, int step, String? comment);
+  Future<void> completeStep(String survey, int step);
+  Future<void> upload(ConstructionPhoto photo);
+  Future<void> deletePhoto(String surveyId, String photoId);
+  Future<Map<String, dynamic>> verify(List<String> ids);
+  Future<List<Map<String, dynamic>>> list({
+    bool resident,
+    String? search,
+    String? status,
+  });
+  Future<Map<String, dynamic>> detail(String surveyId);
+  Future<void> residentUpdate(String id, Map<String, dynamic> values);
+  Future<void> residentAction(
+    String id,
+    String action, [
+    Map<String, dynamic>? body,
+  ]);
+  Future<void> correctCanonicalLocation(
+    String id,
+    GeoPoint point,
+    String reason,
+  );
+  Future<void> correctionComment(
+    String surveyId,
+    String correctionId,
+    String? comment,
+  );
+  Future<void> completeCorrection(String surveyId, String correctionId);
+}
+
+class ConstructionApi implements ConstructionRemote {
   ConstructionApi(this.client, this.sessions, this.packageInfo);
   final ApiClient client;
   final SessionStore sessions;
@@ -102,13 +148,21 @@ class ConstructionApi {
       (await client.dio.post<Map<String, dynamic>>(
         '/construction/base-surveys',
         data: surveyCreatePayload(survey),
-        options: Options(headers: {'Idempotency-Key': 'survey-${survey.id}'}),
+        options: Options(
+          headers: {
+            'Idempotency-Key':
+                'survey-${survey.id}-$constructionCausalIdempotencyVersion',
+          },
+        ),
       )).data ??
       const {};
   Future<void> openStep(String survey, int step) => client.dio.post<void>(
     '/construction/base-surveys/${canonicalUuid(survey)}/steps/$step/open',
     options: Options(
-      headers: {'Idempotency-Key': 'open-${canonicalUuid(survey)}-$step'},
+      headers: {
+        'Idempotency-Key':
+            'open-${canonicalUuid(survey)}-$step-$constructionCausalIdempotencyVersion',
+      },
     ),
   );
   Future<void> commentStep(String survey, int step, String? comment) =>
@@ -119,7 +173,10 @@ class ConstructionApi {
   Future<void> completeStep(String survey, int step) => client.dio.post<void>(
     '/construction/base-surveys/${canonicalUuid(survey)}/steps/$step/complete',
     options: Options(
-      headers: {'Idempotency-Key': 'complete-${canonicalUuid(survey)}-$step'},
+      headers: {
+        'Idempotency-Key':
+            'complete-${canonicalUuid(survey)}-$step-$constructionCausalIdempotencyVersion',
+      },
     ),
   );
   Future<void> upload(ConstructionPhoto photo) async {
@@ -146,7 +203,12 @@ class ConstructionApi {
     await client.dio.post<void>(
       path,
       data: form,
-      options: Options(headers: {'Idempotency-Key': 'photo-${photo.id}'}),
+      options: Options(
+        headers: {
+          'Idempotency-Key':
+              'photo-${photo.id}-$constructionCausalIdempotencyVersion',
+        },
+      ),
     );
   }
 
@@ -156,7 +218,10 @@ class ConstructionApi {
   ) => client.dio.delete<void>(
     '/construction/base-surveys/${canonicalUuid(surveyId)}/photos/${canonicalUuid(photoId)}',
     options: Options(
-      headers: {'Idempotency-Key': 'delete-photo-${canonicalUuid(photoId)}'},
+      headers: {
+        'Idempotency-Key':
+            'delete-photo-${canonicalUuid(photoId)}-$constructionCausalIdempotencyVersion',
+      },
     ),
   );
 
@@ -250,7 +315,10 @@ class ConstructionApi {
   ) => client.dio.post<void>(
     '/construction/base-surveys/${canonicalUuid(survey)}/corrections/${canonicalUuid(correction)}/complete',
     options: Options(
-      headers: {'Idempotency-Key': 'correction-${canonicalUuid(correction)}'},
+      headers: {
+        'Idempotency-Key':
+            'correction-${canonicalUuid(correction)}-$constructionCausalIdempotencyVersion',
+      },
     ),
   );
 }

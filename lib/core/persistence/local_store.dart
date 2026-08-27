@@ -6,7 +6,8 @@ import 'uuid_hive_migration.dart';
 
 class LocalStore {
   LocalStore(this.surveysBox, this.photosBox, this.queueBox, this.metadataBox);
-  static const schemaVersion = 2;
+  static const schemaVersion = 3;
+  static const causalQueueRecoveryMarker = 'causalQueueRecoveryV2';
   final Box<String> surveysBox, photosBox, queueBox, metadataBox;
   static Future<LocalStore> open() async {
     final store = LocalStore(
@@ -21,8 +22,48 @@ class LocalStore {
       queueBox: store.queueBox,
       metadataBox: store.metadataBox,
     );
+    await store._repairLegacyCausalQueue();
     await store.metadataBox.put('schemaVersion', '$schemaVersion');
     return store;
+  }
+
+  Future<void> _repairLegacyCausalQueue() async {
+    if (metadataBox.get(causalQueueRecoveryMarker) == 'complete') return;
+    final source = queueBox.toMap(), repaired = <String, SyncQueueItem>{};
+    for (final raw in source.values) {
+      final decoded = SyncQueueItem.fromJson(
+        Map<String, dynamic>.from(jsonDecode(raw) as Map),
+      );
+      final key = canonicalQueueItemId(decoded);
+      final normalized = SyncQueueItem(
+        id: key,
+        surveyId: canonicalUuid(decoded.surveyId),
+        operation: decoded.operation,
+        createdAt: decoded.createdAt,
+        photoId: canonicalUuidOrNull(decoded.photoId),
+        step: decoded.step,
+        correctionId: canonicalUuidOrNull(decoded.correctionId),
+        attempts: decoded.attempts,
+        // A legacy cooldown may have been caused solely by invalid global
+        // ordering. The causal scheduler will assign a new cooldown only if
+        // the operation fails after its prerequisites become ready.
+        nextAttemptAt: null,
+      );
+      final current = repaired[key];
+      repaired[key] = current == null
+          ? normalized
+          : mergeQueueItems(
+              current,
+              normalized,
+            ).copyWith(clearNextAttempt: true);
+    }
+    for (final entry in repaired.entries) {
+      await queueBox.put(entry.key, jsonEncode(entry.value.toJson()));
+    }
+    for (final key in source.keys) {
+      if (!repaired.containsKey('$key')) await queueBox.delete(key);
+    }
+    await metadataBox.put(causalQueueRecoveryMarker, 'complete');
   }
 
   List<BaseSurvey> surveys() => surveysBox.values

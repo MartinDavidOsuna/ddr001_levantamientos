@@ -15,6 +15,7 @@ import '../network/api_client.dart';
 import '../persistence/local_store.dart';
 import '../persistence/uuid_hive_migration.dart';
 import '../security/session_store.dart';
+import 'construction_sync_scheduler.dart';
 
 class AppController extends ChangeNotifier {
   AppController({
@@ -23,15 +24,16 @@ class AppController extends ChangeNotifier {
     required this.sessions,
     required ApiClient api,
     required this.packageInfo,
+    ConstructionRemote? remote,
     LocationService? locations,
     PhotoCaptureService? camera,
-  }) : remote = ConstructionApi(api, sessions, packageInfo),
+  }) : remote = remote ?? ConstructionApi(api, sessions, packageInfo),
        locations = locations ?? LocationService(),
        camera = camera ?? PhotoCaptureService();
   final AppConfig config;
   final LocalStore local;
   final SessionStore sessions;
-  final ConstructionApi remote;
+  final ConstructionRemote remote;
   final PackageInfo packageInfo;
   final LocationService locations;
   final PhotoCaptureService camera;
@@ -44,6 +46,8 @@ class AppController extends ChangeNotifier {
   String? message;
   String? pendingTakeoverToken;
   StreamSubscription<List<ConnectivityResult>>? _connectivity;
+  final ConstructionSyncScheduler _scheduler =
+      const ConstructionSyncScheduler();
 
   Future<void> bootstrap() async {
     surveys = local.surveys();
@@ -505,38 +509,278 @@ class AppController extends ChangeNotifier {
     if (syncing || !online || session == null) return;
     syncing = true;
     notifyListeners();
-    final ordered = [...queue]
-      ..sort((a, b) {
-        final pa = QueueOperation.values.indexOf(a.operation),
-            pb = QueueOperation.values.indexOf(b.operation);
-        return pa != pb ? pa.compareTo(pb) : a.createdAt.compareTo(b.createdAt);
-      });
-    for (final item in ordered) {
-      if (item.nextAttemptAt?.isAfter(DateTime.now()) == true) continue;
+    try {
       try {
-        await _execute(item);
-        queue = queue.where((q) => q.id != item.id).toList();
-        await local.deleteQueue(item.id);
+        await _reconcilePendingSurveys();
       } catch (error) {
-        final retry = item.retry(DateTime.now());
-        queue = queue.map((q) => q.id == item.id ? retry : q).toList();
-        await local.saveQueue(retry);
-        final wait = retry.nextAttemptAt!.difference(DateTime.now());
-        unawaited(
-          Future<void>.delayed(wait.isNegative ? Duration.zero : wait, () {
-            if (online && session != null) unawaited(synchronize());
-          }),
-        );
+        if (error is DioException && error.response?.statusCode != 401) {
+          online = false;
+        }
         if (kDebugMode) {
           debugPrint(
-            '[SYNC] ${item.operation.name} retry=${retry.attempts} category=${error.runtimeType}',
+            '[SYNC] reconciliation classification=global category=${error.runtimeType}',
           );
         }
-        break;
+        return;
+      }
+      while (online && queue.isNotEmpty) {
+        final ready = _scheduler.readyRound(queue, photos, DateTime.now());
+        if (ready.isEmpty) {
+          _logBlockedQueue(DateTime.now());
+          break;
+        }
+        var progressed = false;
+        for (final selected in ready) {
+          final item = queue.where((q) => q.id == selected.id).firstOrNull;
+          if (item == null) continue;
+          try {
+            _logQueue(item, ready: true);
+            await _execute(item);
+            await _removeQueueItem(item);
+            progressed = true;
+          } catch (error) {
+            if (_isGlobalSyncError(error)) {
+              if (error is DioException && error.response?.statusCode != 401) {
+                online = false;
+              }
+              await _recordRetry(item, error, global: true);
+              return;
+            }
+            await _recordRetry(
+              item,
+              error,
+              dependency: _isDependencyResponse(error),
+            );
+          }
+        }
+        if (!progressed &&
+            _scheduler.readyRound(queue, photos, DateTime.now()).isEmpty) {
+          _logBlockedQueue(DateTime.now());
+          break;
+        }
+      }
+    } finally {
+      syncing = false;
+      _scheduleNextAttempt();
+      notifyListeners();
+    }
+  }
+
+  Future<void> _reconcilePendingSurveys() async {
+    final surveyIds = queue.map((item) => canonicalUuid(item.surveyId)).toSet();
+    for (final surveyId in surveyIds) {
+      Map<String, dynamic> detail;
+      try {
+        detail = await remote.detail(surveyId);
+      } on DioException catch (error) {
+        if (error.response?.statusCode == 404) continue;
+        if (_isGlobalSyncError(error)) rethrow;
+        continue;
+      } catch (_) {
+        continue;
+      }
+      final steps = (detail['steps'] as List? ?? const [])
+          .whereType<Map>()
+          .map((row) => Map<String, dynamic>.from(row))
+          .toList();
+      final serverPhotos = (detail['photos'] as List? ?? const [])
+          .whereType<Map>()
+          .map((row) => Map<String, dynamic>.from(row))
+          .toList();
+      final corrections = (detail['corrections'] as List? ?? const [])
+          .whereType<Map>()
+          .map((row) => Map<String, dynamic>.from(row))
+          .toList();
+      final satisfied = <SyncQueueItem>[];
+      for (final item in queue.where(
+        (candidate) => uuidEquals(candidate.surveyId, surveyId),
+      )) {
+        var done = item.operation == QueueOperation.createSurvey;
+        if (item.operation == QueueOperation.openStep) {
+          done = steps.any(
+            (row) => (row['step_number'] as num?)?.toInt() == item.step,
+          );
+        }
+        if (item.operation == QueueOperation.completeStep) {
+          done = steps.any(
+            (row) =>
+                (row['step_number'] as num?)?.toInt() == item.step &&
+                '${row['status']}' == 'completed',
+          );
+        }
+        if (item.operation == QueueOperation.uploadPhoto ||
+            item.operation == QueueOperation.verifyPhotos) {
+          final row = serverPhotos
+              .where(
+                (candidate) => uuidEquals(
+                  '${candidate['photo_id'] ?? candidate['photoId']}',
+                  item.photoId,
+                ),
+              )
+              .firstOrNull;
+          if (row != null) {
+            final confirmed = '${row['integrity_status']}' == 'confirmed';
+            if (item.operation == QueueOperation.uploadPhoto || confirmed) {
+              done = true;
+            }
+            final localPhoto = photos
+                .where((photo) => uuidEquals(photo.id, item.photoId))
+                .firstOrNull;
+            if (localPhoto != null) {
+              await _replacePhoto(
+                localPhoto.copyWith(
+                  syncState: confirmed
+                      ? PhotoSyncState.confirmed
+                      : PhotoSyncState.uploadedUnverified,
+                ),
+              );
+            }
+          }
+        }
+        if (item.operation == QueueOperation.completeCorrection) {
+          done = corrections.any(
+            (row) =>
+                uuidEquals('${row['correction_id']}', item.correctionId) &&
+                '${row['status']}' == 'completed',
+          );
+        }
+        if (done) satisfied.add(item);
+      }
+      for (final item in satisfied) {
+        await _removeQueueItem(item);
       }
     }
-    syncing = false;
-    notifyListeners();
+  }
+
+  Future<void> _removeQueueItem(SyncQueueItem item) async {
+    queue = queue.where((candidate) => candidate.id != item.id).toList();
+    await local.deleteQueue(item.id);
+    if (!queue.any(
+      (candidate) => uuidEquals(candidate.surveyId, item.surveyId),
+    )) {
+      final current = surveys
+          .where((survey) => uuidEquals(survey.id, item.surveyId))
+          .firstOrNull;
+      if (current != null && current.syncState != SyncState.requiresReview) {
+        await _replaceSurvey(
+          current.copyWith(syncState: SyncState.synchronized),
+        );
+      }
+    }
+  }
+
+  Future<void> _recordRetry(
+    SyncQueueItem item,
+    Object error, {
+    bool dependency = false,
+    bool global = false,
+  }) async {
+    final localDependency = dependency && _hasPendingLocalPrerequisite(item);
+    final retry = localDependency
+        ? item.copyWith(
+            nextAttemptAt: DateTime.now().add(const Duration(seconds: 2)),
+          )
+        : item.retry(DateTime.now());
+    queue = queue
+        .map((candidate) => candidate.id == item.id ? retry : candidate)
+        .toList();
+    await local.saveQueue(retry);
+    if (kDebugMode) {
+      final response = error is DioException ? error.response : null;
+      final data = response?.data;
+      final code = data is Map ? data['code'] : null;
+      debugPrint(
+        '[SYNC] survey=${canonicalUuid(item.surveyId)} operation=${item.operation.name} '
+        'step=${item.step ?? '-'} ready=true retry=${retry.attempts} '
+        'classification=${dependency
+            ? 'dependency'
+            : global
+            ? 'global'
+            : 'operation'} '
+        'category=${error.runtimeType} status=${response?.statusCode ?? '-'} '
+        'code=${code ?? '-'} localDependency=$localDependency',
+      );
+    }
+  }
+
+  bool _hasPendingLocalPrerequisite(SyncQueueItem item) {
+    if (item.operation == QueueOperation.openStep &&
+        item.step != null &&
+        item.step! > 1) {
+      return queue.any(
+        (candidate) =>
+            uuidEquals(candidate.surveyId, item.surveyId) &&
+            candidate.operation == QueueOperation.completeStep &&
+            candidate.step == item.step! - 1,
+      );
+    }
+    return false;
+  }
+
+  bool _isDependencyResponse(Object error) {
+    if (error is StateError &&
+        error.message.toString().contains('EVIDENCE_NOT_SYNCED')) {
+      return true;
+    }
+    if (error is! DioException || error.response?.statusCode != 409) {
+      return false;
+    }
+    final data = error.response?.data;
+    final code = data is Map ? '${data['code']}' : '';
+    return const {'STEP_SEQUENCE', 'EVIDENCE_NOT_SYNCED'}.contains(code);
+  }
+
+  bool _isGlobalSyncError(Object error) {
+    if (error is! DioException) return false;
+    if (error.response?.statusCode == 401) return true;
+    return const {
+      DioExceptionType.connectionError,
+      DioExceptionType.connectionTimeout,
+      DioExceptionType.sendTimeout,
+      DioExceptionType.receiveTimeout,
+      DioExceptionType.badCertificate,
+    }.contains(error.type);
+  }
+
+  void _scheduleNextAttempt() {
+    final next = queue
+        .map((item) => item.nextAttemptAt)
+        .whereType<DateTime>()
+        .where((date) => date.isAfter(DateTime.now()))
+        .fold<DateTime?>(
+          null,
+          (earliest, date) =>
+              earliest == null || date.isBefore(earliest) ? date : earliest,
+        );
+    if (next == null || !online || session == null) return;
+    final wait = next.difference(DateTime.now());
+    unawaited(
+      Future<void>.delayed(wait, () {
+        if (online && session != null) unawaited(synchronize());
+      }),
+    );
+  }
+
+  void _logBlockedQueue(DateTime now) {
+    if (!kDebugMode) return;
+    for (final item in queue) {
+      final state = _scheduler.readiness(item, queue, photos, now);
+      if (!state.isReady) {
+        _logQueue(item, ready: false, dependency: state.dependency);
+      }
+    }
+  }
+
+  void _logQueue(
+    SyncQueueItem item, {
+    required bool ready,
+    String? dependency,
+  }) {
+    if (!kDebugMode) return;
+    debugPrint(
+      '[SYNC] survey=${canonicalUuid(item.surveyId)} operation=${item.operation.name} '
+      'step=${item.step ?? '-'} ready=$ready dependency=${dependency ?? '-'}',
+    );
   }
 
   Future<void> _execute(SyncQueueItem item) async {

@@ -385,6 +385,23 @@ class SyncQueueItem {
   final int attempts;
   final DateTime createdAt;
   final DateTime? nextAttemptAt;
+  SyncQueueItem copyWith({
+    int? attempts,
+    DateTime? nextAttemptAt,
+    bool clearNextAttempt = false,
+  }) => SyncQueueItem(
+    id: id,
+    surveyId: surveyId,
+    operation: operation,
+    createdAt: createdAt,
+    photoId: photoId,
+    step: step,
+    correctionId: correctionId,
+    attempts: attempts ?? this.attempts,
+    nextAttemptAt: clearNextAttempt
+        ? null
+        : nextAttemptAt ?? this.nextAttemptAt,
+  );
   SyncQueueItem retry(DateTime now) {
     final seconds = (1 << attempts.clamp(0, 8)) * 2;
     return SyncQueueItem(
