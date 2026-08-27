@@ -1,0 +1,7 @@
+# Functional Specification
+
+Contractor usa Inicio, Levantamientos, Mapa y Perfil. Crea UUID y `displayIdentifier` offline; la app bloquea duplicados propios normalizados conocidos. Pasos 1–5 requieren 1–4 fotos y paso 6 al menos 4 sin máximo. Comentarios son opcionales. Finalizar localmente cierra evidencia, desbloquea el siguiente paso y no depende de Internet. Paso 6 produce `executedLocal` hasta confirmación remota.
+
+Mis levantamientos mezcla local/servidor por UUID, busca identificador/cuenta y filtra estados. Rechazo muestra motivo y usa Correction Round sin modificar evidencia original.
+
+Resident ve revisión y mapa global; puede aceptar/rechazar/entregar, cambiar identificador/cuenta y corregir canonical mediante API, pero no evidencia. Registrar instalación permanece “Próximamente”.
