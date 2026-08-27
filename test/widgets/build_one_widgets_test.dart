@@ -17,6 +17,7 @@ import 'package:ddr001_levantamientos/features/shell/main_shell.dart';
 import 'package:ddr001_levantamientos/shared/widgets/optional_comment_field.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart' hide StepState;
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive_ce/hive.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -122,6 +123,42 @@ void main() {
     await tester.tap(find.byKey(const Key('my_surveys_action')));
     await tester.pumpAndSettle();
     expect(find.text('Mis levantamientos'), findsOneWidget);
+  });
+  testWidgets('bottom navigation labels stay on one line responsively', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 700);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final (app, root) = (await tester.runAsync(
+      () => controller(ConstructionRole.contractor),
+    ))!;
+    addTearDown(() async {
+      await Hive.close();
+      await root.delete(recursive: true);
+    });
+    await tester.pumpWidget(
+      MediaQuery(
+        data: const MediaQueryData(
+          size: Size(320, 700),
+          textScaler: TextScaler.linear(2),
+        ),
+        child: page(app, const MainShell()),
+      ),
+    );
+    await tester.pumpAndSettle();
+    for (final label in const ['INICIO', 'LEVANTAMIENTOS', 'MAPA', 'PERFIL']) {
+      final paragraph = tester.renderObject<RenderParagraph>(find.text(label));
+      final boxes = paragraph.getBoxesForSelection(
+        TextSelection(baseOffset: 0, extentOffset: label.length),
+      );
+      expect(
+        boxes.map((box) => (box.top, box.bottom)).toSet(),
+        hasLength(1),
+        reason: label,
+      );
+    }
   });
   testWidgets('new survey requires display identifier UI', (tester) async {
     final (app, root) = (await tester.runAsync(
