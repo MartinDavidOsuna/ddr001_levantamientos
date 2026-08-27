@@ -375,18 +375,35 @@ class _StepCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 12),
                 if (open && step.number == 6) ...[
-                  ...cardinalPhotoPurposes.map(
-                    (purpose) => ListTile(
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                      leading: Icon(
-                        evidence.any((photo) => photo.purpose == purpose)
-                            ? Icons.check_circle
-                            : Icons.radio_button_unchecked,
-                      ),
-                      title: Text(photoPurposeLabel(purpose)),
-                    ),
+                  Row(
+                    children: cardinalPhotoPurposes
+                        .map(
+                          (purpose) => Expanded(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  evidence.any(
+                                        (photo) => photo.purpose == purpose,
+                                      )
+                                      ? Icons.check_circle
+                                      : Icons.radio_button_unchecked,
+                                ),
+                                const SizedBox(height: 4),
+                                FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: Text(
+                                    photoPurposeLabel(purpose),
+                                    maxLines: 1,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        )
+                        .toList(),
                   ),
+                  const SizedBox(height: 8),
                   Text(
                     nextPurpose == PhotoPurpose.additional
                         ? 'Fotografías adicionales'
