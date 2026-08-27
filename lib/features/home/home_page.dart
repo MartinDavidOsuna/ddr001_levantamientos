@@ -31,7 +31,7 @@ class HomePage extends StatelessWidget {
               key: const Key('new_survey_action'),
               icon: Icons.add_location_alt,
               title: 'INICIAR NUEVO LEVANTAMIENTO',
-              subtitle: 'Documenta una base incluso sin conexión',
+              subtitle: 'Documenta una base nueva',
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => const NewSurveyPage()),
