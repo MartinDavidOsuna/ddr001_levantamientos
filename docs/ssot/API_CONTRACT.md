@@ -11,6 +11,12 @@ Extensión cardinal Build 1: `ddade065cb2ca9eb12803e1f6a3ff7bef83eca1c`.
 - Login móvil DDR001 Levantamientos: envía exclusivamente nombre normalizado, correo
   normalizado, teléfono de diez dígitos y descriptor de dispositivo a Field Auth. No
   captura contraseña, cuadrilla, dominio ni rol y jamás intenta Admin Auth.
+- Envía `client_app=ddr001_levantamientos` en cada inicio Field. La identidad de
+  sesión servidor es app + installation ID; otras apps y dispositivos del mismo
+  usuario conservan sesiones y familias de refresh independientes.
+- Logout termina sólo la sesión Field actual. Si el servidor no confirma el cierre,
+  la app conserva la sesión local y muestra un error para permitir reintento; no
+  simula un logout dejando tokens activos.
 - Compatibilidad del contrato vigente: `/field-sessions/start` todavía marca `crew`
   como requerido. El adaptador envía un scope fijo no visible y no lo conserva en el
   modelo móvil. Construction Profile, no ese atributo, determina rol y capabilities.

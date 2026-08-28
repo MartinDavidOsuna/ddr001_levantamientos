@@ -20,6 +20,9 @@ silenciosa instalaciones legacy sin borrar carpetas ni archivos fotográficos.
   a `rv.users.full_name`; correo se normaliza en minúsculas y teléfono conserva los
   diez dígitos exigidos por el contrato existente. Installation ID, device binding,
   takeover, refresh, restore y logout siguen usando Field Auth.
+- Cada login declara `client_app=ddr001_levantamientos`. Installation ID es propio
+  de esta app; el servidor permite al mismo usuario otras apps y otros dispositivos
+  simultáneos. Logout revoca únicamente la sesión de esta instalación.
 - El login móvil no crea sesiones Admin. La lectura técnica de sesiones Admin antiguas
   permanece sólo para que una sesión ya almacenada pueda restaurarse o cerrarse sin
   romper compatibilidad; no existe control visible que permita iniciar una nueva.

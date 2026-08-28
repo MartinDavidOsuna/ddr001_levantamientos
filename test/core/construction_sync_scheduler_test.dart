@@ -122,10 +122,12 @@ class FakeRemote implements ConstructionRemote {
   Object? reviewFailure;
   Object? authFailure;
   Object? profileFailure;
+  Object? logoutFailure;
   ConstructionRole profileRole = ConstructionRole.contractor;
   int fieldLoginAttempts = 0;
   (String, String, String)? lastFieldIdentity;
   SessionKind? logoutKind;
+  String? revokedTakeoverToken;
 
   @override
   Future<Map<String, dynamic>> detail(String surveyId) async => {
@@ -251,9 +253,16 @@ class FakeRemote implements ConstructionRemote {
   }
 
   @override
-  Future<void> logout(FieldSession session) async => logoutKind = session.kind;
+  Future<void> logout(FieldSession session) async {
+    if (logoutFailure case final failure?) throw failure;
+    logoutKind = session.kind;
+  }
+
   @override
-  Future<void> revokeExisting(String takeoverToken) async {}
+  Future<void> revokeExisting(String takeoverToken) async {
+    revokedTakeoverToken = takeoverToken;
+  }
+
   @override
   Future<List<Map<String, dynamic>>> list({
     bool resident = false,
@@ -476,6 +485,61 @@ void main() {
       ));
     });
 
+    test('another identity conflict never offers device takeover', () async {
+      app.session = null;
+      remote.authFailure = DioException(
+        requestOptions: RequestOptions(path: '/field-sessions/start'),
+        response: Response<Map<String, dynamic>>(
+          requestOptions: RequestOptions(path: '/field-sessions/start'),
+          statusCode: 409,
+          data: const {'code': 'IDENTITY_CONFLICT'},
+        ),
+        type: DioExceptionType.badResponse,
+      );
+
+      final error = await app.login(
+        name: 'Usuario',
+        email: 'usuario@example.com',
+        phone: '1234567890',
+      );
+
+      expect(error, contains('conflicto'));
+      expect(error, isNot(contains('otro dispositivo')));
+      expect(app.pendingTakeoverToken, isNull);
+      expect(remote.fieldLoginAttempts, 1);
+    });
+
+    test(
+      'same-installation recovery requires an explicit takeover token',
+      () async {
+        app.session = null;
+        remote.authFailure = DioException(
+          requestOptions: RequestOptions(path: '/field-sessions/start'),
+          response: Response<Map<String, dynamic>>(
+            requestOptions: RequestOptions(path: '/field-sessions/start'),
+            statusCode: 409,
+            data: const {
+              'code': 'SESSION_ALREADY_ACTIVE',
+              'takeoverToken': 'same-installation-recovery',
+            },
+          ),
+          type: DioExceptionType.badResponse,
+        );
+
+        final error = await app.login(
+          name: 'Usuario',
+          email: 'usuario@example.com',
+          phone: '1234567890',
+        );
+
+        expect(error, contains('Esta instalación'));
+        expect(app.pendingTakeoverToken, 'same-installation-recovery');
+        expect(await app.revokeExistingSession(), isNull);
+        expect(remote.revokedTakeoverToken, 'same-installation-recovery');
+        expect(app.pendingTakeoverToken, isNull);
+      },
+    );
+
     test('logout dispatches using the persisted internal domain', () async {
       app.session = const FieldSession(
         sessionId: '00000000-0000-4000-8000-000000000011',
@@ -488,10 +552,23 @@ void main() {
         phone: '',
         kind: SessionKind.admin,
       );
-      await app.logout();
+      expect(await app.logout(), isNull);
       expect(remote.logoutKind, SessionKind.admin);
       expect(app.session, isNull);
     });
+
+    test(
+      'failed logout keeps the current session available for retry',
+      () async {
+        remote.logoutFailure = StateError('offline');
+        final current = app.session;
+
+        final error = await app.logout();
+
+        expect(error, contains('Intenta de nuevo'));
+        expect(app.session, same(current));
+      },
+    );
 
     test(
       'manual retry probes server even when connectivity state is stale',

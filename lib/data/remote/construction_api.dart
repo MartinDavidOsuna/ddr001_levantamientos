@@ -16,9 +16,36 @@ Map<String, dynamic> surveyCreatePayload(BaseSurvey survey) => {
 };
 
 const constructionCausalIdempotencyVersion = 'causal-v1';
+const fieldClientApp = 'ddr001_levantamientos';
 // The unchanged legacy Field endpoint requires this transport attribute. It is
 // not user-selectable, persisted, displayed, or used by Construction features.
 const _legacyFieldSessionScope = 'DDR001 LEVANTAMIENTOS';
+
+Map<String, dynamic> fieldSessionStartPayload({
+  required String name,
+  required String email,
+  required String phone,
+  required String installationId,
+  required String platform,
+  required String manufacturer,
+  required String model,
+  required String osVersion,
+  required String appVersion,
+}) => {
+  'name': name.trim().replaceAll(RegExp(r'\s+'), ' '),
+  'email': email.trim().toLowerCase(),
+  'phone': phone.trim(),
+  'crew': _legacyFieldSessionScope,
+  'client_app': fieldClientApp,
+  'device': {
+    'installationId': installationId,
+    'platform': platform,
+    'manufacturer': manufacturer,
+    'model': model,
+    'androidVersion': osVersion,
+    'appVersion': appVersion,
+  },
+};
 
 abstract interface class ConstructionRemote {
   Future<FieldSession> fieldLogin({
@@ -88,20 +115,17 @@ class ConstructionApi implements ConstructionRemote {
     }
     final response = await client.dio.post<Map<String, dynamic>>(
       '/field-sessions/start',
-      data: {
-        'name': name.trim().replaceAll(RegExp(r'\s+'), ' '),
-        'email': email.trim().toLowerCase(),
-        'phone': phone.trim(),
-        'crew': _legacyFieldSessionScope,
-        'device': {
-          'installationId': installation,
-          'platform': Platform.operatingSystem,
-          'manufacturer': manufacturer,
-          'model': model,
-          'androidVersion': os,
-          'appVersion': '${packageInfo.version}+${packageInfo.buildNumber}',
-        },
-      },
+      data: fieldSessionStartPayload(
+        name: name,
+        email: email,
+        phone: phone,
+        installationId: installation,
+        platform: Platform.operatingSystem,
+        manufacturer: manufacturer,
+        model: model,
+        osVersion: os,
+        appVersion: '${packageInfo.version}+${packageInfo.buildNumber}',
+      ),
       options: Options(extra: {'skipAuth': true}),
     );
     final j = response.data ?? const {};
@@ -134,23 +158,20 @@ class ConstructionApi implements ConstructionRemote {
         const {},
   );
   Future<void> logout(FieldSession session) async {
-    try {
-      if (session.kind == SessionKind.admin) {
-        await client.dio.post<void>(
-          logoutEndpoint(session),
-          data: {'refreshToken': session.refreshToken},
-        );
-      } else {
-        await client.dio.post<void>(
-          logoutEndpoint(session),
-          options: Options(
-            headers: {'Idempotency-Key': 'end-${session.sessionId}'},
-          ),
-        );
-      }
-    } finally {
-      await sessions.clear();
+    if (session.kind == SessionKind.admin) {
+      await client.dio.post<void>(
+        logoutEndpoint(session),
+        data: {'refreshToken': session.refreshToken},
+      );
+    } else {
+      await client.dio.post<void>(
+        logoutEndpoint(session),
+        options: Options(
+          headers: {'Idempotency-Key': 'end-${session.sessionId}'},
+        ),
+      );
     }
+    await sessions.clear();
   }
 
   Future<Map<String, dynamic>> createSurvey(BaseSurvey survey) async =>

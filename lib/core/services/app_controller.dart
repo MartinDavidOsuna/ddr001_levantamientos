@@ -280,10 +280,13 @@ class AppController extends ChangeNotifier {
     } on DioException catch (error) {
       final data = error.response?.data;
       if (error.response?.statusCode == 409 && data is Map) {
-        pendingTakeoverToken = data['takeoverToken']?.toString();
-        return pendingTakeoverToken == null
-            ? 'La sesión ya está activa.'
-            : 'Tu usuario está activo en otro dispositivo.';
+        final code = data['code']?.toString();
+        final takeoverToken = data['takeoverToken']?.toString();
+        if (code == 'SESSION_ALREADY_ACTIVE' && takeoverToken != null) {
+          pendingTakeoverToken = takeoverToken;
+          return 'Esta instalación necesita recuperar su sesión.';
+        }
+        return 'Los datos de identidad entran en conflicto con otro usuario.';
       }
       return fieldLoginErrorMessage(error);
     } finally {
@@ -305,12 +308,19 @@ class AppController extends ChangeNotifier {
     }
   }
 
-  Future<void> logout() async {
+  Future<String?> logout() async {
     final current = session;
-    if (current != null) await remote.logout(current).catchError((_) {});
+    if (current != null) {
+      try {
+        await remote.logout(current);
+      } catch (_) {
+        return 'No fue posible cerrar la sesión. Intenta de nuevo.';
+      }
+    }
     session = null;
     profile = null;
     notifyListeners();
+    return null;
   }
 
   bool duplicateKnown(String identifier) {

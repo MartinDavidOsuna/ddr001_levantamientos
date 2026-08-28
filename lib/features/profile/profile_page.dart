@@ -109,7 +109,12 @@ class ProfilePage extends StatelessWidget {
                     false;
                 if (!proceed) return;
               }
-              await app.logout();
+              final error = await app.logout();
+              if (error != null && context.mounted) {
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(SnackBar(content: Text(error)));
+              }
             },
             icon: const Icon(Icons.logout),
             label: const Text('Cerrar sesión'),

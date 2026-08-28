@@ -1,5 +1,6 @@
 import 'package:ddr001_levantamientos/core/security/field_identity.dart';
 import 'package:ddr001_levantamientos/core/security/session_store.dart';
+import 'package:ddr001_levantamientos/data/remote/construction_api.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -92,6 +93,28 @@ void main() {
     expect(
       fieldLoginErrorMessage(responseFailure(500)),
       'No fue posible iniciar sesión.',
+    );
+  });
+
+  test('Field login payload identifies Levantamientos and installation', () {
+    final payload = fieldSessionStartPayload(
+      name: ' Usuario  Test ',
+      email: ' USER@EXAMPLE.COM ',
+      phone: '6621234567',
+      installationId: 'installation-a',
+      platform: 'android',
+      manufacturer: 'Motorola',
+      model: 'moto g14',
+      osVersion: '14',
+      appVersion: '1.0.0+1',
+    );
+    expect(payload['client_app'], fieldClientApp);
+    expect(fieldClientApp, 'ddr001_levantamientos');
+    expect(payload['name'], 'Usuario Test');
+    expect(payload['email'], 'user@example.com');
+    expect(
+      (payload['device'] as Map<String, dynamic>)['installationId'],
+      'installation-a',
     );
   });
 }
