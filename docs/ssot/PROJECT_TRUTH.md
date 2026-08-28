@@ -11,18 +11,22 @@ lowercase como representación canónica para todos los UUID Construction. Una
 diferencia de case jamás crea otra entidad. Storage schema v3 repara de forma
 silenciosa instalaciones legacy sin borrar carpetas ni archivos fotográficos.
 
-- Proyecto: `ddr001_levantamientos`, versión `0.1.0+1`.
+- Proyecto: `ddr001_levantamientos`, versión `1.0.0+1`.
 - Android applicationId e iOS bundle id: `com.aquafim.ddr001levantamientos`.
 - Nombre visible: DDR001 Levantamientos.
 - Flutter 3.44.8, Dart 3.12.2, Android/iOS únicamente.
-- Auth: la pantalla es única y no expone dominios ni roles. Un resolver centralizado
-  usa la forma de la credencial existente: contraseña presente intenta únicamente
-  Admin; contraseña vacía con nombre/teléfono/cuadrilla completos intenta únicamente
-  Field. Nunca hay fallback por 401, 429, timeout, error de red o error de servidor.
-  Field conserva sesiones DDR001 y Admin conserva su JWT; no existe conversión de token.
-- Si el mismo correo existe en ambos dominios, una contraseña válida resuelve Admin;
-  sin contraseña resuelve Field. Una contraseña incorrecta jamás cae a Field. El
-  dominio resuelto se persiste sólo en Secure Storage para refresh, restore y logout.
+- Auth móvil: una sola pantalla Field con `name`, `email` y `phone`, sin contraseña,
+  cuadrilla, selector de dominio ni selector de rol. `name` se normaliza y corresponde
+  a `rv.users.full_name`; correo se normaliza en minúsculas y teléfono conserva los
+  diez dígitos exigidos por el contrato existente. Installation ID, device binding,
+  takeover, refresh, restore y logout siguen usando Field Auth.
+- El login móvil no crea sesiones Admin. La lectura técnica de sesiones Admin antiguas
+  permanece sólo para que una sesión ya almacenada pueda restaurarse o cerrarse sin
+  romper compatibilidad; no existe control visible que permita iniciar una nueva.
+- El endpoint Field legacy aún requiere un atributo de cuadrilla. El adaptador remoto
+  envía un scope fijo de compatibilidad que no se captura, persiste, muestra ni utiliza
+  en las features Construction. Esta deuda desaparece cuando el contrato API elimine
+  ese requisito; no autoriza inferir rol ni capabilities.
 - Offline: Hive CE schema 3. Tokens: Secure Storage.
 - API configurable por `APP_ENV` y `API_BASE_URL`; producción acepta HTTPS o la única excepción HTTP oficial exacta.
 - Evidencia: cámara exclusivamente, GPS individual obligatorio, originales retenidos.

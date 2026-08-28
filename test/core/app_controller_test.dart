@@ -59,7 +59,6 @@ void main() {
       displayName: 'Contratista',
       email: 'a@b.mx',
       phone: '1234567890',
-      crew: 'C1',
       role: ConstructionRole.contractor,
     );
   });

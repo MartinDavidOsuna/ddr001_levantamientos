@@ -4,9 +4,7 @@ import 'dart:io';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:dio/dio.dart';
 import 'package:package_info_plus/package_info_plus.dart';
-import 'package:uuid/uuid.dart';
 import '../../core/network/api_client.dart';
-import '../../core/security/auth_resolver.dart';
 import '../../core/security/session_store.dart';
 import '../../domain/construction/construction_models.dart';
 import '../../core/identity/uuid_identity.dart';
@@ -18,17 +16,15 @@ Map<String, dynamic> surveyCreatePayload(BaseSurvey survey) => {
 };
 
 const constructionCausalIdempotencyVersion = 'causal-v1';
+// The unchanged legacy Field endpoint requires this transport attribute. It is
+// not user-selectable, persisted, displayed, or used by Construction features.
+const _legacyFieldSessionScope = 'DDR001 LEVANTAMIENTOS';
 
-abstract interface class ConstructionRemote implements AuthGateway {
+abstract interface class ConstructionRemote {
   Future<FieldSession> fieldLogin({
     required String name,
     required String email,
     required String phone,
-    required String crew,
-  });
-  Future<FieldSession> adminLogin({
-    required String email,
-    required String password,
   });
   Future<void> revokeExisting(String takeoverToken);
   Future<ConstructionProfile> profile();
@@ -74,7 +70,6 @@ class ConstructionApi implements ConstructionRemote {
     required String name,
     required String email,
     required String phone,
-    required String crew,
   }) async {
     final installation = await sessions.installationId();
     var manufacturer = 'Apple',
@@ -97,7 +92,7 @@ class ConstructionApi implements ConstructionRemote {
         'name': name.trim().replaceAll(RegExp(r'\s+'), ' '),
         'email': email.trim().toLowerCase(),
         'phone': phone.trim(),
-        'crew': crew.trim().toUpperCase(),
+        'crew': _legacyFieldSessionScope,
         'device': {
           'installationId': installation,
           'platform': Platform.operatingSystem,
@@ -119,43 +114,6 @@ class ConstructionApi implements ConstructionRemote {
       name: name.trim(),
       email: email.trim().toLowerCase(),
       phone: phone.trim(),
-      crew: crew.trim().toUpperCase(),
-    );
-    await sessions.save(value);
-    return value;
-  }
-
-  Future<FieldSession> adminLogin({
-    required String email,
-    required String password,
-  }) async {
-    final response = await client.dio.post<Map<String, dynamic>>(
-      '/admin/auth/login',
-      data: {'email': email.trim().toLowerCase(), 'password': password},
-      options: Options(extra: {'skipAuth': true}),
-    );
-    final tokens = response.data ?? const {};
-    final me =
-        (await client.dio.get<Map<String, dynamic>>(
-          '/admin/auth/me',
-          options: Options(
-            headers: {'Authorization': 'Bearer ${tokens['accessToken']}'},
-            extra: {'skipAuth': true},
-          ),
-        )).data ??
-        const {};
-    final value = FieldSession(
-      sessionId: canonicalUuid(const Uuid().v4()),
-      userId: canonicalUuid('${me['userId']}'),
-      accessToken: '${tokens['accessToken']}',
-      refreshToken: '${tokens['refreshToken']}',
-      installationId: await sessions.installationId(),
-      name: '',
-      email: email.trim().toLowerCase(),
-      phone: '',
-      crew: '',
-      kind: SessionKind.admin,
-      adminRole: me['role']?.toString(),
     );
     await sessions.save(value);
     return value;

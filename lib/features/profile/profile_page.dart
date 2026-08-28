@@ -36,6 +36,13 @@ class ProfilePage extends StatelessWidget {
             child: Column(
               children: [
                 ListTile(
+                  leading: const Icon(Icons.person),
+                  title: const Text('Nombre'),
+                  subtitle: Text(
+                    profile?.displayName ?? app.session?.name ?? '',
+                  ),
+                ),
+                ListTile(
                   leading: const Icon(Icons.email),
                   title: const Text('Correo'),
                   subtitle: Text(profile?.email ?? app.session?.email ?? ''),
@@ -46,9 +53,14 @@ class ProfilePage extends StatelessWidget {
                   subtitle: Text(profile?.phone ?? app.session?.phone ?? ''),
                 ),
                 ListTile(
-                  leading: const Icon(Icons.groups),
-                  title: const Text('Cuadrilla'),
-                  subtitle: Text(profile?.crew ?? app.session?.crew ?? ''),
+                  leading: const Icon(Icons.badge),
+                  title: const Text('Rol'),
+                  subtitle: Text(profile?.role.displayLabel ?? 'Contratista'),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.phone_android),
+                  title: const Text('Dispositivo'),
+                  subtitle: Text(app.session?.installationId ?? ''),
                 ),
                 ListTile(
                   leading: const Icon(Icons.sync),

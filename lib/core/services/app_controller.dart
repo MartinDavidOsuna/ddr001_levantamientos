@@ -14,7 +14,7 @@ import '../media/photo_capture_service.dart';
 import '../network/api_client.dart';
 import '../persistence/local_store.dart';
 import '../persistence/uuid_hive_migration.dart';
-import '../security/auth_resolver.dart';
+import '../security/field_identity.dart';
 import '../security/session_store.dart';
 import 'construction_sync_scheduler.dart';
 
@@ -26,18 +26,15 @@ class AppController extends ChangeNotifier {
     required ApiClient api,
     required this.packageInfo,
     ConstructionRemote? remote,
-    AuthResolver? authResolver,
     LocationService? locations,
     PhotoCaptureService? camera,
   }) : remote = remote ?? ConstructionApi(api, sessions, packageInfo),
-       authResolver = authResolver ?? const AuthResolver(),
        locations = locations ?? LocationService(),
        camera = camera ?? PhotoCaptureService();
   final AppConfig config;
   final LocalStore local;
   final SessionStore sessions;
   final ConstructionRemote remote;
-  final AuthResolver authResolver;
   final PackageInfo packageInfo;
   final LocationService locations;
   final PhotoCaptureService camera;
@@ -251,23 +248,19 @@ class AppController extends ChangeNotifier {
     required String name,
     required String email,
     required String phone,
-    required String crew,
-    required String password,
   }) async {
     busy = true;
     message = null;
     pendingTakeoverToken = null;
     notifyListeners();
     try {
-      session = await authResolver.authenticate(
-        remote,
-        UnifiedLoginCredentials(
-          name: name,
-          email: email,
-          phone: phone,
-          crew: crew,
-          password: password,
-        ),
+      final identity = FieldIdentity(name: name, email: email, phone: phone);
+      final validation = identity.validate();
+      if (validation != null) return validation;
+      session = await remote.fieldLogin(
+        name: identity.normalizedName,
+        email: identity.normalizedEmail,
+        phone: identity.normalizedPhone,
       );
       try {
         profile = await remote.profile();
@@ -284,8 +277,6 @@ class AppController extends ChangeNotifier {
       online = true;
       if (profile!.role.isReviewer) unawaited(refreshServer());
       return null;
-    } on AuthValidationException catch (error) {
-      return error.message;
     } on DioException catch (error) {
       final data = error.response?.data;
       if (error.response?.statusCode == 409 && data is Map) {
@@ -294,7 +285,7 @@ class AppController extends ChangeNotifier {
             ? 'La sesión ya está activa.'
             : 'Tu usuario está activo en otro dispositivo.';
       }
-      return loginErrorMessage(error);
+      return fieldLoginErrorMessage(error);
     } finally {
       busy = false;
       notifyListeners();

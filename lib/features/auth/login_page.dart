@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/services/app_controller.dart';
@@ -17,8 +18,6 @@ class _LoginPageState extends State<LoginPage> {
   final name = TextEditingController();
   final email = TextEditingController();
   final phone = TextEditingController();
-  final crew = TextEditingController();
-  final password = TextEditingController();
   String? error;
 
   @override
@@ -26,8 +25,6 @@ class _LoginPageState extends State<LoginPage> {
     name.dispose();
     email.dispose();
     phone.dispose();
-    crew.dispose();
-    password.dispose();
     super.dispose();
   }
 
@@ -85,12 +82,6 @@ class _LoginPageState extends State<LoginPage> {
                                 fontWeight: FontWeight.w800,
                               ),
                         ),
-                        const SizedBox(height: 6),
-                        const Text(
-                          'Acceso seguro',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(color: _blue),
-                        ),
                         const SizedBox(height: 20),
                         Card(
                           color: _blue,
@@ -104,41 +95,30 @@ class _LoginPageState extends State<LoginPage> {
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
                                 TextField(
-                                  key: const Key('login_email'),
-                                  controller: email,
-                                  style: inputStyle,
-                                  cursorColor: Colors.white,
-                                  keyboardType: TextInputType.emailAddress,
-                                  autofillHints: const [AutofillHints.email],
-                                  decoration: _decoration(
-                                    'Correo',
-                                    Icons.email_outlined,
-                                  ),
-                                ),
-                                const SizedBox(height: 12),
-                                TextField(
-                                  key: const Key('login_password'),
-                                  controller: password,
-                                  style: inputStyle,
-                                  cursorColor: Colors.white,
-                                  obscureText: true,
-                                  autofillHints: const [AutofillHints.password],
-                                  decoration: _decoration(
-                                    'Contraseña',
-                                    Icons.lock_outline,
-                                  ),
-                                ),
-                                const SizedBox(height: 12),
-                                TextField(
                                   key: const Key('login_name'),
                                   controller: name,
                                   style: inputStyle,
                                   cursorColor: Colors.white,
                                   textCapitalization: TextCapitalization.words,
+                                  textInputAction: TextInputAction.next,
                                   autofillHints: const [AutofillHints.name],
                                   decoration: _decoration(
-                                    'Nombre completo',
+                                    'Nombre',
                                     Icons.person_outline,
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                TextField(
+                                  key: const Key('login_email'),
+                                  controller: email,
+                                  style: inputStyle,
+                                  cursorColor: Colors.white,
+                                  keyboardType: TextInputType.emailAddress,
+                                  textInputAction: TextInputAction.next,
+                                  autofillHints: const [AutofillHints.email],
+                                  decoration: _decoration(
+                                    'Correo',
+                                    Icons.email_outlined,
                                   ),
                                 ),
                                 const SizedBox(height: 12),
@@ -148,24 +128,17 @@ class _LoginPageState extends State<LoginPage> {
                                   style: inputStyle,
                                   cursorColor: Colors.white,
                                   keyboardType: TextInputType.phone,
+                                  textInputAction: TextInputAction.done,
                                   maxLength: 10,
+                                  inputFormatters: [
+                                    FilteringTextInputFormatter.digitsOnly,
+                                  ],
                                   autofillHints: const [
                                     AutofillHints.telephoneNumber,
                                   ],
                                   decoration: _decoration(
                                     'Teléfono',
                                     Icons.phone_outlined,
-                                  ),
-                                ),
-                                const SizedBox(height: 12),
-                                TextField(
-                                  key: const Key('login_crew'),
-                                  controller: crew,
-                                  style: inputStyle,
-                                  cursorColor: Colors.white,
-                                  decoration: _decoration(
-                                    'Cuadrilla',
-                                    Icons.groups_outlined,
                                   ),
                                 ),
                                 if (error != null)
@@ -215,8 +188,6 @@ class _LoginPageState extends State<LoginPage> {
                                                 name: name.text,
                                                 email: email.text,
                                                 phone: phone.text,
-                                                crew: crew.text,
-                                                password: password.text,
                                               );
                                           if (mounted) {
                                             setState(() => error = result);
@@ -248,12 +219,13 @@ class _LoginPageState extends State<LoginPage> {
               bottom: 5,
               child: IgnorePointer(
                 child: Text(
-                  '${app.packageInfo.version}+${app.packageInfo.buildNumber}',
+                  'v${app.packageInfo.version}',
                   key: const Key('login_version'),
                   textAlign: TextAlign.center,
                   style: const TextStyle(
-                    color: Color(0xfff1f3f8),
-                    fontSize: 11,
+                    color: Color(0xff6b7280),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
               ),

@@ -8,6 +8,11 @@ Por decisión operacional actual, tokens Authorization, fotografías y metadata/
 
 Aplicación Flutter independiente para documentar bases de concreto de nuevos hidrantes. Build 1 prioriza contratistas, operación completamente offline, evidencia cámara+GPS y sincronización endurecida con la API DDR001.
 
+La autenticación móvil usa exclusivamente Field Auth: Nombre, Correo y Teléfono,
+sin contraseña, cuadrilla, selector de dominio ni selector de rol. El dispositivo se
+vincula mediante Installation ID y el perfil Construction recibido del servidor define
+las capabilities. Para revisión móvil, resident debe existir como usuario Field.
+
 ## Requisitos
 
 - Flutter 3.44.8 / Dart 3.12.2

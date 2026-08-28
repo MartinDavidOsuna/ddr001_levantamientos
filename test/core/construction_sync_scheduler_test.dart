@@ -124,30 +124,8 @@ class FakeRemote implements ConstructionRemote {
   Object? profileFailure;
   ConstructionRole profileRole = ConstructionRole.contractor;
   int fieldLoginAttempts = 0;
-  int adminLoginAttempts = 0;
+  (String, String, String)? lastFieldIdentity;
   SessionKind? logoutKind;
-
-  @override
-  Future<FieldSession> adminLogin({
-    required String email,
-    required String password,
-  }) async {
-    adminLoginAttempts++;
-    if (authFailure case final failure?) throw failure;
-    return FieldSession(
-      sessionId: '00000000-0000-4000-8000-000000000011',
-      userId: '00000000-0000-4000-8000-000000000012',
-      accessToken: 'admin-access',
-      refreshToken: 'admin-refresh',
-      installationId: '00000000-0000-4000-8000-000000000013',
-      name: '',
-      email: email,
-      phone: '',
-      crew: '',
-      kind: SessionKind.admin,
-      adminRole: 'admin',
-    );
-  }
 
   @override
   Future<Map<String, dynamic>> detail(String surveyId) async => {
@@ -247,7 +225,6 @@ class FakeRemote implements ConstructionRemote {
       displayName: 'Usuario',
       email: 'a@b.mx',
       phone: '1234567890',
-      crew: 'C1',
       role: profileRole,
     );
   }
@@ -257,9 +234,9 @@ class FakeRemote implements ConstructionRemote {
     required String name,
     required String email,
     required String phone,
-    required String crew,
   }) async {
     fieldLoginAttempts++;
+    lastFieldIdentity = (name, email, phone);
     if (authFailure case final failure?) throw failure;
     return FieldSession(
       sessionId: '00000000-0000-4000-8000-000000000001',
@@ -270,7 +247,6 @@ class FakeRemote implements ConstructionRemote {
       name: name,
       email: email,
       phone: phone,
-      crew: crew,
     );
   }
 
@@ -472,7 +448,6 @@ void main() {
         name: 'Contractor',
         email: 'a@b.mx',
         phone: '1234567890',
-        crew: 'C1',
       );
     });
 
@@ -481,71 +456,24 @@ void main() {
       await root.delete(recursive: true);
     });
 
-    test('unified Field login follows resident profile from server', () async {
+    test('Field login follows resident profile from server', () async {
       app.session = null;
       remote.profileRole = ConstructionRole.resident;
       final error = await app.login(
-        name: 'Residente Test',
-        email: 'resident@example.com',
+        name: '  María   Residente  ',
+        email: ' RESIDENT@Example.COM ',
         phone: '1234567890',
-        crew: 'C1',
-        password: '',
       );
       expect(error, isNull);
       expect(app.session?.kind, SessionKind.field);
       expect(app.profile?.role, ConstructionRole.resident);
       expect(app.profile?.role.isReviewer, isTrue);
       expect(remote.fieldLoginAttempts, 1);
-      expect(remote.adminLoginAttempts, 0);
-    });
-
-    for (final role in const [
-      ConstructionRole.admin,
-      ConstructionRole.superadmin,
-    ]) {
-      test(
-        'password login follows $role reviewer profile from server',
-        () async {
-          app.session = null;
-          remote.profileRole = role;
-          final error = await app.login(
-            name: '',
-            email: 'reviewer@example.com',
-            phone: '',
-            crew: '',
-            password: 'secret',
-          );
-          expect(error, isNull);
-          expect(app.session?.kind, SessionKind.admin);
-          expect(app.profile?.role, role);
-          expect(app.profile?.role.isReviewer, isTrue);
-          expect(remote.adminLoginAttempts, 1);
-          expect(remote.fieldLoginAttempts, 0);
-        },
-      );
-    }
-
-    test('viewer profile rejection clears partial Admin session', () async {
-      app.session = null;
-      remote.profileFailure = DioException(
-        requestOptions: RequestOptions(path: '/construction/admin/profile'),
-        response: Response<void>(
-          requestOptions: RequestOptions(path: '/construction/admin/profile'),
-          statusCode: 403,
-        ),
-        type: DioExceptionType.badResponse,
-      );
-      final error = await app.login(
-        name: '',
-        email: 'viewer@example.com',
-        phone: '',
-        crew: '',
-        password: 'secret',
-      );
-      expect(error, 'No tienes acceso a DDR001 Levantamientos.');
-      expect(app.session, isNull);
-      expect(app.profile?.role, isNot(ConstructionRole.admin));
-      expect(remote.logoutKind, SessionKind.admin);
+      expect(remote.lastFieldIdentity, (
+        'María Residente',
+        'resident@example.com',
+        '1234567890',
+      ));
     });
 
     test('logout dispatches using the persisted internal domain', () async {
@@ -558,7 +486,6 @@ void main() {
         name: '',
         email: 'admin@example.com',
         phone: '',
-        crew: '',
         kind: SessionKind.admin,
       );
       await app.logout();
@@ -683,7 +610,6 @@ void main() {
           displayName: 'Reviewer',
           email: 'reviewer@example.com',
           phone: '',
-          crew: '',
           role: ConstructionRole.resident,
         );
         app.surveys = [
@@ -711,7 +637,6 @@ void main() {
           displayName: 'Reviewer',
           email: 'reviewer@example.com',
           phone: '',
-          crew: '',
           role: ConstructionRole.admin,
         );
         app.surveys = [
