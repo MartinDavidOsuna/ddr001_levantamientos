@@ -8,6 +8,9 @@ Fuente inicial: API SHA `90ee7e770f3a66105220c05a60e3b5ed48c7da1d`.
 Extensión cardinal Build 1: `ddade065cb2ca9eb12803e1f6a3ff7bef83eca1c`.
 
 - Field auth: `POST /field-sessions/start`, `POST /field-sessions/refresh`, `POST /field-sessions/:id/end`.
+- Login móvil unificado: el cliente enruta internamente una sola vez hacia el endpoint
+  legacy correspondiente según la credencial capturada. No se agregó un tercer auth,
+  no se envían roles y los errores técnicos no disparan un segundo intento.
 - Profile Field: `GET /construction/profile`.
 - Profile admin reviewer: `GET /construction/admin/profile` con JWT admin.
 - Contractor: create/list/detail/map; open/patch/complete steps; multipart step/correction photos; corrections.

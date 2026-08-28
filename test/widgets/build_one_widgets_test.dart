@@ -103,7 +103,9 @@ BaseSurvey reviewSurvey() => BaseSurvey(
 );
 
 void main() {
-  testWidgets('login renders exact field auth inputs', (tester) async {
+  testWidgets('login is unified, branded and hides technical domains', (
+    tester,
+  ) async {
     final (app, root) = (await tester.runAsync(
       () => controller(ConstructionRole.contractor),
     ))!;
@@ -118,7 +120,36 @@ void main() {
     );
     expect(find.text('DDR001 Levantamientos'), findsOneWidget);
     expect(find.byKey(const Key('login_email')), findsOneWidget);
+    expect(find.byKey(const Key('login_password')), findsOneWidget);
+    expect(find.byKey(const Key('login_name')), findsOneWidget);
+    expect(find.byKey(const Key('login_phone')), findsOneWidget);
+    expect(find.byKey(const Key('login_crew')), findsOneWidget);
     expect(find.byKey(const Key('login_submit')), findsOneWidget);
+    expect(find.byKey(const Key('login_version')), findsOneWidget);
+    expect(find.text('0.1.0+1'), findsOneWidget);
+    expect(find.text('Campo'), findsNothing);
+    expect(find.text('Administración'), findsNothing);
+    expect(find.textContaining('Field'), findsNothing);
+    expect(find.textContaining('Admin'), findsNothing);
+    expect(
+      tester.widget<Scaffold>(find.byType(Scaffold)).backgroundColor,
+      Colors.white,
+    );
+    expect(
+      tester
+          .widget<TextField>(find.byKey(const Key('login_email')))
+          .style
+          ?.color,
+      const Color(0xffcbd1dd),
+    );
+    final submit = tester.widget<FilledButton>(
+      find.byKey(const Key('login_submit')),
+    );
+    expect(submit.style?.backgroundColor?.resolve(const {}), Colors.white);
+    expect(
+      submit.style?.foregroundColor?.resolve(const {}),
+      const Color(0xff2848b8),
+    );
   });
   testWidgets('contractor home exposes primary actions', (tester) async {
     final (app, root) = (await tester.runAsync(

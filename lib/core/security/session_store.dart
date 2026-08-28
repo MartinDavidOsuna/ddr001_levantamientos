@@ -5,6 +5,14 @@ import '../identity/uuid_identity.dart';
 
 enum SessionKind { field, admin }
 
+String refreshEndpoint(SessionKind kind) => kind == SessionKind.admin
+    ? '/admin/auth/refresh'
+    : '/field-sessions/refresh';
+
+String logoutEndpoint(FieldSession session) => session.kind == SessionKind.admin
+    ? '/admin/auth/logout'
+    : '/field-sessions/${session.sessionId}/end';
+
 class FieldSession {
   const FieldSession({
     required this.sessionId,

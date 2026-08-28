@@ -14,6 +14,7 @@ import '../media/photo_capture_service.dart';
 import '../network/api_client.dart';
 import '../persistence/local_store.dart';
 import '../persistence/uuid_hive_migration.dart';
+import '../security/auth_resolver.dart';
 import '../security/session_store.dart';
 import 'construction_sync_scheduler.dart';
 
@@ -25,15 +26,18 @@ class AppController extends ChangeNotifier {
     required ApiClient api,
     required this.packageInfo,
     ConstructionRemote? remote,
+    AuthResolver? authResolver,
     LocationService? locations,
     PhotoCaptureService? camera,
   }) : remote = remote ?? ConstructionApi(api, sessions, packageInfo),
+       authResolver = authResolver ?? const AuthResolver(),
        locations = locations ?? LocationService(),
        camera = camera ?? PhotoCaptureService();
   final AppConfig config;
   final LocalStore local;
   final SessionStore sessions;
   final ConstructionRemote remote;
+  final AuthResolver authResolver;
   final PackageInfo packageInfo;
   final LocationService locations;
   final PhotoCaptureService camera;
@@ -248,27 +252,40 @@ class AppController extends ChangeNotifier {
     required String email,
     required String phone,
     required String crew,
+    required String password,
   }) async {
-    if (name.trim().length < 3 ||
-        !email.contains('@') ||
-        !RegExp(r'^\d{10}$').hasMatch(phone.trim()) ||
-        crew.trim().isEmpty) {
-      return 'Revisa nombre, correo, teléfono de 10 dígitos y cuadrilla.';
-    }
     busy = true;
     message = null;
+    pendingTakeoverToken = null;
     notifyListeners();
     try {
-      session = await remote.login(
-        name: name,
-        email: email,
-        phone: phone,
-        crew: crew,
+      session = await authResolver.authenticate(
+        remote,
+        UnifiedLoginCredentials(
+          name: name,
+          email: email,
+          phone: phone,
+          crew: crew,
+          password: password,
+        ),
       );
-      profile = await remote.profile();
-      await local.saveProfile(profile!);
+      try {
+        profile = await remote.profile();
+        await local.saveProfile(profile!);
+      } catch (_) {
+        final incomplete = session;
+        if (incomplete != null) {
+          await remote.logout(incomplete).catchError((_) {});
+        }
+        await sessions.clear();
+        session = null;
+        rethrow;
+      }
       online = true;
+      if (profile!.role.isReviewer) unawaited(refreshServer());
       return null;
+    } on AuthValidationException catch (error) {
+      return error.message;
     } on DioException catch (error) {
       final data = error.response?.data;
       if (error.response?.statusCode == 409 && data is Map) {
@@ -277,34 +294,7 @@ class AppController extends ChangeNotifier {
             ? 'La sesión ya está activa.'
             : 'Tu usuario está activo en otro dispositivo.';
       }
-      return 'No fue posible iniciar sesión. Verifica conexión y datos.';
-    } finally {
-      busy = false;
-      notifyListeners();
-    }
-  }
-
-  Future<String?> adminLogin({
-    required String email,
-    required String password,
-  }) async {
-    if (!email.contains('@') || password.isEmpty) {
-      return 'Captura correo y contraseña.';
-    }
-    busy = true;
-    notifyListeners();
-    try {
-      session = await remote.adminLogin(email: email, password: password);
-      profile = await remote.profile();
-      await local.saveProfile(profile!);
-      online = true;
-      unawaited(refreshServer());
-      return null;
-    } on DioException catch (error) {
-      final data = error.response?.data;
-      return data is Map && data['detail'] != null
-          ? data['detail'].toString()
-          : 'No fue posible iniciar sesión administrativa.';
+      return loginErrorMessage(error);
     } finally {
       busy = false;
       notifyListeners();

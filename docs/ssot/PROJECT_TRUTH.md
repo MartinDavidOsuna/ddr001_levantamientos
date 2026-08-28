@@ -15,8 +15,14 @@ silenciosa instalaciones legacy sin borrar carpetas ni archivos fotográficos.
 - Android applicationId e iOS bundle id: `com.aquafim.ddr001levantamientos`.
 - Nombre visible: DDR001 Levantamientos.
 - Flutter 3.44.8, Dart 3.12.2, Android/iOS únicamente.
-- Auth: Field conserva sesiones DDR001. Reviewer administrativo usa el login/JWT
-  admin existente y un perfil Construction aditivo; no existe conversión de token.
+- Auth: la pantalla es única y no expone dominios ni roles. Un resolver centralizado
+  usa la forma de la credencial existente: contraseña presente intenta únicamente
+  Admin; contraseña vacía con nombre/teléfono/cuadrilla completos intenta únicamente
+  Field. Nunca hay fallback por 401, 429, timeout, error de red o error de servidor.
+  Field conserva sesiones DDR001 y Admin conserva su JWT; no existe conversión de token.
+- Si el mismo correo existe en ambos dominios, una contraseña válida resuelve Admin;
+  sin contraseña resuelve Field. Una contraseña incorrecta jamás cae a Field. El
+  dominio resuelto se persiste sólo en Secure Storage para refresh, restore y logout.
 - Offline: Hive CE schema 3. Tokens: Secure Storage.
 - API configurable por `APP_ENV` y `API_BASE_URL`; producción acepta HTTPS o la única excepción HTTP oficial exacta.
 - Evidencia: cámara exclusivamente, GPS individual obligatorio, originales retenidos.

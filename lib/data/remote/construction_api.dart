@@ -6,6 +6,7 @@ import 'package:dio/dio.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:uuid/uuid.dart';
 import '../../core/network/api_client.dart';
+import '../../core/security/auth_resolver.dart';
 import '../../core/security/session_store.dart';
 import '../../domain/construction/construction_models.dart';
 import '../../core/identity/uuid_identity.dart';
@@ -18,8 +19,8 @@ Map<String, dynamic> surveyCreatePayload(BaseSurvey survey) => {
 
 const constructionCausalIdempotencyVersion = 'causal-v1';
 
-abstract interface class ConstructionRemote {
-  Future<FieldSession> login({
+abstract interface class ConstructionRemote implements AuthGateway {
+  Future<FieldSession> fieldLogin({
     required String name,
     required String email,
     required String phone,
@@ -69,7 +70,7 @@ class ConstructionApi implements ConstructionRemote {
   final ApiClient client;
   final SessionStore sessions;
   final PackageInfo packageInfo;
-  Future<FieldSession> login({
+  Future<FieldSession> fieldLogin({
     required String name,
     required String email,
     required String phone,
@@ -178,12 +179,12 @@ class ConstructionApi implements ConstructionRemote {
     try {
       if (session.kind == SessionKind.admin) {
         await client.dio.post<void>(
-          '/admin/auth/logout',
+          logoutEndpoint(session),
           data: {'refreshToken': session.refreshToken},
         );
       } else {
         await client.dio.post<void>(
-          '/field-sessions/${session.sessionId}/end',
+          logoutEndpoint(session),
           options: Options(
             headers: {'Idempotency-Key': 'end-${session.sessionId}'},
           ),

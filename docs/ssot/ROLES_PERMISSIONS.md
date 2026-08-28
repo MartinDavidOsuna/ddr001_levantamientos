@@ -6,6 +6,9 @@ Certificar contractor, resident y proyecciones reviewer admin/superadmin. Un Fie
 
 La autoridad de acceso es el perfil validado por API; móvil nunca envía role. La UI
 consume capabilities centralizadas, no comparaciones de roles dispersas.
+El dominio de autenticación persistido sirve exclusivamente para refresh/restore/logout
+y no concede capabilities. Un Admin `viewer` autenticado sigue recibiendo 403 en el
+perfil Construction y su sesión parcial se elimina del dispositivo.
 
 | Capability | Contractor | Resident | Admin | Superadmin |
 | --- | --- | --- | --- | --- |

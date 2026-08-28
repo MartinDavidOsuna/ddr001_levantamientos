@@ -120,12 +120,34 @@ class FakeRemote implements ConstructionRemote {
   final reviewActions = <String>[];
   Completer<void>? reviewGate;
   Object? reviewFailure;
+  Object? authFailure;
+  Object? profileFailure;
+  ConstructionRole profileRole = ConstructionRole.contractor;
+  int fieldLoginAttempts = 0;
+  int adminLoginAttempts = 0;
+  SessionKind? logoutKind;
 
   @override
   Future<FieldSession> adminLogin({
     required String email,
     required String password,
-  }) => throw UnimplementedError();
+  }) async {
+    adminLoginAttempts++;
+    if (authFailure case final failure?) throw failure;
+    return FieldSession(
+      sessionId: '00000000-0000-4000-8000-000000000011',
+      userId: '00000000-0000-4000-8000-000000000012',
+      accessToken: 'admin-access',
+      refreshToken: 'admin-refresh',
+      installationId: '00000000-0000-4000-8000-000000000013',
+      name: '',
+      email: email,
+      phone: '',
+      crew: '',
+      kind: SessionKind.admin,
+      adminRole: 'admin',
+    );
+  }
 
   @override
   Future<Map<String, dynamic>> detail(String surveyId) async => {
@@ -218,23 +240,42 @@ class FakeRemote implements ConstructionRemote {
   @override
   Future<void> deletePhoto(String surveyId, String photoId) async {}
   @override
-  Future<ConstructionProfile> profile() async => const ConstructionProfile(
-    userId: 'user',
-    displayName: 'Contractor',
-    email: 'a@b.mx',
-    phone: '1234567890',
-    crew: 'C1',
-    role: ConstructionRole.contractor,
-  );
+  Future<ConstructionProfile> profile() async {
+    if (profileFailure case final failure?) throw failure;
+    return ConstructionProfile(
+      userId: 'user',
+      displayName: 'Usuario',
+      email: 'a@b.mx',
+      phone: '1234567890',
+      crew: 'C1',
+      role: profileRole,
+    );
+  }
+
   @override
-  Future<FieldSession> login({
+  Future<FieldSession> fieldLogin({
     required String name,
     required String email,
     required String phone,
     required String crew,
-  }) => throw UnimplementedError();
+  }) async {
+    fieldLoginAttempts++;
+    if (authFailure case final failure?) throw failure;
+    return FieldSession(
+      sessionId: '00000000-0000-4000-8000-000000000001',
+      userId: '00000000-0000-4000-8000-000000000002',
+      accessToken: 'field-access',
+      refreshToken: 'field-refresh',
+      installationId: '00000000-0000-4000-8000-000000000003',
+      name: name,
+      email: email,
+      phone: phone,
+      crew: crew,
+    );
+  }
+
   @override
-  Future<void> logout(FieldSession session) async {}
+  Future<void> logout(FieldSession session) async => logoutKind = session.kind;
   @override
   Future<void> revokeExisting(String takeoverToken) async {}
   @override
@@ -438,6 +479,91 @@ void main() {
     tearDown(() async {
       await Hive.close();
       await root.delete(recursive: true);
+    });
+
+    test('unified Field login follows resident profile from server', () async {
+      app.session = null;
+      remote.profileRole = ConstructionRole.resident;
+      final error = await app.login(
+        name: 'Residente Test',
+        email: 'resident@example.com',
+        phone: '1234567890',
+        crew: 'C1',
+        password: '',
+      );
+      expect(error, isNull);
+      expect(app.session?.kind, SessionKind.field);
+      expect(app.profile?.role, ConstructionRole.resident);
+      expect(app.profile?.role.isReviewer, isTrue);
+      expect(remote.fieldLoginAttempts, 1);
+      expect(remote.adminLoginAttempts, 0);
+    });
+
+    for (final role in const [
+      ConstructionRole.admin,
+      ConstructionRole.superadmin,
+    ]) {
+      test(
+        'password login follows $role reviewer profile from server',
+        () async {
+          app.session = null;
+          remote.profileRole = role;
+          final error = await app.login(
+            name: '',
+            email: 'reviewer@example.com',
+            phone: '',
+            crew: '',
+            password: 'secret',
+          );
+          expect(error, isNull);
+          expect(app.session?.kind, SessionKind.admin);
+          expect(app.profile?.role, role);
+          expect(app.profile?.role.isReviewer, isTrue);
+          expect(remote.adminLoginAttempts, 1);
+          expect(remote.fieldLoginAttempts, 0);
+        },
+      );
+    }
+
+    test('viewer profile rejection clears partial Admin session', () async {
+      app.session = null;
+      remote.profileFailure = DioException(
+        requestOptions: RequestOptions(path: '/construction/admin/profile'),
+        response: Response<void>(
+          requestOptions: RequestOptions(path: '/construction/admin/profile'),
+          statusCode: 403,
+        ),
+        type: DioExceptionType.badResponse,
+      );
+      final error = await app.login(
+        name: '',
+        email: 'viewer@example.com',
+        phone: '',
+        crew: '',
+        password: 'secret',
+      );
+      expect(error, 'No tienes acceso a DDR001 Levantamientos.');
+      expect(app.session, isNull);
+      expect(app.profile?.role, isNot(ConstructionRole.admin));
+      expect(remote.logoutKind, SessionKind.admin);
+    });
+
+    test('logout dispatches using the persisted internal domain', () async {
+      app.session = const FieldSession(
+        sessionId: '00000000-0000-4000-8000-000000000011',
+        userId: '00000000-0000-4000-8000-000000000012',
+        accessToken: 'admin-access',
+        refreshToken: 'admin-refresh',
+        installationId: '00000000-0000-4000-8000-000000000013',
+        name: '',
+        email: 'admin@example.com',
+        phone: '',
+        crew: '',
+        kind: SessionKind.admin,
+      );
+      await app.logout();
+      expect(remote.logoutKind, SessionKind.admin);
+      expect(app.session, isNull);
     });
 
     test(

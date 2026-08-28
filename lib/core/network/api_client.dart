@@ -102,9 +102,7 @@ class ApiClient {
     final current = await _sessions.read();
     if (current == null) return null;
     final response = await dio.post<Map<String, dynamic>>(
-      current.kind == SessionKind.admin
-          ? '/admin/auth/refresh'
-          : '/field-sessions/refresh',
+      refreshEndpoint(current.kind),
       data: {'refreshToken': current.refreshToken},
       options: Options(extra: {'skipAuth': true}),
     );
