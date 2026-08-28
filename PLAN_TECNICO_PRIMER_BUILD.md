@@ -390,7 +390,7 @@ Se eliminará sólo el contador demo generado.
 
 ### Assets e iconografía
 
-Se podrá reutilizar el símbolo institucional DDR001 sólo con validación de marca. El icono específico de Levantamientos queda pendiente y no debe ser una copia del icono RV. Incluir temporalmente un asset marcado como placeholder sólo durante implementación, nunca como release final.
+Validación cerrada el 2026-08-27: se reutiliza la identidad institucional Aquafim ya aprobada y utilizada por DDR001 Diagnóstico Hidrantes. El launcher compartido no contiene texto ni elementos de diagnóstico, revisión visual o metrología; también se reutilizan sus variantes Android/iOS, logotipo y símbolo institucional. No se incorporan assets funcionales específicos de RV y no quedan placeholders Flutter en el release.
 
 ### SSOT futuro
 

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/services/app_controller.dart';
 import '../../domain/construction/construction_models.dart';
+import '../../shared/widgets/app_brand_logo.dart';
 
 class ProfilePage extends StatelessWidget {
   const ProfilePage({super.key});
@@ -13,7 +14,13 @@ class ProfilePage extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          const CircleAvatar(radius: 44, child: Icon(Icons.person, size: 48)),
+          const Center(
+            child: AppBrandLogo(
+              variant: AppBrandLogoVariant.symbol,
+              width: 88,
+              height: 88,
+            ),
+          ),
           const SizedBox(height: 12),
           Text(
             profile?.displayName ?? app.session?.name ?? '',

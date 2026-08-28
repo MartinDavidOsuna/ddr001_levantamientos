@@ -112,6 +112,11 @@ void main() {
       await root.delete(recursive: true);
     });
     await tester.pumpWidget(page(app, const LoginPage()));
+    expect(
+      find.byKey(const ValueKey('app-brand-logo-horizontal')),
+      findsOneWidget,
+    );
+    expect(find.text('DDR001 Levantamientos'), findsOneWidget);
     expect(find.byKey(const Key('login_email')), findsOneWidget);
     expect(find.byKey(const Key('login_submit')), findsOneWidget);
   });
@@ -347,6 +352,7 @@ void main() {
     await tester.pumpWidget(page(app, const ConstructionMapPage()));
     expect(find.textContaining('ubicación aparecerán'), findsOneWidget);
     await tester.pumpWidget(page(app, const ProfilePage()));
+    expect(find.byKey(const ValueKey('app-brand-logo-symbol')), findsOneWidget);
     expect(find.text('Contratista'), findsOneWidget);
     await tester.drag(find.byType(ListView), const Offset(0, -500));
     await tester.pump();
