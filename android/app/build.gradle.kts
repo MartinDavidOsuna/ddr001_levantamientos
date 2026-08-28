@@ -11,6 +11,25 @@ val keystorePropertiesFile = rootProject.file("key.properties")
 if (keystorePropertiesFile.exists()) {
     keystorePropertiesFile.inputStream().use(keystoreProperties::load)
 }
+val releaseRequested = gradle.startParameter.taskNames.any {
+    it.contains("release", ignoreCase = true)
+}
+val releaseSigningKeys = listOf("storePassword", "keyPassword", "keyAlias", "storeFile")
+if (releaseRequested) {
+    if (!keystorePropertiesFile.exists()) {
+        throw GradleException(
+            "Release signing is required: create android/key.properties from key.properties.example."
+        )
+    }
+    val missing = releaseSigningKeys.filter { keystoreProperties.getProperty(it).isNullOrBlank() }
+    if (missing.isNotEmpty()) {
+        throw GradleException("Release signing properties missing: ${missing.joinToString()}.")
+    }
+    val configuredStore = file(keystoreProperties.getProperty("storeFile"))
+    if (!configuredStore.isFile) {
+        throw GradleException("Release signing storeFile does not exist: $configuredStore")
+    }
+}
 
 android {
     namespace = "com.aquafim.ddr001levantamientos"

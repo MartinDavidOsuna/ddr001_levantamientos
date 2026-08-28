@@ -1,6 +1,9 @@
 import 'package:flutter/foundation.dart';
 
 class AppConfig {
+  static const productionHttpApiBaseUrl =
+      'http://cifra.aquafim.com:3002/api/v1';
+
   const AppConfig({required this.environment, required this.apiBaseUrl});
   final String environment;
   final Uri apiBaseUrl;
@@ -24,11 +27,19 @@ class AppConfig {
     if (uri == null ||
         !uri.hasScheme ||
         !uri.hasAuthority ||
-        !uri.path.endsWith('/api/v1')) {
+        !const {'http', 'https'}.contains(uri.scheme) ||
+        uri.path != '/api/v1' ||
+        uri.hasQuery ||
+        uri.hasFragment ||
+        uri.userInfo.isNotEmpty) {
       throw StateError('API_BASE_URL debe ser una URL /api/v1 válida.');
     }
-    if (env == 'production' && uri.scheme != 'https') {
-      throw StateError('Producción requiere HTTPS.');
+    if (env == 'production' &&
+        uri.scheme == 'http' &&
+        raw != productionHttpApiBaseUrl) {
+      throw StateError(
+        'Producción sólo permite HTTP para el endpoint oficial DDR001.',
+      );
     }
     if (env != 'production' && uri.host == 'cifra.aquafim.com') {
       throw StateError(

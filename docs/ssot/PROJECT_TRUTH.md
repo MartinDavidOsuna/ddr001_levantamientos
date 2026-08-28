@@ -2,7 +2,7 @@
 
 ## PRODUCTION RELEASE RUNBOOK
 
-El candidato `1.0.0+1` requiere HTTPS productivo confirmado, firma Android definitiva y E2E físico. La app no relaja auth ni acepta endpoint TEST en producción.
+El candidato `1.0.0+1` usa por decisión operacional `http://cifra.aquafim.com:3002/api/v1`, con cleartext Android limitado a ese dominio. Requiere firma Android definitiva y E2E físico. La app no acepta otro HTTP ni endpoint TEST en producción.
 
 ## UUID identity
 
@@ -18,7 +18,7 @@ silenciosa instalaciones legacy sin borrar carpetas ni archivos fotográficos.
 - Auth: Field conserva sesiones DDR001. Reviewer administrativo usa el login/JWT
   admin existente y un perfil Construction aditivo; no existe conversión de token.
 - Offline: Hive CE schema 3. Tokens: Secure Storage.
-- API configurable por `APP_ENV` y `API_BASE_URL`; producción requiere HTTPS.
+- API configurable por `APP_ENV` y `API_BASE_URL`; producción acepta HTTPS o la única excepción HTTP oficial exacta.
 - Evidencia: cámara exclusivamente, GPS individual obligatorio, originales retenidos.
 
 ## Construction reviewer-equivalent

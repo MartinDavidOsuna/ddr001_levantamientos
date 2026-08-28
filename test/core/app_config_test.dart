@@ -26,14 +26,37 @@ void main() {
       throwsStateError,
     ),
   );
-  test(
-    'production requires HTTPS',
-    () => expect(
-      () => AppConfig.fromEnvironment(
-        environment: 'production',
-        baseUrl: 'http://api.example.com/api/v1',
-      ),
-      throwsStateError,
-    ),
-  );
+  test('production accepts only the official HTTP endpoint', () {
+    final config = AppConfig.fromEnvironment(
+      environment: 'production',
+      baseUrl: AppConfig.productionHttpApiBaseUrl,
+    );
+    expect(config.apiBaseUrl.toString(), AppConfig.productionHttpApiBaseUrl);
+  });
+
+  for (final endpoint in const [
+    'http://otrohost.com/api/v1',
+    'http://cifra.aquafim.com:3000/api/v1',
+    'http://cifra.aquafim.com/api/v1',
+    'http://192.168.1.10:3002/api/v1',
+    'http://localhost:3002/api/v1',
+  ]) {
+    test('production rejects non-official HTTP endpoint $endpoint', () {
+      expect(
+        () => AppConfig.fromEnvironment(
+          environment: 'production',
+          baseUrl: endpoint,
+        ),
+        throwsStateError,
+      );
+    });
+  }
+
+  test('production keeps HTTPS available for a future endpoint', () {
+    final config = AppConfig.fromEnvironment(
+      environment: 'production',
+      baseUrl: 'https://api.example.com/api/v1',
+    );
+    expect(config.apiBaseUrl.scheme, 'https');
+  });
 }
