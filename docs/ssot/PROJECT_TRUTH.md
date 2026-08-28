@@ -1,5 +1,9 @@
 # Project Truth
 
+## PRODUCTION RELEASE RUNBOOK
+
+El candidato `1.0.0+1` requiere HTTPS productivo confirmado, firma Android definitiva y E2E físico. La app no relaja auth ni acepta endpoint TEST en producción.
+
 ## UUID identity
 
 SQL Server puede serializar `UNIQUEIDENTIFIER` en mayúsculas. Flutter usa siempre

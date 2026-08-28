@@ -1,5 +1,9 @@
 # Sync Model
 
+## PRODUCTION RELEASE RUNBOOK
+
+La salida exige reinicio/force-stop, mezcla offline/online, causal replay por survey y `0 pending`; una cola que bloquee otras encuestas o pierda IDs/fotos impide certificar.
+
 El scheduler causal ejecuta create → open → comment → upload → verify → complete
 y complete N antes de open N+1. Los items sobreviven reinicios y un survey fallido
 no bloquea otros surveys ready. Retry usa backoff exponencial con jitter.

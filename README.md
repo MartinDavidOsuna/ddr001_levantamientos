@@ -1,5 +1,9 @@
 # DDR001 Levantamientos
 
+## PRODUCTION RELEASE RUNBOOK
+
+Release candidato `1.0.0+1`, `com.aquafim.ddr001levantamientos`. Requiere `API_BASE_URL` HTTPS terminado en `/api/v1` y firma persistente fuera del repo mediante `android/key.properties`. El endpoint documentado hoy (`http://cifra.aquafim.com:3002/api/v1`) no cumple el guard; no distribuir hasta confirmar el HTTPS real. El procedimiento SQL/API, smoke y rollback vive en `../ddr001_api/docs/DDR001_LEVANTAMIENTOS_PRODUCTION_RUNBOOK.md`.
+
 Aplicación Flutter independiente para documentar bases de concreto de nuevos hidrantes. Build 1 prioriza contratistas, operación completamente offline, evidencia cámara+GPS y sincronización endurecida con la API DDR001.
 
 ## Requisitos

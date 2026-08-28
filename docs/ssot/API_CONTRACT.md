@@ -1,5 +1,9 @@
 # API Contract
 
+## PRODUCTION RELEASE RUNBOOK
+
+Compilar únicamente con `APP_ENV=production` y el HTTPS real `/api/v1`; validar health, auth Field/Admin, RV legacy y Construction antes de distribuir.
+
 Fuente inicial: API SHA `90ee7e770f3a66105220c05a60e3b5ed48c7da1d`.
 Extensión cardinal Build 1: `ddade065cb2ca9eb12803e1f6a3ff7bef83eca1c`.
 

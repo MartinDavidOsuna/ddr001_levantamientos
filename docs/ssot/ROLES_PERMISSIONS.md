@@ -1,5 +1,9 @@
 # Roles and Permissions
 
+## PRODUCTION RELEASE RUNBOOK
+
+Certificar contractor, resident y proyecciones reviewer admin/superadmin. Un Field válido sin `construction.app_users` se autocrea sólo como contractor; nunca se autoasignan privilegios reviewer.
+
 La autoridad de acceso es el perfil validado por API; móvil nunca envía role. La UI
 consume capabilities centralizadas, no comparaciones de roles dispersas.
 

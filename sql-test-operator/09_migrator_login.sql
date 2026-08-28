@@ -1,10 +1,11 @@
+:setvar MigratorPassword "<MIGRATOR_PASSWORD_FROM_SECRET_MANAGER>"
 USE [master];
 SET NOCOUNT ON;
 IF CONVERT(sysname,SERVERPROPERTY('ServerName'))<>N'WIN-5RQE8N8NQ9V' THROW 51080,'STOP: servidor incorrecto.',1;
 IF DB_ID(N'DDR001_Hidrantes_TEST') IS NULL THROW 51081,'STOP: TEST no existe.',1;
-IF N'Agrienlace2001!' LIKE N'<%>' THROW 51082,'STOP: sustituya <MIGRATOR_PASSWORD>.',1;
+IF N'$(MigratorPassword)' LIKE N'<%>' THROW 51082,'STOP: proporcione MigratorPassword mediante sqlcmd -v.',1;
 IF SUSER_ID(N'DDR001_Levantamientos_TEST_Migrator') IS NOT NULL THROW 51083,'STOP: login Migrator ya existe; no se reemplazó.',1;
-CREATE LOGIN [DDR001_Levantamientos_TEST_Migrator] WITH PASSWORD=N'Agrienlace2001!',DEFAULT_DATABASE=[DDR001_Hidrantes_TEST],CHECK_POLICY=ON,CHECK_EXPIRATION=OFF;
+CREATE LOGIN [DDR001_Levantamientos_TEST_Migrator] WITH PASSWORD=N'$(MigratorPassword)',DEFAULT_DATABASE=[DDR001_Hidrantes_TEST],CHECK_POLICY=ON,CHECK_EXPIRATION=OFF;
 DENY VIEW ANY DATABASE TO [DDR001_Levantamientos_TEST_Migrator];
 USE [DDR001_Hidrantes_TEST];
 CREATE USER [DDR001_Levantamientos_TEST_Migrator] FOR LOGIN [DDR001_Levantamientos_TEST_Migrator] WITH DEFAULT_SCHEMA=[dbo];
