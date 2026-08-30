@@ -91,7 +91,8 @@ class AmbiguousUploadRemote implements ConstructionRemote {
   );
 
   @override
-  Future<Map<String, dynamic>> createSurvey(BaseSurvey survey) async => const {};
+  Future<Map<String, dynamic>> createSurvey(BaseSurvey survey) async =>
+      const {};
   @override
   Future<void> openStep(String survey, int step) async {}
   @override
@@ -146,7 +147,9 @@ void main() {
   testWidgets(
     'timeout after server photo commit never strands media as uploadedUnverified',
     (tester) async {
-      final root = await Directory.systemTemp.createTemp('ambiguous-upload-e2e-');
+      final root = await Directory.systemTemp.createTemp(
+        'ambiguous-upload-e2e-',
+      );
       addTearDown(() async {
         await Hive.close();
         await root.delete(recursive: true);
@@ -239,9 +242,14 @@ void main() {
       await app.synchronize();
       expect(remote.uploadCalls, 1);
       expect(remote.serverHasPhoto, isTrue);
-      expect(app.queue, isNotEmpty, reason: 'timeout must preserve durable work');
+      expect(
+        app.queue,
+        isNotEmpty,
+        reason: 'timeout must preserve durable work',
+      );
 
-      app.online = true; // Simulate connectivity returning after process/network loss.
+      app.online =
+          true; // Simulate connectivity returning after process/network loss.
       await app.synchronize();
 
       final current = app.photos.single;

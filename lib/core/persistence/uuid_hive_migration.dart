@@ -78,6 +78,8 @@ class UuidHiveMigration {
         attempts: item.attempts,
         createdAt: item.createdAt,
         nextAttemptAt: item.nextAttemptAt,
+        requiresReview: item.requiresReview,
+        lastErrorCode: item.lastErrorCode,
       );
       final current = merged[key];
       merged[key] = current == null
@@ -152,6 +154,8 @@ SyncQueueItem mergeQueueItems(SyncQueueItem left, SyncQueueItem right) =>
           ? left.createdAt
           : right.createdAt,
       nextAttemptAt: _latest(left.nextAttemptAt, right.nextAttemptAt),
+      requiresReview: left.requiresReview || right.requiresReview,
+      lastErrorCode: right.lastErrorCode ?? left.lastErrorCode,
     );
 
 DateTime? _latest(DateTime? left, DateTime? right) {

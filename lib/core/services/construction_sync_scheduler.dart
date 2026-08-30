@@ -19,6 +19,9 @@ class ConstructionSyncScheduler {
     List<ConstructionPhoto> photos,
     DateTime now,
   ) {
+    if (item.requiresReview) {
+      return const QueueReadiness.blocked('requires_review');
+    }
     if (item.nextAttemptAt?.isAfter(now) == true) {
       return const QueueReadiness.blocked('retry_cooldown');
     }

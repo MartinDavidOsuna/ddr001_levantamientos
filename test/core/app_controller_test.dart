@@ -88,6 +88,39 @@ void main() {
     await app.createSurvey('Base Norte');
     expect(() => app.createSurvey(' base   norte '), throwsStateError);
   });
+  test('local-only delete writes tombstone before purging evidence', () async {
+    final survey = await app.createSurvey('Delete durable');
+    final file = File('${root.path}/delete.jpg')..writeAsStringSync('evidence');
+    final photo = ConstructionPhoto(
+      id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      surveyId: survey.id,
+      localPath: file.path,
+      thumbnailPath: file.path,
+      sha256: 'a' * 64,
+      capturedAt: DateTime.utc(2026, 8, 30),
+      stepNumber: 1,
+      syncState: PhotoSyncState.localOnly,
+    );
+    app.photos = [photo];
+    app.surveys = [
+      survey.copyWith(
+        steps: [
+          survey.steps.first.copyWith(photoIds: [photo.id]),
+          ...survey.steps.skip(1),
+        ],
+      ),
+    ];
+    await local.savePhoto(photo);
+    await local.saveSurvey(app.surveys.single);
+
+    await app.deletePhoto(survey.id, 1, photo.id);
+
+    final tombstone = local.journal.find('delete-${photo.id}')!;
+    expect(tombstone.state.name, 'committed');
+    expect(file.existsSync(), isFalse);
+    expect(local.photos(), isEmpty);
+    expect(app.survey(survey.id).steps.first.photoIds, isEmpty);
+  });
   test('step sequence starts with only step one open', () async {
     final s = await app.createSurvey('S');
     expect(s.steps.first.state, StepState.open);

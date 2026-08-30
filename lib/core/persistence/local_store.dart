@@ -2,19 +2,29 @@ import 'dart:convert';
 import 'package:hive_ce/hive.dart';
 import '../../domain/construction/construction_models.dart';
 import '../identity/uuid_identity.dart';
+import 'construction_operation_journal.dart';
 import 'uuid_hive_migration.dart';
 
 class LocalStore {
-  LocalStore(this.surveysBox, this.photosBox, this.queueBox, this.metadataBox);
+  LocalStore(
+    this.surveysBox,
+    this.photosBox,
+    this.queueBox,
+    this.metadataBox,
+    this.journalBox,
+  );
   static const schemaVersion = 3;
   static const causalQueueRecoveryMarker = 'causalQueueRecoveryV2';
-  final Box<String> surveysBox, photosBox, queueBox, metadataBox;
+  final Box<String> surveysBox, photosBox, queueBox, metadataBox, journalBox;
+  ConstructionOperationJournal get journal =>
+      ConstructionOperationJournal(journalBox);
   static Future<LocalStore> open() async {
     final store = LocalStore(
       await Hive.openBox<String>('construction_surveys_v1'),
       await Hive.openBox<String>('construction_photos_v1'),
       await Hive.openBox<String>('construction_sync_queue_v1'),
       await Hive.openBox<String>('construction_metadata_v1'),
+      await Hive.openBox<String>('construction_operation_journal_v1'),
     );
     await const UuidHiveMigration().run(
       surveysBox: store.surveysBox,
@@ -48,6 +58,8 @@ class LocalStore {
         // ordering. The causal scheduler will assign a new cooldown only if
         // the operation fails after its prerequisites become ready.
         nextAttemptAt: null,
+        requiresReview: decoded.requiresReview,
+        lastErrorCode: decoded.lastErrorCode,
       );
       final current = repaired[key];
       repaired[key] = current == null
