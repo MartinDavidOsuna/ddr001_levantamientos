@@ -9,7 +9,7 @@ Estado: **FIELD_CERTIFICATION_NOT_READY**
 - Rama: `fix/app-zero-loss-and-resilience-certification`.
 - Base remota exacta: `416ff23c4e99783a264fdfe5cc2e3edb94da75be`.
 - Merge-base auditado: `f3a6afdfb65a2fb8325a24f9e777b56446f8f7e5`.
-- HEAD de implementación antes del commit documental: `849eb59`.
+- HEAD de implementación antes del commit documental: `05c7717`.
 - HEAD final: consultar `git rev-parse HEAD` en la entrega, porque este reporte forma parte del commit final.
 
 ## Cambios y hallazgos
@@ -33,13 +33,14 @@ P1 corregidos:
 - SHA-256 por streaming conservado; upload usa representación determinista y valida tamaño y digest exacto antes de enviar.
 - Tombstone heredado ya no vuelve a enlazarse durante bootstrap; replay remoto 404 se considera delete idempotente satisfecho.
 - Icono Android invertido y con margen seguro para que el sistema muestre el logo completo sin zoom.
+- Miniaturas decodificadas a 264 px y galería paginada en bloques de 24; las listas grandes ya no materializan cientos de bitmaps a la vez.
 
 Archivos principales: `app_controller.dart`, `photo_capture_service.dart`, `local_store.dart`, `construction_operation_journal.dart`, modelos/scheduler/migración, suites core/integration, fixture de dispositivo y documentación. No se modificó API ni SQL.
 
 ## Pruebas automáticas
 
 - `flutter analyze`: PASS, 0 issues.
-- `flutter test`: PASS, 127/127 en la corrida completa final.
+- `flutter test`: PASS, 129/129 en la corrida completa final.
 - Ambiguous upload Android: PASS.
 - Matriz verify: confirmed, missing_original, hash_mismatch, not_found, missing_thumbnail, missing_mapping, not_verified, mapping_conflict y deleted: PASS determinista.
 - 401 + refresh, timeout de refresh y revocación: PASS.
@@ -78,11 +79,14 @@ CI conserva `flutter pub get`, `flutter analyze` y `flutter test`. Cámara físi
 - En otra muestra debug posterior: PSS ~361 MB / RSS ~446 MB.
 - Muestra posterior al reboot: PSS ~329 MB / RSS ~409 MB.
 - Después de diez relanzamientos: PSS ~333 MB / RSS ~420 MB y CPU 0.0% tras estabilizar; el pico inmediato de arranque no persistió.
+- Perfil con 10 fotos: detalle/lista 366–376 MB PSS; al volver al inicio bajó a 143 MB PSS.
+- Perfil físico con 100 surveys y 400 archivos de miniatura (60,856 KB): lista 332 MB PSS. La implementación original del perfil llegó a 982 MB PSS al construir 400 bitmaps; tras decode acotado y paginación, la misma etapa quedó en 386 MB PSS con 24 visibles y 434 MB con 48 visibles.
 - CPU inactiva observada: 0.0% en muestra `top`; no se observó loop >1 request/s.
-- Logcat: sin FATAL EXCEPTION, ANR u OOM de la app. `DeadObjectException` de WindowManager coincidió con force-stop inducido.
+- Offline sostenido 10 minutos con Wi-Fi y datos desactivados: PASS. PSS minuto a minuto 402–425 MB sobre la caché del dataset extremo, sin tendencia creciente; CPU puntual 0–5%, sin mensajes `[SYNC]`, crash, ANR u OOM. Wi-Fi y datos quedaron restaurados al terminar.
+- Logcat: sin FATAL EXCEPTION, ANR, OOM ni `FileNotFoundException` de la app durante el perfil. Los `DeadObjectException` observados provenían de servicios Android/force-stop inducido, no de un crash de la app.
 - GPS: registro high-accuracy durante flujo y `ProviderRequest` activo ausente después de salir. Historial de sistema mostró registro/retiro.
 - Batería: la estadística agregada del dispositivo no permite atribución limpia por package sin reset destructivo; no se reseteó batterystats.
-- Perfil de 10 fotografías, 100 surveys/400 thumbnails, sync real y 10 minutos offline: incompleto.
+- Perfil de 10 fotografías, dataset de 100 surveys/400 thumbnails y 10 minutos offline: PASS físico. Perfil durante sync real: no ejecutado por ausencia del TEST API.
 
 ## Red, recovery y API
 
@@ -96,7 +100,7 @@ CI conserva `flutter pub get`, `flutter analyze` y `flutter test`. Cámara físi
 
 1. TEST API real y credenciales externas no disponibles: falta sync/upload/verify remoto e idempotencia real.
 2. F15 no cubrió kill físico en cada frontera de tombstone, aunque las fronteras prepared/queued/review y el replay 404 sí pasan de forma determinista.
-3. Faltan 20 uploads reales con cinco interrupciones y el dataset completo de perfilado.
-4. No se ejecutó prueba sostenida offline de 10/30 minutos ni batería aislada.
+3. Faltan 20 uploads reales con cinco interrupciones.
+4. No se pudo aislar consumo de batería por package sin resetear estadísticas compartidas del teléfono; no se hizo ese reset destructivo.
 
 Por estas brechas no se declara intención como evidencia: **FIELD_CERTIFICATION_NOT_READY**.

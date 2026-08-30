@@ -210,7 +210,7 @@ Baseline efectivo de la rama de auditoría: `416ff23c4e99783a264fdfe5cc2e3edb94d
 | F14 | PASS | Android físico: 19/20 surveys avanzan con uno estructural |
 | F15 | PARCIAL | Fronteras prepared/queued/review y replay 404 pasan determinísticamente; falta kill físico en cada frontera |
 | F16 | PASS | Cooldown serializa/reabre; fixture física conserva queue tras force-stop |
-| F17 | PASS | Wi-Fi/datos desactivados; survey, queue y archivo permanecen |
+| F17 | PASS | Wi-Fi/datos desactivados; survey, queue y archivo permanecen; corrida sostenida de 10 minutos sin sync loop, OOM ni ANR |
 | F18 | PASS determinista | HTTP 500 aplica backoff sin pérdida |
 
-Estado del plan: **FIELD_CERTIFICATION_NOT_READY**. F03 y el reinicio completo del teléfono ya pasaron. F15 aún requiere todas las fronteras físicas; también faltan TEST API real, 20 uploads interrumpidos y el dataset de perfilado completo.
+Estado del plan: **FIELD_CERTIFICATION_NOT_READY**. F03 y el reinicio completo del teléfono ya pasaron. El dataset físico de 100 surveys/400 thumbnails también pasó después de acotar decode y paginar la galería (982 MB PSS antes, 386 MB con 24 visibles después, sin OOM/ANR). F15 aún requiere todas las fronteras físicas; también faltan TEST API real y 20 uploads interrumpidos.
