@@ -170,7 +170,7 @@ class AppController extends ChangeNotifier {
     queue = local.queue();
     profile = local.profile();
     session = await sessions.read();
-    await _recoverLocalState();
+    await recoverLocalState();
     await _recoverPendingLocations();
     final connectivity = Connectivity();
     _setConnectivity(await connectivity.checkConnectivity());
@@ -188,7 +188,7 @@ class AppController extends ChangeNotifier {
     }
   }
 
-  Future<void> _recoverLocalState() async {
+  Future<void> recoverLocalState({bool recoverCamera = true}) async {
     for (final deletion in local.journal.pending().where(
       (entry) => entry.operation == ConstructionJournalOperation.deletePhoto,
     )) {
@@ -210,7 +210,9 @@ class AppController extends ChangeNotifier {
         await _purgeDeletedPhoto(deletion);
       }
     }
-    final recovered = await camera.recoverPendingCaptures();
+    final recovered = recoverCamera
+        ? await camera.recoverPendingCaptures()
+        : const <ConstructionPhoto>[];
     for (final candidate in recovered) {
       var photo = photos
           .where((value) => uuidEquals(value.id, candidate.id))
@@ -1351,7 +1353,11 @@ class AppController extends ChangeNotifier {
   String? _localReviewCode(Object error) {
     if (error is! StateError) return null;
     final value = error.message.toString();
-    return const {'MISSING_LOCAL_FILE', 'LOCAL_CORRUPTION'}.contains(value)
+    return const {
+          'MISSING_LOCAL_FILE',
+          'LOCAL_CORRUPTION',
+          'MAPPING_CONFLICT',
+        }.contains(value)
         ? value
         : null;
   }
@@ -1534,6 +1540,9 @@ class AppController extends ChangeNotifier {
       _ => PhotoSyncState.retryRequired,
     };
     await _replacePhoto(p.copyWith(syncState: next));
+    if (next == PhotoSyncState.mappingConflict) {
+      throw StateError('MAPPING_CONFLICT');
+    }
     if (next == PhotoSyncState.retryRequired &&
         const {
           'missing_original',
@@ -1546,6 +1555,7 @@ class AppController extends ChangeNotifier {
         photoId: p.id,
         step: p.stepNumber,
       );
+      throw StateError('PHOTO_REUPLOAD_REQUIRED');
     }
     if (next == PhotoSyncState.retryRequired &&
         const {
