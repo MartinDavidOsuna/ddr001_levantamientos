@@ -187,3 +187,30 @@ Cualquier pérdida de evidencia local, duplicado remoto no reconciliable, borrad
 **No se detecta un cambio obligatorio de API para implementar esta certificación.** El contrato actual aporta UUID cliente, idempotencia, detail y `verify-batch`, suficientes para recuperación app-side.
 
 Único bloqueo condicional a verificar en TEST: si una petición con `Idempotency-Key` ya procesada por servidor pero cuya respuesta se perdió no puede reconciliarse de forma estable por `surveyId/photoId`, o si repetir exactamente la misma clave/payload produce un efecto duplicado, eso sería un defecto obligatorio de API. No se propone ni se implementa ningún cambio de API mientras esa condición no sea demostrada.
+
+## 9. Ejecución de certificación 2026-08-30
+
+Baseline efectivo de la rama de auditoría: `416ff23c4e99783a264fdfe5cc2e3edb94da75be` (merge-base con `feature/contractor-build-1`: `f3a6afdfb65a2fb8325a24f9e777b56446f8f7e5`).
+
+| Caso | Estado | Evidencia |
+|---|---|---|
+| F01 | PASS | Unit test offline + fixture Android visible después de relanzar |
+| F02 | PASS | Tres force-stops consecutivos; survey, queue y SHA estables |
+| F03 | PASS parcial | Kill inmediato al aceptar cámara: captura nunca expuesta; evidencia anterior intacta |
+| F04 | PASS | Journal `prepared/fileDurable` y recuperación desde representación durable |
+| F05 | PASS | Bootstrap repara metadata/link/queue faltantes |
+| F06 | PASS determinista | Timeout de transporte conserva archivo y queue |
+| F07 | PASS | Gate Android `ambiguous_upload_recovery_test.dart` |
+| F08 | PASS determinista | `not_verified` conserva verify con cooldown |
+| F09 | PASS determinista | `missing_original` reencola mismo UUID/archivo |
+| F10 | PASS determinista | `hash_mismatch` conserva original y recuperación controlada |
+| F11 | PASS determinista | `mapping_conflict` pasa a review sin loop |
+| F12 | PASS | Refresh timeout conserva sesión |
+| F13 | PASS | Revocación definitiva limpia sólo sesión |
+| F14 | PASS | Android físico: 19/20 surveys avanzan con uno estructural |
+| F15 | PARCIAL | Tombstone local/remoto probado; no se inyectó kill en cada frontera física |
+| F16 | PASS | Cooldown serializa/reabre; fixture física conserva queue tras force-stop |
+| F17 | PASS | Wi-Fi/datos desactivados; survey, queue y archivo permanecen |
+| F18 | PASS determinista | HTTP 500 aplica backoff sin pérdida |
+
+Estado del plan: **FIELD_CERTIFICATION_NOT_READY**. F03 requiere aún validar recuperación positiva de `retrieveLostData` tras process death real y F15 requiere todas las fronteras físicas. También faltan TEST API real, reinicio completo del teléfono, 20 uploads interrumpidos y el dataset de perfilado completo.
