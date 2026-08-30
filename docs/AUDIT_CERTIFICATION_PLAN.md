@@ -196,7 +196,7 @@ Baseline efectivo de la rama de auditoría: `416ff23c4e99783a264fdfe5cc2e3edb94d
 |---|---|---|
 | F01 | PASS | Unit test offline + fixture Android visible después de relanzar |
 | F02 | PASS | Tres force-stops consecutivos; survey, queue y SHA estables |
-| F03 | PASS parcial | Kill inmediato al aceptar cámara: captura nunca expuesta; evidencia anterior intacta |
+| F03 | PASS | Process death con cámara activa; `Listo` devuelve JPEG, bootstrap crea una sola terna durable y force-stop conserva hashes |
 | F04 | PASS | Journal `prepared/fileDurable` y recuperación desde representación durable |
 | F05 | PASS | Bootstrap repara metadata/link/queue faltantes |
 | F06 | PASS determinista | Timeout de transporte conserva archivo y queue |
@@ -208,9 +208,9 @@ Baseline efectivo de la rama de auditoría: `416ff23c4e99783a264fdfe5cc2e3edb94d
 | F12 | PASS | Refresh timeout conserva sesión |
 | F13 | PASS | Revocación definitiva limpia sólo sesión |
 | F14 | PASS | Android físico: 19/20 surveys avanzan con uno estructural |
-| F15 | PARCIAL | Tombstone local/remoto probado; no se inyectó kill en cada frontera física |
+| F15 | PARCIAL | Fronteras prepared/queued/review y replay 404 pasan determinísticamente; falta kill físico en cada frontera |
 | F16 | PASS | Cooldown serializa/reabre; fixture física conserva queue tras force-stop |
 | F17 | PASS | Wi-Fi/datos desactivados; survey, queue y archivo permanecen |
 | F18 | PASS determinista | HTTP 500 aplica backoff sin pérdida |
 
-Estado del plan: **FIELD_CERTIFICATION_NOT_READY**. F03 requiere aún validar recuperación positiva de `retrieveLostData` tras process death real y F15 requiere todas las fronteras físicas. También faltan TEST API real, reinicio completo del teléfono, 20 uploads interrumpidos y el dataset de perfilado completo.
+Estado del plan: **FIELD_CERTIFICATION_NOT_READY**. F03 y el reinicio completo del teléfono ya pasaron. F15 aún requiere todas las fronteras físicas; también faltan TEST API real, 20 uploads interrumpidos y el dataset de perfilado completo.
