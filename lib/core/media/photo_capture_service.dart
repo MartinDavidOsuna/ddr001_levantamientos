@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path/path.dart' as p;
@@ -40,12 +41,18 @@ class PhotoCaptureService {
     required this.local,
     ConstructionImagePicker? picker,
     Future<Directory> Function()? supportDirectory,
+    Future<Directory> Function()? temporaryDirectory,
+    this.representationBuilder,
   }) : picker = picker ?? ImagePickerAdapter(),
-       supportDirectory = supportDirectory ?? getApplicationSupportDirectory;
+       supportDirectory = supportDirectory ?? getApplicationSupportDirectory,
+       temporaryDirectory = temporaryDirectory ?? getTemporaryDirectory;
 
   final LocalStore local;
   final ConstructionImagePicker picker;
   final Future<Directory> Function() supportDirectory;
+  final Future<Directory> Function() temporaryDirectory;
+  final Future<bool> Function(File source, File upload, File thumbnail)?
+  representationBuilder;
 
   Future<ConstructionPhoto?> capture({
     required String surveyId,
@@ -92,6 +99,9 @@ class PhotoCaptureService {
             .toList()
           ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
     if (pending.isEmpty) return const [];
+    if (kDebugMode) {
+      debugPrint('[CAMERA_RECOVERY] pending=${pending.length}');
+    }
     for (final entry in pending) {
       final sourcePath = entry.sourcePath;
       if (sourcePath != null && File(sourcePath).existsSync()) {
@@ -102,17 +112,27 @@ class PhotoCaptureService {
         }
       }
     }
+    XFile? lostFile;
     try {
       final lost = await picker.retrieveLostData();
-      final file = lost.files?.firstOrNull;
-      final prepared = pending
-          .where((entry) => entry.state == ConstructionJournalState.prepared)
-          .firstOrNull;
-      if (file != null && prepared != null) {
-        await _makeDurable(prepared, File(file.path));
-      }
+      lostFile = lost.files?.firstOrNull ?? lost.file;
     } on Object {
       // Journal and staging remain available for the next bootstrap.
+    }
+    final prepared = pending
+        .where((entry) => entry.state == ConstructionJournalState.prepared)
+        .firstOrNull;
+    if (prepared != null) {
+      var restored = false;
+      if (lostFile != null) {
+        restored = await _tryRecoverCandidate(prepared, File(lostFile.path));
+      }
+      if (!restored) {
+        final cacheCandidate = await _recentPickerCacheCandidate(prepared);
+        if (cacheCandidate != null) {
+          await _tryRecoverCandidate(prepared, cacheCandidate);
+        }
+      }
     }
     final recovered = <ConstructionPhoto>[];
     for (final entry in local.journal.pending().where(
@@ -130,6 +150,66 @@ class PhotoCaptureService {
       recovered.add(_photoFromEntry(entry));
     }
     return recovered;
+  }
+
+  Future<bool> _tryRecoverCandidate(
+    ConstructionJournalEntry prepared,
+    File cameraResult,
+  ) async {
+    if (!cameraResult.existsSync() || await cameraResult.length() == 0) {
+      return false;
+    }
+    try {
+      await _makeDurable(prepared, cameraResult);
+      return true;
+    } on Object catch (error) {
+      await local.journal.save(
+        prepared.copyWith(
+          lastError: 'CAMERA_CACHE_RECOVERY_${error.runtimeType}',
+        ),
+      );
+      // Keep both the picker cache file and journal for later recovery.
+      return false;
+    }
+  }
+
+  Future<File?> _recentPickerCacheCandidate(
+    ConstructionJournalEntry prepared,
+  ) async {
+    final cache = await temporaryDirectory();
+    if (!cache.existsSync()) {
+      if (kDebugMode) debugPrint('[CAMERA_RECOVERY] cache_missing');
+      return null;
+    }
+    final threshold = prepared.createdAt.subtract(const Duration(minutes: 5));
+    final ceiling = prepared.createdAt.add(const Duration(minutes: 5));
+    final candidates = <(File, DateTime)>[];
+    await for (final entity in cache.list()) {
+      if (entity is! File ||
+          !const {
+            '.jpg',
+            '.jpeg',
+          }.contains(p.extension(entity.path).toLowerCase())) {
+        continue;
+      }
+      final modified = (await entity.stat()).modified.toUtc();
+      if (kDebugMode) {
+        debugPrint(
+          '[CAMERA_RECOVERY] cache_jpeg modified=${modified.toIso8601String()} '
+          'window=${threshold.toIso8601String()}..${ceiling.toIso8601String()}',
+        );
+      }
+      if (!modified.isBefore(threshold) &&
+          !modified.isAfter(ceiling) &&
+          await entity.length() > 0) {
+        candidates.add((entity, modified));
+      }
+    }
+    candidates.sort((a, b) => b.$2.compareTo(a.$2));
+    if (kDebugMode) {
+      debugPrint('[CAMERA_RECOVERY] cache_candidates=${candidates.length}');
+    }
+    return candidates.firstOrNull?.$1;
   }
 
   Future<void> _recordOrphanFiles() async {
@@ -218,11 +298,40 @@ class PhotoCaptureService {
     final source = File(entry.sourcePath!);
     if (!source.existsSync()) {
       await source.parent.create(recursive: true);
-      await cameraFile.openRead().pipe(source.openWrite());
+      final partial = File('${source.path}.part');
+      final sink = partial.openWrite(mode: FileMode.writeOnly);
+      try {
+        await cameraFile.openRead().pipe(sink);
+      } on Object {
+        await sink.close();
+        rethrow;
+      }
+      await partial.rename(source.path);
     }
     var current = entry.copyWith(state: ConstructionJournalState.fileDurable);
     await local.journal.save(current);
     final upload = File(entry.uploadPath!);
+    final thumbnail = File(entry.thumbnailPath!);
+    if ((!upload.existsSync() || !thumbnail.existsSync()) &&
+        !await _buildRepresentations(source, upload, thumbnail)) {
+      throw StateError('No fue posible procesar la fotografía.');
+    }
+    current = current.copyWith(
+      state: ConstructionJournalState.fileDurable,
+      sha256: await sha256File(upload),
+      fileSize: await upload.length(),
+    );
+    await local.journal.save(current);
+    return _photoFromEntry(current);
+  }
+
+  Future<bool> _buildRepresentations(
+    File source,
+    File upload,
+    File thumbnail,
+  ) async {
+    final custom = representationBuilder;
+    if (custom != null) return custom(source, upload, thumbnail);
     if (!upload.existsSync()) {
       final normalized = await FlutterImageCompress.compressAndGetFile(
         source.path,
@@ -232,11 +341,8 @@ class PhotoCaptureService {
         minHeight: 1920,
         format: CompressFormat.jpeg,
       );
-      if (normalized == null) {
-        throw StateError('No fue posible procesar la fotografía.');
-      }
+      if (normalized == null) return false;
     }
-    final thumbnail = File(entry.thumbnailPath!);
     if (!thumbnail.existsSync()) {
       final thumb = await FlutterImageCompress.compressAndGetFile(
         upload.path,
@@ -246,17 +352,9 @@ class PhotoCaptureService {
         minHeight: 420,
         format: CompressFormat.jpeg,
       );
-      if (thumb == null) {
-        throw StateError('No fue posible crear la miniatura.');
-      }
+      if (thumb == null) return false;
     }
-    current = current.copyWith(
-      state: ConstructionJournalState.fileDurable,
-      sha256: await sha256File(upload),
-      fileSize: await upload.length(),
-    );
-    await local.journal.save(current);
-    return _photoFromEntry(current);
+    return true;
   }
 
   ConstructionPhoto _photoFromEntry(ConstructionJournalEntry entry) =>

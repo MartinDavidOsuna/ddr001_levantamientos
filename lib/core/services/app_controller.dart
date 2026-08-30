@@ -198,6 +198,7 @@ class AppController extends ChangeNotifier {
       if (photo != null && photo.syncState != PhotoSyncState.deleted) {
         await _replacePhoto(photo.copyWith(syncState: PhotoSyncState.deleted));
       }
+      await _unlinkDeletedPhoto(deletion);
       if (deletion.remotePossible) {
         await _enqueue(
           deletion.surveyId,
@@ -231,6 +232,7 @@ class AppController extends ChangeNotifier {
 
     for (final original in [...photos]) {
       var photo = original;
+      if (photo.syncState == PhotoSyncState.deleted) continue;
       if (!File(photo.localPath).existsSync()) {
         photo = photo.copyWith(syncState: PhotoSyncState.missingLocal);
         await _replacePhoto(photo);
@@ -860,6 +862,44 @@ class AppController extends ChangeNotifier {
     );
   }
 
+  Future<void> _unlinkDeletedPhoto(ConstructionJournalEntry deletion) async {
+    final surveyIndex = surveys.indexWhere(
+      (value) => uuidEquals(value.id, deletion.surveyId),
+    );
+    final photoId = deletion.photoId;
+    if (surveyIndex < 0 || photoId == null) return;
+    final current = surveys[surveyIndex];
+    if (deletion.correctionId != null) {
+      final corrections = current.corrections
+          .map(
+            (correction) => uuidEquals(correction.id, deletion.correctionId)
+                ? CorrectionRound(
+                    id: correction.id,
+                    round: correction.round,
+                    state: correction.state,
+                    comment: correction.comment,
+                    photoIds: correction.photoIds
+                        .where((id) => !uuidEquals(id, photoId))
+                        .toList(),
+                  )
+                : correction,
+          )
+          .toList();
+      await _replaceSurvey(current.copyWith(corrections: corrections));
+      return;
+    }
+    final steps = current.steps
+        .map(
+          (step) => step.copyWith(
+            photoIds: step.photoIds
+                .where((id) => !uuidEquals(id, photoId))
+                .toList(),
+          ),
+        )
+        .toList();
+    await _replaceSurvey(current.copyWith(steps: steps));
+  }
+
   bool canFinalize(String surveyId, int step) {
     final s = survey(surveyId),
         current = s.steps[step - 1],
@@ -1453,8 +1493,17 @@ class AppController extends ChangeNotifier {
       case QueueOperation.openStep:
         await remote.openStep(s.id, item.step!);
       case QueueOperation.deletePhoto:
-        await remote.deletePhoto(s.id, item.photoId!);
-        final deletion = local.journal.find('delete-${item.photoId}');
+        try {
+          await remote.deletePhoto(s.id, item.photoId!);
+        } on DioException catch (error) {
+          // A retry after an ambiguous successful delete commonly observes
+          // 404. The desired remote state is already true, so this is a
+          // successful idempotent replay rather than a permanent conflict.
+          if (error.response?.statusCode != 404) rethrow;
+        }
+        final deletion = local.journal.find(
+          'delete-${canonicalUuid(item.photoId!)}',
+        );
         if (deletion != null) await _purgeDeletedPhoto(deletion);
       case QueueOperation.updateComment:
         await remote.commentStep(
@@ -1474,6 +1523,15 @@ class AppController extends ChangeNotifier {
         final capture = local.journal.find(p.id);
         if (capture?.fileSize != null &&
             await uploadFile.length() != capture!.fileSize) {
+          await _replacePhoto(
+            p.copyWith(syncState: PhotoSyncState.permanentFailure),
+          );
+          throw StateError('LOCAL_CORRUPTION');
+        }
+        final digest = await sha256File(uploadFile);
+        if (digest.toLowerCase() != p.sha256.toLowerCase() ||
+            (capture?.sha256 != null &&
+                digest.toLowerCase() != capture!.sha256!.toLowerCase())) {
           await _replacePhoto(
             p.copyWith(syncState: PhotoSyncState.permanentFailure),
           );
