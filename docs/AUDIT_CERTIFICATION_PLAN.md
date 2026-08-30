@@ -195,7 +195,7 @@ Baseline efectivo de la rama de auditoría: `416ff23c4e99783a264fdfe5cc2e3edb94d
 | Caso | Estado | Evidencia |
 |---|---|---|
 | F01 | PASS | Unit test offline + fixture Android visible después de relanzar |
-| F02 | PASS | Tres force-stops consecutivos; survey, queue y SHA estables |
+| F02 | PASS | Diez force-stops consecutivos; survey, queue y SHA estables |
 | F03 | PASS | Process death con cámara activa; `Listo` devuelve JPEG, bootstrap crea una sola terna durable y force-stop conserva hashes |
 | F04 | PASS | Journal `prepared/fileDurable` y recuperación desde representación durable |
 | F05 | PASS | Bootstrap repara metadata/link/queue faltantes |

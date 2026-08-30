@@ -65,7 +65,7 @@ CI conserva `flutter pub get`, `flutter analyze` y `flutter test`. Cámara físi
 - E2E-I 20 surveys: PASS físico, 19 avanzaron y uno quedó review.
 - E2E-J GPS: PASS observado; solicitud high accuracy presente dentro del detalle y ausente al salir.
 - Icono Android: PASS visual en launcher Motorola; fondo blanco, símbolo azul completo y margen seguro sin recorte/zoom.
-- Flujos críticos: tres force-stops consecutivos conservaron 1 survey, 1 queue y SHA `2b0781…b1b2e`.
+- Flujos críticos: diez force-stops/relaunch consecutivos conservaron 1 survey, 1 queue y SHA `2b0781…b1b2e`.
 - Reinicio completo: PASS en APK TEST normal sin reinstalar; sesión, survey, queue, cooldown y SHA reaparecieron después de `boot_completed` y desbloqueo.
 - Camera process death: PASS positivo. Se mató Levantamientos con la cámara Motorola activa, se tomó la foto y se accionó el control UIAutomator `done_button`/`Listo`; bootstrap recuperó el JPEG privado, creó una sola terna source/upload/thumb y la UI mostró 2/4. Otro force-stop conservó exactamente tres archivos y los mismos hashes.
 - La corrida exploratoria detectó una posible asociación duplicada de cache con un journal antiguo; se corrigió con ventana temporal acotada y la corrida limpia final demostró una sola foto tras restart.
@@ -77,6 +77,7 @@ CI conserva `flutter pub get`, `flutter analyze` y `flutter test`. Cámara físi
 - Después de cámara/foto: PSS ~325 MB / RSS ~324 MB.
 - En otra muestra debug posterior: PSS ~361 MB / RSS ~446 MB.
 - Muestra posterior al reboot: PSS ~329 MB / RSS ~409 MB.
+- Después de diez relanzamientos: PSS ~333 MB / RSS ~420 MB y CPU 0.0% tras estabilizar; el pico inmediato de arranque no persistió.
 - CPU inactiva observada: 0.0% en muestra `top`; no se observó loop >1 request/s.
 - Logcat: sin FATAL EXCEPTION, ANR u OOM de la app. `DeadObjectException` de WindowManager coincidió con force-stop inducido.
 - GPS: registro high-accuracy durante flujo y `ProviderRequest` activo ausente después de salir. Historial de sistema mostró registro/retiro.
@@ -95,7 +96,7 @@ CI conserva `flutter pub get`, `flutter analyze` y `flutter test`. Cámara físi
 
 1. TEST API real y credenciales externas no disponibles: falta sync/upload/verify remoto e idempotencia real.
 2. F15 no cubrió kill físico en cada frontera de tombstone, aunque las fronteras prepared/queued/review y el replay 404 sí pasan de forma determinista.
-3. Faltan 20 uploads reales con cinco interrupciones, diez force-stops de persistencia y dataset completo de perfilado.
+3. Faltan 20 uploads reales con cinco interrupciones y el dataset completo de perfilado.
 4. No se ejecutó prueba sostenida offline de 10/30 minutos ni batería aislada.
 
 Por estas brechas no se declara intención como evidencia: **FIELD_CERTIFICATION_NOT_READY**.
