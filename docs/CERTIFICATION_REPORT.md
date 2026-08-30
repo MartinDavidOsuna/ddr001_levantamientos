@@ -64,6 +64,7 @@ CI conserva `flutter pub get`, `flutter analyze` y `flutter test`. Cámara físi
 - E2E-H cooldown: PASS local/fixture.
 - E2E-I 20 surveys: PASS físico, 19 avanzaron y uno quedó review.
 - E2E-J GPS: PASS observado; solicitud high accuracy presente dentro del detalle y ausente al salir.
+- Icono Android: PASS visual en launcher Motorola; fondo blanco, símbolo azul completo y margen seguro sin recorte/zoom.
 - Flujos críticos: tres force-stops consecutivos conservaron 1 survey, 1 queue y SHA `2b0781…b1b2e`.
 - Reinicio completo: PASS en APK TEST normal sin reinstalar; sesión, survey, queue, cooldown y SHA reaparecieron después de `boot_completed` y desbloqueo.
 - Camera process death: PASS positivo. Se mató Levantamientos con la cámara Motorola activa, se tomó la foto y se accionó el control UIAutomator `done_button`/`Listo`; bootstrap recuperó el JPEG privado, creó una sola terna source/upload/thumb y la UI mostró 2/4. Otro force-stop conservó exactamente tres archivos y los mismos hashes.
