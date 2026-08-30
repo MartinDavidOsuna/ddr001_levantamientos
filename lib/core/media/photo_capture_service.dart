@@ -8,6 +8,15 @@ import 'package:uuid/uuid.dart';
 import '../../domain/construction/construction_models.dart';
 import '../identity/uuid_identity.dart';
 
+/// Computes SHA-256 without materializing the complete file in Dart heap.
+///
+/// Field photographs can be several megabytes. Streaming keeps memory usage
+/// approximately constant and mirrors the zero-loss RV hardening approach.
+Future<String> sha256File(File file) async {
+  final digest = await sha256.bind(file.openRead()).first;
+  return digest.toString();
+}
+
 class PhotoCaptureService {
   Future<ConstructionPhoto?> capture({
     required String surveyId,
@@ -53,9 +62,7 @@ class PhotoCaptureService {
       format: CompressFormat.jpeg,
     );
     if (thumb == null) throw StateError('No fue posible crear la miniatura.');
-    final digest = sha256
-        .convert(await File(normalized.path).readAsBytes())
-        .toString();
+    final digest = await sha256File(File(normalized.path));
     return ConstructionPhoto(
       id: id,
       surveyId: canonicalSurveyId,
