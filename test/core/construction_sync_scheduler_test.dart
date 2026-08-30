@@ -128,6 +128,8 @@ class FakeRemote implements ConstructionRemote {
   Object? authFailure;
   Object? profileFailure;
   Object? logoutFailure;
+  Object? openFailure;
+  String verifyStatus = 'confirmed';
   ConstructionRole profileRole = ConstructionRole.contractor;
   int fieldLoginAttempts = 0;
   (String, String, String)? lastFieldIdentity;
@@ -175,6 +177,7 @@ class FakeRemote implements ConstructionRemote {
       );
     }
     if (failOpen.contains(id)) throw StateError('survey failure');
+    if (openFailure case final failure?) throw failure;
     steps.putIfAbsent(id, () => {})[step] = 'open';
   }
 
@@ -202,6 +205,14 @@ class FakeRemote implements ConstructionRemote {
 
   @override
   Future<Map<String, dynamic>> verify(List<String> ids) async {
+    if (verifyStatus != 'confirmed') {
+      events.add('verify:$verifyStatus');
+      return {
+        'items': [
+          for (final id in ids) {'photoId': id, 'status': verifyStatus},
+        ],
+      };
+    }
     for (final id in ids) {
       serverPhotos[id.toLowerCase()]?['integrity_status'] = 'confirmed';
     }
@@ -681,6 +692,96 @@ void main() {
       expect(app.queue.single.attempts, 5);
       expect(app.queue.single.nextAttemptAt, isNotNull);
     });
+
+    test('timeout before commit preserves queue and local survey', () async {
+      app.surveys = [baseSurvey(surveyA)];
+      app.queue = [job(QueueOperation.openStep, step: 1)];
+      remote.openFailure = DioException(
+        requestOptions: RequestOptions(path: '/open'),
+        type: DioExceptionType.sendTimeout,
+      );
+
+      await app.synchronize();
+
+      expect(app.surveys, hasLength(1));
+      expect(app.queue.single.attempts, 1);
+      expect(app.queue.single.nextAttemptAt, isNotNull);
+    });
+
+    test('HTTP 500 backs off without blocking or deleting work', () async {
+      app.surveys = [baseSurvey(surveyA)];
+      app.queue = [job(QueueOperation.openStep, step: 1)];
+      remote.openFailure = DioException(
+        requestOptions: RequestOptions(path: '/open'),
+        response: Response(
+          requestOptions: RequestOptions(path: '/open'),
+          statusCode: 500,
+        ),
+        type: DioExceptionType.badResponse,
+      );
+
+      await app.synchronize();
+
+      expect(app.online, isTrue);
+      expect(app.surveys, hasLength(1));
+      expect(app.queue.single.nextAttemptAt, isNotNull);
+    });
+
+    for (final status in const [
+      'missing_original',
+      'hash_mismatch',
+      'not_found',
+      'missing_thumbnail',
+      'missing_mapping',
+      'not_verified',
+      'mapping_conflict',
+      'deleted',
+    ]) {
+      test(
+        'verify $status preserves original and follows recovery policy',
+        () async {
+          final photo = evidence(state: PhotoSyncState.uploadedUnverified);
+          app.surveys = [baseSurvey(surveyA)];
+          app.photos = [photo];
+          app.queue = [
+            job(QueueOperation.verifyPhotos, step: 1, photo: photoA),
+          ];
+          remote.verifyStatus = status;
+
+          await app.synchronize();
+
+          expect(File(photo.localPath).existsSync(), isTrue);
+          if (status == 'mapping_conflict') {
+            expect(app.photos.single.syncState, PhotoSyncState.mappingConflict);
+            expect(app.queue.single.requiresReview, isTrue);
+          } else if (status == 'deleted') {
+            expect(
+              app.photos.single.syncState,
+              PhotoSyncState.permanentFailure,
+            );
+            expect(app.queue, isEmpty);
+          } else {
+            expect(app.queue, isNotEmpty);
+            expect(app.queue.any((item) => item.nextAttemptAt != null), isTrue);
+            if (const {
+              'missing_original',
+              'hash_mismatch',
+              'not_found',
+            }.contains(status)) {
+              expect(
+                remote.events,
+                contains('${surveyA.toLowerCase()}:upload:1'),
+              );
+            } else {
+              expect(
+                remote.events,
+                isNot(contains('${surveyA.toLowerCase()}:upload:1')),
+              );
+            }
+          }
+        },
+      );
+    }
 
     test('structural 409 requires review without a retry loop', () async {
       app.surveys = [baseSurvey(surveyA), baseSurvey(surveyB)];

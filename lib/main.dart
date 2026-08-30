@@ -6,6 +6,7 @@ import 'app/app.dart';
 import 'core/config/app_config.dart';
 import 'core/network/api_client.dart';
 import 'core/persistence/local_store.dart';
+import 'core/qa/device_certification_fixture.dart';
 import 'core/security/session_store.dart';
 import 'core/services/app_controller.dart';
 
@@ -15,6 +16,7 @@ Future<void> main() async {
   await Hive.initFlutter();
   final local = await LocalStore.open();
   final sessions = SecureSessionStore();
+  await seedDeviceCertificationFixture(local, sessions);
   final api = ApiClient(config: config, sessions: sessions);
   final controller = AppController(
     config: config,
