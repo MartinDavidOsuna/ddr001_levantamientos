@@ -1018,6 +1018,20 @@ class AppController extends ChangeNotifier {
                 ),
               );
             }
+            // A server-side photo proves that the multipart mutation was
+            // committed, even when its response was lost. Integrity remains
+            // a separate durable operation: never retire the ambiguous
+            // upload unless confirmation is final or verify work exists.
+            if (!confirmed &&
+                item.operation == QueueOperation.uploadPhoto &&
+                item.photoId != null) {
+              await _enqueue(
+                item.surveyId,
+                QueueOperation.verifyPhotos,
+                photoId: item.photoId,
+                step: item.step,
+              );
+            }
           }
         }
         if (item.operation == QueueOperation.completeCorrection) {
