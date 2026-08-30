@@ -249,6 +249,119 @@ void main() {
     expect(find.byKey(const Key('camera_1')), findsOneWidget);
     expect(find.text('Tomar foto'), findsOneWidget);
   });
+  testWidgets('survey thumbnails cap decoded dimensions', (tester) async {
+    final (app, root) = (await tester.runAsync(
+      () => controller(ConstructionRole.contractor),
+    ))!;
+    addTearDown(() async {
+      await Hive.close();
+      await root.delete(recursive: true);
+    });
+    final survey = (await tester.runAsync(() => app.createSurvey('Thumb')))!;
+    const photoId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+    final photo = ConstructionPhoto(
+      id: photoId,
+      surveyId: survey.id,
+      localPath: 'assets/branding/logo_symbol.png',
+      thumbnailPath: 'assets/branding/logo_symbol.png',
+      sha256: 'a' * 64,
+      capturedAt: DateTime.utc(2026, 8, 30),
+      stepNumber: 1,
+      location: GeoPoint(
+        latitude: 29,
+        longitude: -110,
+        accuracy: 5,
+        capturedAt: DateTime.utc(2026, 8, 30),
+      ),
+      syncState: PhotoSyncState.confirmed,
+    );
+    app.photos = [photo];
+    app.surveys = [
+      survey.copyWith(
+        steps: [
+          survey.steps.first.copyWith(photoIds: const [photoId]),
+          ...survey.steps.skip(1),
+        ],
+      ),
+    ];
+
+    await tester.pumpWidget(page(app, SurveyDetailPage(surveyId: survey.id)));
+
+    final thumbnail = tester.widget<Image>(
+      find.descendant(
+        of: find.byKey(const Key('photo_$photoId')),
+        matching: find.byType(Image),
+      ),
+    );
+    final provider = thumbnail.image as ResizeImage;
+    expect(provider.width, 264);
+    expect(provider.height, 264);
+    expect(thumbnail.filterQuality, FilterQuality.low);
+  });
+  testWidgets('survey gallery reveals thumbnails in bounded pages', (
+    tester,
+  ) async {
+    final (app, root) = (await tester.runAsync(
+      () => controller(ConstructionRole.contractor),
+    ))!;
+    addTearDown(() async {
+      await Hive.close();
+      await root.delete(recursive: true);
+    });
+    final survey = (await tester.runAsync(() => app.createSurvey('Paged')))!;
+    final capturedAt = DateTime.utc(2026, 8, 30);
+    final photos = List.generate(30, (index) {
+      final id = 'bbbbbbbb-bbbb-4bbb-8bbb-${index.toString().padLeft(12, '0')}';
+      return ConstructionPhoto(
+        id: id,
+        surveyId: survey.id,
+        localPath: 'assets/branding/logo_symbol.png',
+        thumbnailPath: 'assets/branding/logo_symbol.png',
+        sha256: 'a' * 64,
+        capturedAt: capturedAt.add(Duration(milliseconds: index)),
+        stepNumber: 1,
+        location: GeoPoint(
+          latitude: 29,
+          longitude: -110,
+          accuracy: 5,
+          capturedAt: capturedAt,
+        ),
+        syncState: PhotoSyncState.confirmed,
+      );
+    });
+    app.photos = photos;
+    app.surveys = [
+      survey.copyWith(
+        steps: [
+          survey.steps.first.copyWith(
+            photoIds: photos.map((photo) => photo.id).toList(),
+          ),
+          ...survey.steps.skip(1),
+        ],
+      ),
+    ];
+
+    await tester.pumpWidget(page(app, SurveyDetailPage(surveyId: survey.id)));
+
+    expect(
+      find.byKey(const Key('photo_bbbbbbbb-bbbb-4bbb-8bbb-000000000023')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('photo_bbbbbbbb-bbbb-4bbb-8bbb-000000000024')),
+      findsNothing,
+    );
+    expect(find.text('Mostrar más fotos (6 restantes)'), findsOneWidget);
+    tester
+        .widget<TextButton>(find.byKey(const Key('more_photos_1')))
+        .onPressed!();
+    await tester.pump();
+    expect(
+      find.byKey(const Key('photo_bbbbbbbb-bbbb-4bbb-8bbb-000000000029')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('more_photos_1')), findsNothing);
+  });
   testWidgets('step 6 requests cardinal directions before additional photos', (
     tester,
   ) async {

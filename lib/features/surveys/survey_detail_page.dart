@@ -205,14 +205,26 @@ class _CorrectionCard extends StatelessWidget {
   }
 }
 
-class _StepCard extends StatelessWidget {
+class _StepCard extends StatefulWidget {
   const _StepCard({required this.surveyId, required this.step});
   final String surveyId;
   final SurveyStep step;
+
+  @override
+  State<_StepCard> createState() => _StepCardState();
+}
+
+class _StepCardState extends State<_StepCard> {
+  static const _photoPageSize = 24;
+  var _visiblePhotoCount = _photoPageSize;
+
   @override
   Widget build(BuildContext context) {
     final app = context.watch<AppController>();
+    final surveyId = widget.surveyId;
+    final step = widget.step;
     final evidence = app.photosForStep(surveyId, step.number);
+    final visibleEvidence = evidence.take(_visiblePhotoCount);
     final open = step.state == StepState.open;
     final editable =
         open &&
@@ -251,7 +263,7 @@ class _StepCard extends StatelessWidget {
                   child: Wrap(
                     spacing: 8,
                     runSpacing: 8,
-                    children: evidence
+                    children: visibleEvidence
                         .map(
                           (photo) => GestureDetector(
                             key: Key('photo_${photo.id}'),
@@ -287,7 +299,10 @@ class _StepCard extends StatelessWidget {
                                     File(photo.thumbnailPath),
                                     width: 88,
                                     height: 88,
+                                    cacheWidth: 264,
+                                    cacheHeight: 264,
                                     fit: BoxFit.cover,
+                                    filterQuality: FilterQuality.low,
                                   ),
                                 ),
                                 if (photo.locationState ==
@@ -379,6 +394,20 @@ class _StepCard extends StatelessWidget {
                         .toList(),
                   ),
                 ),
+                if (_visiblePhotoCount < evidence.length) ...[
+                  const SizedBox(height: 8),
+                  TextButton.icon(
+                    key: Key('more_photos_${step.number}'),
+                    onPressed: () => setState(() {
+                      _visiblePhotoCount += _photoPageSize;
+                    }),
+                    icon: const Icon(Icons.expand_more),
+                    label: Text(
+                      'Mostrar más fotos '
+                      '(${evidence.length - _visiblePhotoCount} restantes)',
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 12),
                 if (editable && step.number == 6) ...[
                   Row(
