@@ -230,6 +230,29 @@ class AppController extends ChangeNotifier {
       await _repairPhotoLink(photo);
     }
 
+    // Older builds opened the next stage only in the local projection. Repair
+    // the durable causal commands so later evidence cannot be stranded behind
+    // a server-side "Evidence context not found" response.
+    for (final survey in [...surveys]) {
+      for (final step in survey.steps.where(
+        (candidate) => candidate.state == StepState.completedLocal,
+      )) {
+        await _enqueue(survey.id, QueueOperation.openStep, step: step.number);
+        await _enqueue(
+          survey.id,
+          QueueOperation.completeStep,
+          step: step.number,
+        );
+        if (step.number < survey.steps.length) {
+          await _enqueue(
+            survey.id,
+            QueueOperation.openStep,
+            step: step.number + 1,
+          );
+        }
+      }
+    }
+
     for (final original in [...photos]) {
       var photo = original;
       if (photo.syncState == PhotoSyncState.deleted) continue;
@@ -963,6 +986,9 @@ class AppController extends ChangeNotifier {
     );
     await _enqueue(surveyId, QueueOperation.openStep, step: step);
     await _enqueue(surveyId, QueueOperation.completeStep, step: step);
+    if (step < 6) {
+      await _enqueue(surveyId, QueueOperation.openStep, step: step + 1);
+    }
     notifyListeners();
     if (online) unawaited(synchronize());
   }

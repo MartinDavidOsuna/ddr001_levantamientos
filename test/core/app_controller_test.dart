@@ -392,6 +392,72 @@ void main() {
   );
 
   test(
+    'finalizing a stage durably queues the next remote stage opening',
+    () async {
+      final survey = await app.createSurvey('Next stage causal order');
+      app.queue = [];
+      await local.queueBox.clear();
+      final evidenceFile = File('${root.path}/next-stage.jpg')
+        ..writeAsStringSync('x');
+      final photo = ConstructionPhoto(
+        id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        surveyId: survey.id,
+        localPath: evidenceFile.path,
+        thumbnailPath: evidenceFile.path,
+        sha256: List.filled(64, 'a').join(),
+        capturedAt: DateTime.utc(2026),
+        stepNumber: 1,
+        location: GeoPoint(
+          latitude: 20,
+          longitude: -100,
+          accuracy: 5,
+          capturedAt: DateTime.utc(2026),
+        ),
+        syncState: PhotoSyncState.confirmed,
+      );
+      app.photos = [photo];
+      app.surveys = [
+        survey.copyWith(
+          steps: [
+            survey.steps.first.copyWith(photoIds: [photo.id]),
+            ...survey.steps.skip(1),
+          ],
+        ),
+      ];
+
+      await app.finalizeStep(survey.id, 1);
+
+      expect(
+        app.queue.map((item) => (item.operation, item.step)),
+        containsAll(<(QueueOperation, int?)>[
+          (QueueOperation.openStep, 1),
+          (QueueOperation.completeStep, 1),
+          (QueueOperation.openStep, 2),
+        ]),
+      );
+    },
+  );
+
+  test('bootstrap repairs a legacy missing next-stage open command', () async {
+    final survey = await app.createSurvey('Legacy next stage');
+    app.queue = [];
+    await local.queueBox.clear();
+    final steps = [...survey.steps];
+    steps[0] = steps[0].copyWith(state: StepState.completedLocal);
+    steps[1] = steps[1].copyWith(state: StepState.open);
+    final legacy = survey.copyWith(steps: steps, currentStep: 1);
+    app.surveys = [legacy];
+    await local.saveSurvey(legacy);
+
+    await app.recoverLocalState(recoverCamera: false);
+
+    expect(
+      app.queue.map((item) => (item.operation, item.step)),
+      contains((QueueOperation.openStep, 2)),
+    );
+  });
+
+  test(
     'finalization blocks pending location and allows confirmed location',
     () async {
       final survey = await app.createSurvey('Location gate');
