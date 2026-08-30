@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:ddr001_levantamientos/core/config/app_config.dart';
+import 'package:ddr001_levantamientos/core/media/photo_capture_service.dart';
 import 'package:ddr001_levantamientos/core/network/api_client.dart';
 import 'package:ddr001_levantamientos/core/persistence/local_store.dart';
 import 'package:ddr001_levantamientos/core/persistence/uuid_hive_migration.dart';
@@ -203,7 +204,7 @@ void main() {
         surveyId: surveyId,
         localPath: file.path,
         thumbnailPath: file.path,
-        sha256: List.filled(64, 'a').join(),
+        sha256: await sha256File(file),
         capturedAt: DateTime.utc(2026, 8, 30),
         stepNumber: 1,
         location: GeoPoint(

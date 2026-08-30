@@ -162,6 +162,64 @@ void main() {
       );
     },
   );
+  for (final boundary in const [
+    ConstructionJournalState.prepared,
+    ConstructionJournalState.queued,
+    ConstructionJournalState.failedNeedsReview,
+  ]) {
+    test('bootstrap repairs remote delete boundary ${boundary.name}', () async {
+      final survey = await app.createSurvey('Delete boundary');
+      app.queue = [];
+      await local.queueBox.clear();
+      final file = File('${root.path}/delete-${boundary.name}.jpg')
+        ..writeAsStringSync('evidence');
+      final photo = ConstructionPhoto(
+        id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+        surveyId: survey.id,
+        localPath: file.path,
+        thumbnailPath: file.path,
+        sha256: 'a' * 64,
+        capturedAt: DateTime.utc(2026, 8, 30),
+        stepNumber: 1,
+        syncState: PhotoSyncState.confirmed,
+      );
+      final linked = survey.copyWith(
+        steps: [
+          survey.steps.first.copyWith(photoIds: [photo.id]),
+          ...survey.steps.skip(1),
+        ],
+      );
+      app.surveys = [linked];
+      app.photos = [photo];
+      await local.saveSurvey(linked);
+      await local.savePhoto(photo);
+      await local.journal.save(
+        ConstructionJournalEntry(
+          id: 'delete-${photo.id}',
+          operation: ConstructionJournalOperation.deletePhoto,
+          state: boundary,
+          surveyId: survey.id,
+          photoId: photo.id,
+          step: 1,
+          uploadPath: file.path,
+          thumbnailPath: file.path,
+          sha256: photo.sha256,
+          fileSize: file.lengthSync(),
+          remotePossible: true,
+          createdAt: DateTime.utc(2026, 8, 30),
+        ),
+      );
+
+      await app.recoverLocalState(recoverCamera: false);
+
+      expect(app.photos.single.syncState, PhotoSyncState.deleted);
+      expect(app.survey(survey.id).steps.first.photoIds, isEmpty);
+      expect(file.existsSync(), isTrue);
+      expect(app.queue, hasLength(1));
+      expect(app.queue.single.operation, QueueOperation.deletePhoto);
+      expect(local.journal.find('delete-${photo.id}')!.state, boundary);
+    });
+  }
   test(
     'bootstrap recovery resets uploading and recreates upload queue',
     () async {

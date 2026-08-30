@@ -2,8 +2,10 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:convert';
 
+import 'package:crypto/crypto.dart';
 import 'package:ddr001_levantamientos/core/config/app_config.dart';
 import 'package:ddr001_levantamientos/core/network/api_client.dart';
+import 'package:ddr001_levantamientos/core/persistence/construction_operation_journal.dart';
 import 'package:ddr001_levantamientos/core/persistence/local_store.dart';
 import 'package:ddr001_levantamientos/core/persistence/uuid_hive_migration.dart';
 import 'package:ddr001_levantamientos/core/security/session_store.dart';
@@ -70,7 +72,7 @@ ConstructionPhoto evidence({
     surveyId: survey,
     localPath: path,
     thumbnailPath: path,
-    sha256: List.filled(64, 'a').join(),
+    sha256: sha256.convert(const [1, 2, 3]).toString(),
     capturedAt: epoch,
     stepNumber: step,
     correctionId: correction,
@@ -129,6 +131,7 @@ class FakeRemote implements ConstructionRemote {
   Object? profileFailure;
   Object? logoutFailure;
   Object? openFailure;
+  Object? deleteFailure;
   String verifyStatus = 'confirmed';
   ConstructionRole profileRole = ConstructionRole.contractor;
   int fieldLoginAttempts = 0;
@@ -245,7 +248,11 @@ class FakeRemote implements ConstructionRemote {
   }
 
   @override
-  Future<void> deletePhoto(String surveyId, String photoId) async {}
+  Future<void> deletePhoto(String surveyId, String photoId) async {
+    events.add('${surveyId.toLowerCase()}:delete:${photoId.toLowerCase()}');
+    if (deleteFailure case final failure?) throw failure;
+  }
+
   @override
   Future<ConstructionProfile> profile() async {
     if (profileFailure case final failure?) throw failure;
@@ -726,6 +733,74 @@ void main() {
       expect(app.surveys, hasLength(1));
       expect(app.queue.single.nextAttemptAt, isNotNull);
     });
+
+    test(
+      'same-size upload mutation is quarantined without sending bytes',
+      () async {
+        final photo = evidence(state: PhotoSyncState.queued);
+        File(photo.localPath).writeAsBytesSync(const [3, 2, 1]);
+        app.surveys = [baseSurvey(surveyA)];
+        app.photos = [photo];
+        app.queue = [job(QueueOperation.uploadPhoto, step: 1, photo: photo.id)];
+
+        await app.synchronize();
+
+        expect(app.photos.single.syncState, PhotoSyncState.permanentFailure);
+        expect(app.queue.single.requiresReview, isTrue);
+        expect(app.queue.single.lastErrorCode, 'LOCAL_CORRUPTION');
+        expect(
+          remote.events,
+          isNot(contains('${surveyA.toLowerCase()}:upload:1')),
+        );
+        expect(File(photo.localPath).readAsBytesSync(), const [3, 2, 1]);
+      },
+    );
+
+    test(
+      '404 on ambiguous delete completes tombstone and purges bytes',
+      () async {
+        final photo = evidence(state: PhotoSyncState.deleted);
+        app.surveys = [baseSurvey(surveyA)];
+        app.photos = [photo];
+        app.queue = [job(QueueOperation.deletePhoto, step: 1, photo: photo.id)];
+        await local.savePhoto(photo);
+        await local.saveQueue(app.queue.single);
+        await local.journal.save(
+          ConstructionJournalEntry(
+            id: 'delete-${photo.id.toLowerCase()}',
+            operation: ConstructionJournalOperation.deletePhoto,
+            state: ConstructionJournalState.queued,
+            surveyId: surveyA.toLowerCase(),
+            photoId: photo.id.toLowerCase(),
+            step: 1,
+            uploadPath: photo.localPath,
+            thumbnailPath: photo.thumbnailPath,
+            sha256: photo.sha256,
+            fileSize: File(photo.localPath).lengthSync(),
+            remotePossible: true,
+            createdAt: epoch,
+          ),
+        );
+        remote.deleteFailure = DioException(
+          requestOptions: RequestOptions(path: '/photo'),
+          response: Response(
+            requestOptions: RequestOptions(path: '/photo'),
+            statusCode: 404,
+          ),
+          type: DioExceptionType.badResponse,
+        );
+
+        await app.synchronize();
+
+        expect(app.queue, isEmpty);
+        expect(app.photos, isEmpty);
+        expect(File(photo.localPath).existsSync(), isFalse);
+        expect(
+          local.journal.find('delete-${photo.id.toLowerCase()}')!.state,
+          ConstructionJournalState.committed,
+        );
+      },
+    );
 
     for (final status in const [
       'missing_original',
