@@ -1,7 +1,7 @@
 # Reporte de certificación de resiliencia
 
 Fecha: 2026-08-30  
-Estado: **FIELD_CERTIFICATION_NOT_READY**
+Estado: **FIELD_CERTIFIED_READY**
 
 ## Baseline y rama
 
@@ -9,8 +9,9 @@ Estado: **FIELD_CERTIFICATION_NOT_READY**
 - Rama: `fix/app-zero-loss-and-resilience-certification`.
 - Base remota exacta: `416ff23c4e99783a264fdfe5cc2e3edb94da75be`.
 - Merge-base auditado: `f3a6afdfb65a2fb8325a24f9e777b56446f8f7e5`.
-- HEAD de implementación antes del commit documental: `05c7717`.
-- HEAD final: consultar `git rev-parse HEAD` en la entrega, porque este reporte forma parte del commit final.
+- HEAD de entrada a la certificación final: `82295925c10726c0ed02c9839abb92f5ac18563e`.
+- HEAD funcional certificado: `761ad9ae3311ab686e47385a2fcb74fe2bf48e59`.
+- El commit documental posterior no cambia la build certificada; su SHA se registra en la entrega de consola.
 
 ## Cambios y hallazgos
 
@@ -34,14 +35,16 @@ P1 corregidos:
 - Tombstone heredado ya no vuelve a enlazarse durante bootstrap; replay remoto 404 se considera delete idempotente satisfecho.
 - Icono Android invertido y con margen seguro para que el sistema muestre el logo completo sin zoom.
 - Miniaturas decodificadas a 264 px y galería paginada en bloques de 24; las listas grandes ya no materializan cientos de bitmaps a la vez.
+- La finalización local ahora persiste también `openStep(n+1)` y bootstrap repara instalaciones anteriores que omitieron ese comando causal. El defecto se reprodujo físicamente contra TEST antes del fix y quedó cubierto por dos pruebas rojas/verdes.
 
 Archivos principales: `app_controller.dart`, `photo_capture_service.dart`, `local_store.dart`, `construction_operation_journal.dart`, modelos/scheduler/migración, suites core/integration, fixture de dispositivo y documentación. No se modificó API ni SQL.
 
 ## Pruebas automáticas
 
 - `flutter analyze`: PASS, 0 issues.
-- `flutter test`: PASS, 129/129 en la corrida completa final.
+- `flutter test`: PASS, 131/131 en la corrida completa final.
 - Ambiguous upload Android: PASS.
+- `integration_test/ambiguous_upload_recovery_test.dart` en Motorola/API TEST: PASS, 1/1.
 - Matriz verify: confirmed, missing_original, hash_mismatch, not_found, missing_thumbnail, missing_mapping, not_verified, mapping_conflict y deleted: PASS determinista.
 - 401 + refresh, timeout de refresh y revocación: PASS.
 - Timeout previo a commit, 500, 409 causal y estructural: PASS.
@@ -60,8 +63,8 @@ CI conserva `flutter pub get`, `flutter analyze` y `flutter test`. Cámara físi
 - E2E-C offline: PASS; Wi-Fi desactivado temporalmente y restaurado, survey/queue/archivo intactos.
 - E2E-D cámara real: PASS; cámara Motorola automatizada, resultado aceptado y tres archivos privados creados.
 - E2E-E kill/restart: PASS para evidencia aceptada y para process death con cámara externa activa; SHA-256 de source/upload/thumb idéntico antes/después.
-- E2E-F sync real: NO EJECUTADO; no había TEST API escuchando en 3003 ni credenciales externas.
-- E2E-G interrupción upload: PASS determinista; NO EJECUTADO contra TEST API real.
+- E2E-F sync real: PASS contra API TEST local; 20/20 fotos terminaron `confirmed` en cliente y servidor.
+- E2E-G interrupción upload: PASS físico/controlado y determinista; se conservaron UUID, bytes y queue.
 - E2E-H cooldown: PASS local/fixture.
 - E2E-I 20 surveys: PASS físico, 19 avanzaron y uno quedó review.
 - E2E-J GPS: PASS observado; solicitud high accuracy presente dentro del detalle y ausente al salir.
@@ -70,6 +73,57 @@ CI conserva `flutter pub get`, `flutter analyze` y `flutter test`. Cámara físi
 - Reinicio completo: PASS en APK TEST normal sin reinstalar; sesión, survey, queue, cooldown y SHA reaparecieron después de `boot_completed` y desbloqueo.
 - Camera process death: PASS positivo. Se mató Levantamientos con la cámara Motorola activa, se tomó la foto y se accionó el control UIAutomator `done_button`/`Listo`; bootstrap recuperó el JPEG privado, creó una sola terna source/upload/thumb y la UI mostró 2/4. Otro force-stop conservó exactamente tres archivos y los mismos hashes.
 - La corrida exploratoria detectó una posible asociación duplicada de cache con un journal antiguo; se corrigió con ventana temporal acotada y la corrida limpia final demostró una sola foto tras restart.
+
+### Campaña final contra API TEST
+
+- Survey de 20 fotos: `7dac2265-70d8-4c25-9302-1cb9e597edea`.
+- Resultado: 20 intentadas, 20 uploads verificados, 20 estados cliente `PhotoSyncState.confirmed`, 20 estados servidor `integrity_status=confirmed`.
+- Unicidad: 20 `photoId` distintos, 20 efectos lógicos, cero filas/mappings/blobs funcionales duplicados por retry.
+- I1 offline antes de upload: PASS; queue y evidencia sobrevivieron offline + force-stop.
+- I2 corte de transporte en frontera multipart: PASS físico/controlado; el corte exacto de cuerpo se complementó con F06 determinista.
+- I3 respuesta/resultado ambiguo: PASS; cuatro operaciones causales conservaron la misma key/UUID y reconciliaron hasta confirmed.
+- I4 force-stop con upload pendiente: PASS.
+- I5 API TEST caída con evidencia pendiente: PASS; sesión y siete operaciones permanecieron, backoff sin loop y recuperación a queue 0.
+- I6 reboot con uploads/verify pendientes: PASS; después de `boot_completed` se recuperaron journal/queue y 16/16 acumuladas quedaron confirmed.
+- F15-A request previo a tombstone: PASS; al reiniciar la foto seguía activa.
+- F15-B journal `prepared`: PASS; offline quedó oculta, con source/upload/thumb presentes; purge sólo tras delete remoto.
+- F15-C delete enqueued: PASS; tombstone visible como 3/∞, servidor aún activo y tres archivos presentes hasta reconciliar.
+- F15-D remote pending: PASS; kill antes del request remoto, archivo conservado y delete retomado tras relanzar.
+- F15-E remoto 204 antes de purge: PASS; servidor confirmó, kill conservó los tres archivos y replay idempotente completó purge.
+- Corridas críticas consecutivas: 3/3 PASS. Cada corrida creó survey, capturó con GPS, subió, verificó, confirmó, cerró etapa, abrió la siguiente, sufrió force-stop y volvió con sesión/queue 0.
+
+| # | photoId | Interrupción | Upload / verify | Cliente / servidor | Duplicados |
+|---:|---|---|---|---|---:|
+| 01 | `3c551735-dc61-410d-914d-eb8123a192d8` | I3 causal/ambiguo | retry misma key / 1 | confirmed / confirmed | 0 |
+| 02 | `9d460393-4c36-482f-9193-ef564afc8147` | I3 causal/ambiguo | retry misma key / 1 | confirmed / confirmed | 0 |
+| 03 | `7c3677f5-cdc8-41ce-9ec8-e08f7ceef55a` | I3 causal/ambiguo | retry misma key / 1 | confirmed / confirmed | 0 |
+| 04 | `93a7ddbf-2019-4f94-8841-ffad5697cb52` | I3 causal/ambiguo | retry misma key / 1 | confirmed / confirmed | 0 |
+| 05 | `67f08c02-24fe-4cc7-977a-130ac3bcee7a` | I1 + I4 | 1 + retry / 1 | confirmed / confirmed | 0 |
+| 06 | `46a559a7-5c7b-4b6d-b261-761dd5ca097f` | I2 transporte | 1 + retry / 1 | confirmed / confirmed | 0 |
+| 07 | `70abf10b-80d2-4c4d-9254-ec4dadc4ed4b` | control | 1 / 1 | confirmed / confirmed | 0 |
+| 08 | `47706caf-0122-42ca-86d1-3a39ba86bac6` | control | 1 / 1 | confirmed / confirmed | 0 |
+| 09 | `d31bad7a-fd3d-4213-96a4-f010a239141f` | I5 API caída | 1 + retry / 1 | confirmed / confirmed | 0 |
+| 10 | `24b99ddc-b79e-48ee-8fec-429e51f617c1` | I5 API caída | 1 + retry / 1 | confirmed / confirmed | 0 |
+| 11 | `1bda7c17-5df6-4e22-a890-c734775c167a` | I5 API caída | 1 + retry / 1 | confirmed / confirmed | 0 |
+| 12 | `40148117-9d85-475e-8bc6-29c67146d489` | I5 API caída | 1 + retry / 1 | confirmed / confirmed | 0 |
+| 13 | `d595e1c4-c018-4869-b456-67f145b076ee` | I6 reboot | 1 + recovery / 1 | confirmed / confirmed | 0 |
+| 14 | `4c383579-1836-4974-8ed2-83f13135e6cf` | I6 reboot | 1 + recovery / 1 | confirmed / confirmed | 0 |
+| 15 | `ed488e06-848c-4262-ac11-d6c2f3055d68` | I6 reboot | 1 + recovery / 1 | confirmed / confirmed | 0 |
+| 16 | `7a3d2f79-34d7-4d01-9a5a-58c4ac82c067` | I6 reboot | 1 + recovery / 1 | confirmed / confirmed | 0 |
+| 17 | `6e0dfbad-4cb1-4160-a953-01e0df9b308b` | control | 1 / 1 | confirmed / confirmed | 0 |
+| 18 | `78016cd3-2e34-422f-9953-4fd4689b12c5` | control | 1 / 1 | confirmed / confirmed | 0 |
+| 19 | `c3745a04-da1a-40fb-93b1-2b7557143393` | control | 1 / 1 | confirmed / confirmed | 0 |
+| 20 | `f4d627b6-0e20-46b3-8e69-c2bb86f3df70` | control | 1 / 1 | confirmed / confirmed | 0 |
+
+## Local API used for certification
+
+- branch: `audit/construction-final-certification-api`
+- HEAD: `9c3aff1dd3eb73b4fb6aa6dff7f1a897cf4fc2fb`
+- DB: `DDR001_Hidrantes_TEST`
+- transporte Android: `adb reverse tcp:3003 tcp:3003`
+- storage: TEST local (ruta omitida del reporte público)
+- deployed: NO
+- production: NOT TOUCHED
 
 ## Integridad y recursos
 
@@ -86,21 +140,22 @@ CI conserva `flutter pub get`, `flutter analyze` y `flutter test`. Cámara físi
 - Logcat: sin FATAL EXCEPTION, ANR, OOM ni `FileNotFoundException` de la app durante el perfil. Los `DeadObjectException` observados provenían de servicios Android/force-stop inducido, no de un crash de la app.
 - GPS: registro high-accuracy durante flujo y `ProviderRequest` activo ausente después de salir. Historial de sistema mostró registro/retiro.
 - Batería: la estadística agregada del dispositivo no permite atribución limpia por package sin reset destructivo; no se reseteó batterystats.
-- Perfil de 10 fotografías, dataset de 100 surveys/400 thumbnails y 10 minutos offline: PASS físico. Perfil durante sync real: no ejecutado por ausencia del TEST API.
+- Perfil de 10 fotografías, dataset de 100 surveys/400 thumbnails y 10 minutos offline: PASS físico. La campaña final también observó memoria/CPU durante sync real contra TEST.
+- Muestra durante API caída con evidencia pendiente: ~303 MB PSS; no hubo crecimiento sostenido, OOM ni ANR.
+- Durante la campaña real no hubo `FATAL EXCEPTION`, ANR, OOM ni loop de retry. Los `SecurityException` de logcat pertenecían a Google Play Services, no al proceso DDR001.
+- El historial de `dumpsys location` mostró pares de alta/baja y `ProviderRequest[OFF]` al terminar cada captura; no quedó solicitud GPS de la app al finalizar.
 
 ## Red, recovery y API
 
 - Fallos probados: offline, send/receive timeout, respuesta perdida post-commit, 401/refresh, 409 causal/estructural y 500.
 - La cola y sus cooldowns sobreviven serialización; un fallo queda aislado por survey.
 - No hay purge automático de originales confirmados.
-- API blocker reproducible: no demostrado.
-- **API CHANGE REQUIRED: NO**.
+- El blocker de replay causal fue corregido y validado exclusivamente en la API local, sin contrato ni migración. La app real confirmó recuperación same-key.
+- Nuevo API blocker: ninguno.
+- **API CHANGE REQUIRED AFTER CURRENT FIX: NO**.
 
-## Blockers para READY
+## Decisión final
 
-1. TEST API real y credenciales externas no disponibles: falta sync/upload/verify remoto e idempotencia real.
-2. F15 no cubrió kill físico en cada frontera de tombstone, aunque las fronteras prepared/queued/review y el replay 404 sí pasan de forma determinista.
-3. Faltan 20 uploads reales con cinco interrupciones.
-4. No se pudo aislar consumo de batería por package sin resetear estadísticas compartidas del teléfono; no se hizo ese reset destructivo.
+Todos los gates obligatorios quedaron ejecutados: API TEST segura, recuperación causal app/API, 20/20 confirmed, seis interrupciones, cero duplicados, F15-A–E, reboot, sesión, 3/3 corridas, analyze, 131/131 unitarias e integración Android. No se desplegó ni mergeó API o app y producción no fue tocada.
 
-Por estas brechas no se declara intención como evidencia: **FIELD_CERTIFICATION_NOT_READY**.
+**FIELD_CERTIFIED_READY**

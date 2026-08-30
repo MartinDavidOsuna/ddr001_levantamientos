@@ -184,9 +184,9 @@ Cualquier pérdida de evidencia local, duplicado remoto no reconciliable, borrad
 
 ## 8. Cambios de API
 
-**No se detecta un cambio obligatorio de API para implementar esta certificación.** El contrato actual aporta UUID cliente, idempotencia, detail y `verify-batch`, suficientes para recuperación app-side.
+La campaña TEST demostró que el middleware persistía ciertos 404 causales y bloqueaba la misma `Idempotency-Key` aun después de satisfacerse el prerequisito. La corrección mínima quedó validada sólo localmente en `audit/construction-final-certification-api` @ `9c3aff1dd3eb73b4fb6aa6dff7f1a897cf4fc2fb`: no cambia contrato, schema ni migraciones y preserva replay de operaciones comprometidas. La app real reintentó con la misma key/UUID/payload y obtuvo 4/4 recovered, confirmed y cero duplicados.
 
-Único bloqueo condicional a verificar en TEST: si una petición con `Idempotency-Key` ya procesada por servidor pero cuya respuesta se perdió no puede reconciliarse de forma estable por `surveyId/photoId`, o si repetir exactamente la misma clave/payload produce un efecto duplicado, eso sería un defecto obligatorio de API. No se propone ni se implementa ningún cambio de API mientras esa condición no sea demostrada.
+**API CHANGE REQUIRED AFTER CURRENT FIX: NO.** No apareció un segundo blocker.
 
 ## 9. Ejecución de certificación 2026-08-30
 
@@ -199,7 +199,7 @@ Baseline efectivo de la rama de auditoría: `416ff23c4e99783a264fdfe5cc2e3edb94d
 | F03 | PASS | Process death con cámara activa; `Listo` devuelve JPEG, bootstrap crea una sola terna durable y force-stop conserva hashes |
 | F04 | PASS | Journal `prepared/fileDurable` y recuperación desde representación durable |
 | F05 | PASS | Bootstrap repara metadata/link/queue faltantes |
-| F06 | PASS determinista | Timeout de transporte conserva archivo y queue |
+| F06 | PASS | Corte físico/controlado de transporte conserva archivo/UUID/queue; multipart exacto cubierto además por gate determinista |
 | F07 | PASS | Gate Android `ambiguous_upload_recovery_test.dart` |
 | F08 | PASS determinista | `not_verified` conserva verify con cooldown |
 | F09 | PASS determinista | `missing_original` reencola mismo UUID/archivo |
@@ -208,9 +208,9 @@ Baseline efectivo de la rama de auditoría: `416ff23c4e99783a264fdfe5cc2e3edb94d
 | F12 | PASS | Refresh timeout conserva sesión |
 | F13 | PASS | Revocación definitiva limpia sólo sesión |
 | F14 | PASS | Android físico: 19/20 surveys avanzan con uno estructural |
-| F15 | PARCIAL | Fronteras prepared/queued/review y replay 404 pasan determinísticamente; falta kill físico en cada frontera |
-| F16 | PASS | Cooldown serializa/reabre; fixture física conserva queue tras force-stop |
+| F15 | PASS | Kill físico en request, prepared, queued, remote pending y remoto confirmado antes de purge; bytes sólo se purgan tras confirmación |
+| F16 | PASS | Reboot físico con upload/verify/cooldown pendientes; journal y queue retoman hasta confirmed |
 | F17 | PASS | Wi-Fi/datos desactivados; survey, queue y archivo permanecen; corrida sostenida de 10 minutos sin sync loop, OOM ni ANR |
 | F18 | PASS determinista | HTTP 500 aplica backoff sin pérdida |
 
-Estado del plan: **FIELD_CERTIFICATION_NOT_READY**. F03 y el reinicio completo del teléfono ya pasaron. El dataset físico de 100 surveys/400 thumbnails también pasó después de acotar decode y paginar la galería (982 MB PSS antes, 386 MB con 24 visibles después, sin OOM/ANR). F15 aún requiere todas las fronteras físicas; también faltan TEST API real y 20 uploads interrumpidos.
+Estado del plan: **FIELD_CERTIFIED_READY**. Se utilizó la API TEST local en `audit/construction-final-certification-api` @ `9c3aff1dd3eb73b4fb6aa6dff7f1a897cf4fc2fb`, exclusivamente con `DDR001_Hidrantes_TEST`, sin despliegue ni acceso productivo. La campaña cerró 20/20 fotos confirmed con seis interrupciones, cero duplicados, F15 completo y tres corridas críticas consecutivas. La regresión final obtuvo analyze sin issues, 131/131 pruebas y el gate Android de ambiguous upload PASS.
