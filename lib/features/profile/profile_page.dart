@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/services/app_controller.dart';
+import '../../core/widgets/branded_app_bar_title.dart';
 import '../../domain/construction/construction_models.dart';
 import '../../shared/widgets/app_brand_logo.dart';
 
@@ -10,7 +11,7 @@ class ProfilePage extends StatelessWidget {
   Widget build(BuildContext context) {
     final app = context.watch<AppController>(), profile = app.profile;
     return Scaffold(
-      appBar: AppBar(title: const Text('Perfil')),
+      appBar: AppBar(title: const BrandedAppBarTitle('Perfil')),
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [

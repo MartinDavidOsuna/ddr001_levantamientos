@@ -3,6 +3,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 import '../../core/services/app_controller.dart';
+import '../../core/widgets/branded_app_bar_title.dart';
 import '../../domain/construction/construction_models.dart';
 import '../surveys/survey_detail_page.dart';
 import 'map_status_legend.dart';
@@ -23,7 +24,7 @@ class ConstructionMapPage extends StatelessWidget {
         points = app.surveys.where((s) => s.canonicalLocation != null).toList();
     return Scaffold(
       appBar: AppBar(
-        title: Text(
+        title: BrandedAppBarTitle(
           app.profile?.role.isReviewer == true
               ? 'Mapa de bases'
               : 'Mis bases en mapa',

@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart' hide StepState;
 import 'package:provider/provider.dart';
 import '../../core/services/app_controller.dart';
+import '../../core/widgets/branded_app_bar_title.dart';
 import '../../domain/construction/construction_models.dart';
 import 'surveys_page.dart';
 import '../../shared/widgets/optional_comment_field.dart';
@@ -68,7 +69,7 @@ class _SurveyDetailPageState extends State<SurveyDetailPage>
     final app = context.watch<AppController>();
     final survey = app.survey(widget.surveyId);
     return Scaffold(
-      appBar: AppBar(title: Text(survey.displayIdentifier)),
+      appBar: AppBar(title: BrandedAppBarTitle(survey.displayIdentifier)),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [

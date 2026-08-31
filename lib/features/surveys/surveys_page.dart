@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/services/app_controller.dart';
+import '../../core/widgets/branded_app_bar_title.dart';
 import '../../domain/construction/construction_models.dart';
 import 'survey_detail_page.dart';
 
@@ -48,7 +49,7 @@ class _SurveysPageState extends State<SurveysPage> {
         }).toList()..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
     return Scaffold(
       appBar: AppBar(
-        title: Text(
+        title: BrandedAppBarTitle(
           (app.profile?.role ?? ConstructionRole.contractor).surveyListTitle,
         ),
       ),
