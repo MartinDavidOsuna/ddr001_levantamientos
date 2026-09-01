@@ -99,6 +99,7 @@ class DeviceRemote implements ConstructionRemote {
     required String name,
     required String email,
     required String phone,
+    required String crew,
   }) => throw UnsupportedError('not used');
   @override
   Future<void> logout(FieldSession session) async {}
