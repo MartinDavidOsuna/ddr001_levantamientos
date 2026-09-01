@@ -36,6 +36,28 @@ String surveyFilterLabel(SurveyListFilter filter) => switch (filter) {
 class _SurveysPageState extends State<SurveysPage> {
   String search = '';
   SurveyListFilter? filter;
+  bool refreshing = false;
+
+  Future<void> _refresh(AppController app, {bool showFeedback = false}) async {
+    if (refreshing) return;
+    setState(() => refreshing = true);
+    try {
+      await app.refreshServer();
+      if (!mounted || !showFeedback) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            app.apiReachable
+                ? 'Listado actualizado.'
+                : 'Sin conexión con el servidor. Se conservan los datos locales.',
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => refreshing = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final app = context.watch<AppController>(),
@@ -52,6 +74,21 @@ class _SurveysPageState extends State<SurveysPage> {
         title: BrandedAppBarTitle(
           (app.profile?.role ?? ConstructionRole.contractor).surveyListTitle,
         ),
+        actions: [
+          TextButton.icon(
+            key: const Key('survey_refresh'),
+            onPressed: refreshing
+                ? null
+                : () => _refresh(app, showFeedback: true),
+            icon: refreshing
+                ? const SizedBox.square(
+                    dimension: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.refresh),
+            label: const Text('Actualizar'),
+          ),
+        ],
       ),
       body: Column(
         children: [
@@ -93,8 +130,9 @@ class _SurveysPageState extends State<SurveysPage> {
           const SizedBox(height: 8),
           Expanded(
             child: RefreshIndicator(
-              onRefresh: app.refreshServer,
+              onRefresh: () => _refresh(app),
               child: ListView.builder(
+                physics: const AlwaysScrollableScrollPhysics(),
                 itemCount: items.length,
                 itemBuilder: (_, i) {
                   final s = items[i];

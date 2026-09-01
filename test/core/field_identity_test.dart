@@ -14,15 +14,17 @@ DioException responseFailure(int status) => DioException(
 );
 
 void main() {
-  test('normalizes Field name, email and phone without losing Unicode', () {
+  test('normalizes Field identity including crew without losing Unicode', () {
     const identity = FieldIdentity(
       name: '  María   José  Ñúñez  ',
       email: '  USER@Example.COM ',
       phone: '6621234567',
+      crew: '  cuadrilla   norte  ',
     );
     expect(identity.normalizedName, 'María José Ñúñez');
     expect(identity.normalizedEmail, 'user@example.com');
     expect(identity.normalizedPhone, '6621234567');
+    expect(identity.normalizedCrew, 'CUADRILLA NORTE');
     expect(identity.validate(), isNull);
   });
 
@@ -32,6 +34,7 @@ void main() {
         name: '   ',
         email: 'user@example.com',
         phone: '6621234567',
+        crew: 'CUADRILLA A',
       ).validate(),
       'Ingresa un nombre válido.',
     );
@@ -43,6 +46,7 @@ void main() {
         name: 'Usuario Test',
         email: 'correo-invalido',
         phone: '6621234567',
+        crew: 'CUADRILLA A',
       ).validate(),
       'Ingresa un correo electrónico válido.',
     );
@@ -55,13 +59,26 @@ void main() {
           name: 'Usuario Test',
           email: 'user@example.com',
           phone: phone,
+          crew: 'CUADRILLA A',
         ).validate(),
         'El teléfono debe contener exactamente 10 dígitos.',
       );
     }
   });
 
-  test('legacy persisted Admin and Field sessions keep technical routing', () {
+  test('requires a non-empty crew', () {
+    expect(
+      const FieldIdentity(
+        name: 'Usuario Test',
+        email: 'user@example.com',
+        phone: '6621234567',
+        crew: '   ',
+      ).validate(),
+      'Ingresa una cuadrilla válida.',
+    );
+  });
+
+  test('persisted sessions preserve crew and legacy JSON remains readable', () {
     const field = FieldSession(
       sessionId: '00000000-0000-4000-8000-000000000001',
       userId: '00000000-0000-4000-8000-000000000002',
@@ -71,9 +88,15 @@ void main() {
       name: 'Field User',
       email: 'field@example.com',
       phone: '6621234567',
+      crew: 'CUADRILLA A',
     );
-    final legacyField = field.toJson()..['crew'] = 'LEGACY';
-    expect(FieldSession.fromJson(legacyField).kind, SessionKind.field);
+    expect(FieldSession.fromJson(field.toJson()).crew, 'CUADRILLA A');
+
+    final legacyFieldJson = Map<String, dynamic>.from(field.toJson())
+      ..remove('crew');
+    final legacyField = FieldSession.fromJson(legacyFieldJson);
+    expect(legacyField.kind, SessionKind.field);
+    expect(legacyField.crew, isEmpty);
     expect(refreshEndpoint(SessionKind.field), '/field-sessions/refresh');
 
     final admin = FieldSession.fromJson({
@@ -96,11 +119,12 @@ void main() {
     );
   });
 
-  test('Field login payload identifies Levantamientos and installation', () {
+  test('Field login payload identifies app, installation and crew', () {
     final payload = fieldSessionStartPayload(
       name: ' Usuario  Test ',
       email: ' USER@EXAMPLE.COM ',
       phone: '6621234567',
+      crew: ' cuadrilla   norte ',
       installationId: 'installation-a',
       platform: 'android',
       manufacturer: 'Motorola',
@@ -112,6 +136,7 @@ void main() {
     expect(fieldClientApp, 'ddr001_levantamientos');
     expect(payload['name'], 'Usuario Test');
     expect(payload['email'], 'user@example.com');
+    expect(payload['crew'], 'CUADRILLA NORTE');
     expect(
       (payload['device'] as Map<String, dynamic>)['installationId'],
       'installation-a',

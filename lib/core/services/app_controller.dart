@@ -403,19 +403,26 @@ class AppController extends ChangeNotifier {
     required String name,
     required String email,
     required String phone,
+    required String crew,
   }) async {
     busy = true;
     message = null;
     pendingTakeoverToken = null;
     notifyListeners();
     try {
-      final identity = FieldIdentity(name: name, email: email, phone: phone);
+      final identity = FieldIdentity(
+        name: name,
+        email: email,
+        phone: phone,
+        crew: crew,
+      );
       final validation = identity.validate();
       if (validation != null) return validation;
       session = await remote.fieldLogin(
         name: identity.normalizedName,
         email: identity.normalizedEmail,
         phone: identity.normalizedPhone,
+        crew: identity.normalizedCrew,
       );
       try {
         profile = await remote.profile();
