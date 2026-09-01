@@ -18,6 +18,7 @@ class _LoginPageState extends State<LoginPage> {
   final name = TextEditingController();
   final email = TextEditingController();
   final phone = TextEditingController();
+  final crew = TextEditingController();
   String? error;
 
   @override
@@ -25,6 +26,7 @@ class _LoginPageState extends State<LoginPage> {
     name.dispose();
     email.dispose();
     phone.dispose();
+    crew.dispose();
     super.dispose();
   }
 
@@ -131,7 +133,7 @@ class _LoginPageState extends State<LoginPage> {
                                   style: inputStyle,
                                   cursorColor: Colors.white,
                                   keyboardType: TextInputType.phone,
-                                  textInputAction: TextInputAction.done,
+                                  textInputAction: TextInputAction.next,
                                   maxLength: 10,
                                   inputFormatters: [
                                     FilteringTextInputFormatter.digitsOnly,
@@ -142,6 +144,20 @@ class _LoginPageState extends State<LoginPage> {
                                   decoration: _decoration(
                                     'Teléfono',
                                     Icons.phone_outlined,
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                TextField(
+                                  key: const Key('login_crew'),
+                                  controller: crew,
+                                  style: inputStyle,
+                                  cursorColor: Colors.white,
+                                  textCapitalization: TextCapitalization.characters,
+                                  textInputAction: TextInputAction.done,
+                                  maxLength: 180,
+                                  decoration: _decoration(
+                                    'Cuadrilla',
+                                    Icons.groups_outlined,
                                   ),
                                 ),
                                 if (error != null)
@@ -191,6 +207,7 @@ class _LoginPageState extends State<LoginPage> {
                                                 name: name.text,
                                                 email: email.text,
                                                 phone: phone.text,
+                                                crew: crew.text,
                                               );
                                           if (mounted) {
                                             setState(() => error = result);
