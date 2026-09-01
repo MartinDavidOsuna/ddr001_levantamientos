@@ -4,14 +4,16 @@
 
 El smoke recorre contractor crear/foto/GPS/offline/sync y reviewer rechazar/corregir/aceptar/entregar; pendientes, UUID duplicados o evidencia falsamente confirmada bloquean promoción.
 
-El acceso móvil muestra, en este orden, Nombre, Correo y Teléfono. No utiliza
-contraseña, cuadrilla ni selector de dominio/rol. Field Auth vincula la identidad al
-dispositivo y Construction Profile decide contractor o resident. La sesión se restaura
-sin repetir el formulario y logout conserva la política de pendientes locales.
+El acceso móvil muestra, en este orden, Nombre, Correo, Teléfono y Cuadrilla. No
+utiliza contraseña ni selector de dominio/rol. Field Auth vincula la identidad y la
+cuadrilla de trabajo al dispositivo; Construction Profile decide contractor o resident.
+La sesión se restaura sin repetir el formulario y logout conserva la política de
+pendientes locales. La cuadrilla se normaliza como exige la API y se muestra también
+en Perfil.
 
 Contractor usa Inicio, Levantamientos, Mapa y Perfil. Crea UUID, `displayIdentifier` y una cuenta opcional offline; la app bloquea duplicados propios normalizados conocidos. Pasos 1–5 requieren 1–4 fotos. Paso 6 requiere Norte, Este, Sur y Oeste con clasificación persistente; después admite fotos adicionales ilimitadas que no sustituyen una cardinal. Comentarios son opcionales. Finalizar localmente cierra evidencia, muestra confirmación de guardado local, desbloquea el siguiente paso y no depende de Internet. Paso 6 produce `executedLocal` hasta confirmación remota.
 
-Mis levantamientos mezcla local/servidor por UUID, busca identificador/cuenta y filtra estados. Rechazo muestra motivo y usa Correction Round sin modificar evidencia original.
+Mis levantamientos mezcla local/servidor por UUID, busca identificador/cuenta y filtra estados. El listado dispone de una acción visible **Actualizar** además del pull-to-refresh; ambas ejecutan reconciliación no destructiva y conservan surveys, evidencia y operaciones locales pendientes si la red o API no están disponibles. Rechazo muestra motivo y usa Correction Round sin modificar evidencia original.
 
 Resident/Admin/Superadmin comparten Inicio, Revisión de base, listados y mapa
 global. Pueden aceptar/rechazar/entregar, cambiar identificador/cuenta y corregir
@@ -19,7 +21,8 @@ canonical mediante API, pero no evidencia. La revisión identifica explícitamen
 base, cuenta, contratista, estado, etapa y fechas. Aceptar cambia `executed` a
 `accepted`, mostrado como **Entregable**; rechazar exige motivo multiline sin sólo
 espacios. Todas las mutaciones muestran progreso, éxito o error y actualizan el
-estado en memoria sin reiniciar. Registrar instalación permanece “Próximamente”.
+estado en memoria sin reiniciar. Los listados compartidos de levantamientos también
+ofrecen la acción **Actualizar**. Registrar instalación permanece “Próximamente”.
 
 Todos los estados se muestran mediante un mapper único: Creado, En proceso,
 Ejecutado, Rechazado, Entregable y Entregado. Los valores wire no cambian.
