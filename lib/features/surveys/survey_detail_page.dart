@@ -1,7 +1,9 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart' hide StepState;
 import 'package:provider/provider.dart';
 import '../../core/services/app_controller.dart';
+import '../../core/identity/uuid_identity.dart';
 import '../../core/widgets/branded_app_bar_title.dart';
 import '../../domain/construction/construction_models.dart';
 import 'surveys_page.dart';
@@ -19,6 +21,8 @@ class _SurveyDetailPageState extends State<SurveyDetailPage>
     with WidgetsBindingObserver {
   AppController? _app;
   bool _locationActive = false;
+  bool _detailRequested = false;
+  String? _detailError;
 
   @override
   void initState() {
@@ -31,7 +35,27 @@ class _SurveyDetailPageState extends State<SurveyDetailPage>
     super.didChangeDependencies();
     if (_app != null) return;
     _app = context.read<AppController>();
-    _activateLocation();
+    if (_app!.canCurrentSessionViewSurveyId(widget.surveyId)) {
+      if (_app!.profile?.role.canMutateEvidence ?? false) _activateLocation();
+      _loadDetail();
+    }
+  }
+
+  Future<void> _loadDetail() async {
+    if (_detailRequested || _app?.online != true) return;
+    final survey = _app!.survey(widget.surveyId);
+    if (survey.syncState != SyncState.synchronized &&
+        _app!.profile?.role.isReviewer != true) {
+      return;
+    }
+    _detailRequested = true;
+    try {
+      await _app!.loadSurveyDetail(widget.surveyId);
+    } catch (_) {
+      if (mounted) {
+        setState(() => _detailError = 'No fue posible actualizar el detalle.');
+      }
+    }
   }
 
   void _activateLocation() {
@@ -67,12 +91,30 @@ class _SurveyDetailPageState extends State<SurveyDetailPage>
   @override
   Widget build(BuildContext context) {
     final app = context.watch<AppController>();
+    if (!app.canCurrentSessionViewSurveyId(widget.surveyId)) {
+      return const _SurveyAccessDenied();
+    }
     final survey = app.survey(widget.surveyId);
     return Scaffold(
       appBar: AppBar(title: BrandedAppBarTitle(survey.displayIdentifier)),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          if (_detailError != null)
+            ListTile(
+              leading: const Icon(Icons.cloud_off),
+              title: Text(_detailError!),
+              trailing: TextButton(
+                onPressed: () {
+                  setState(() {
+                    _detailRequested = false;
+                    _detailError = null;
+                  });
+                  _loadDetail();
+                },
+                child: const Text('Reintentar'),
+              ),
+            ),
           Card(
             child: ListTile(
               title: Text(
@@ -121,6 +163,21 @@ class _SurveyDetailPageState extends State<SurveyDetailPage>
   }
 }
 
+class _SurveyAccessDenied extends StatelessWidget {
+  const _SurveyAccessDenied();
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: const BrandedAppBarTitle('Acceso denegado')),
+    body: const Center(
+      child: Padding(
+        padding: EdgeInsets.all(24),
+        child: Text('Este levantamiento no pertenece a la sesión actual.'),
+      ),
+    ),
+  );
+}
+
 enum StepSavedAction { continueSurvey, home }
 
 Future<StepSavedAction?> showStepSavedDialog(
@@ -152,14 +209,29 @@ Future<StepSavedAction?> showStepSavedDialog(
   ),
 );
 
-class _CorrectionCard extends StatelessWidget {
+class _CorrectionCard extends StatefulWidget {
   const _CorrectionCard({required this.surveyId, required this.correction});
   final String surveyId;
   final CorrectionRound correction;
+
+  @override
+  State<_CorrectionCard> createState() => _CorrectionCardState();
+}
+
+class _CorrectionCardState extends State<_CorrectionCard> {
+  bool _showRemoteEvidence = false;
+
   @override
   Widget build(BuildContext context) {
     final app = context.watch<AppController>();
+    final surveyId = widget.surveyId;
+    final correction = widget.correction;
     final evidence = app.photosForCorrection(correction.id);
+    final localIds = evidence.map((photo) => photo.id).toSet();
+    final remoteEvidence = app
+        .remotePhotosForCorrection(surveyId, correction.round)
+        .where((photo) => !localIds.any((id) => uuidEquals(id, photo.id)))
+        .toList(growable: false);
     final open = correction.state == StepState.open;
     final editable =
         open &&
@@ -175,8 +247,34 @@ class _CorrectionCard extends StatelessWidget {
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
             Text(
-              '${evidence.length} fotos · ${open ? 'Abierta' : 'Finalizada localmente'}',
+              '${app.photoCountForCorrection(surveyId, correction)} fotos · ${open ? 'Abierta' : 'Finalizada'}',
             ),
+            if (remoteEvidence.isNotEmpty)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  key: Key('remote_correction_photos_${correction.id}'),
+                  onPressed: () => setState(
+                    () => _showRemoteEvidence = !_showRemoteEvidence,
+                  ),
+                  icon: Icon(
+                    _showRemoteEvidence ? Icons.expand_less : Icons.expand_more,
+                  ),
+                  label: Text(
+                    _showRemoteEvidence
+                        ? 'Ocultar fotos remotas'
+                        : 'Ver fotos remotas (${remoteEvidence.length})',
+                  ),
+                ),
+              ),
+            if (_showRemoteEvidence && remoteEvidence.isNotEmpty)
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: remoteEvidence
+                    .map((photo) => _RemotePhotoTile(photo: photo))
+                    .toList(growable: false),
+              ),
             if (editable) ...[
               OptionalCommentField(
                 initialValue: correction.comment,
@@ -218,6 +316,22 @@ class _StepCard extends StatefulWidget {
 class _StepCardState extends State<_StepCard> {
   static const _photoPageSize = 24;
   var _visiblePhotoCount = _photoPageSize;
+  late bool _expanded;
+
+  @override
+  void initState() {
+    super.initState();
+    _expanded = widget.step.state == StepState.open;
+  }
+
+  @override
+  void didUpdateWidget(covariant _StepCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.step.state != widget.step.state &&
+        widget.step.state == StepState.open) {
+      _expanded = true;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -225,6 +339,12 @@ class _StepCardState extends State<_StepCard> {
     final surveyId = widget.surveyId;
     final step = widget.step;
     final evidence = app.photosForStep(surveyId, step.number);
+    final localIds = evidence.map((photo) => photo.id).toSet();
+    final remoteEvidence = app
+        .remotePhotosForStep(surveyId, step.number)
+        .where((photo) => !localIds.any((id) => uuidEquals(id, photo.id)))
+        .toList(growable: false);
+    final evidenceCount = app.photoCountForStep(surveyId, step.number);
     final visibleEvidence = evidence.take(_visiblePhotoCount);
     final open = step.state == StepState.open;
     final editable =
@@ -240,6 +360,9 @@ class _StepCardState extends State<_StepCard> {
       child: ExpansionTile(
         key: Key('step_${step.number}'),
         initiallyExpanded: open,
+        onExpansionChanged: (expanded) => setState(() {
+          _expanded = expanded;
+        }),
         enabled: step.state != StepState.locked,
         leading: CircleAvatar(child: Text('${step.number}')),
         title: Text(
@@ -247,7 +370,7 @@ class _StepCardState extends State<_StepCard> {
           style: const TextStyle(fontWeight: FontWeight.bold),
         ),
         subtitle: Text(
-          '${evidence.length}/${step.maximumPhotos ?? '∞'} fotos · ${stepStateLabel(step.state)}',
+          '$evidenceCount/${step.maximumPhotos ?? '∞'} fotos · ${stepStateLabel(step.state)}',
         ),
         childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
         children: step.state == StepState.locked
@@ -259,6 +382,19 @@ class _StepCardState extends State<_StepCard> {
                   onChanged: (value) =>
                       app.updateComment(surveyId, step.number, value),
                 ),
+                if (_expanded && remoteEvidence.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: remoteEvidence
+                          .map((photo) => _RemotePhotoTile(photo: photo))
+                          .toList(growable: false),
+                    ),
+                  ),
+                ],
                 Align(
                   alignment: Alignment.centerLeft,
                   child: Wrap(
@@ -565,6 +701,144 @@ class _StepCardState extends State<_StepCard> {
       ),
     );
   }
+}
+
+class _RemotePhotoTile extends StatefulWidget {
+  const _RemotePhotoTile({required this.photo});
+  final RemoteConstructionPhoto photo;
+
+  @override
+  State<_RemotePhotoTile> createState() => _RemotePhotoTileState();
+}
+
+class _RemotePhotoTileState extends State<_RemotePhotoTile> {
+  Future<Uint8List>? _thumb;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _thumb ??= context.read<AppController>().remotePhotoBytes(
+      widget.photo,
+      original: false,
+    );
+  }
+
+  void _retry() => setState(() {
+    _thumb = context.read<AppController>().remotePhotoBytes(
+      widget.photo,
+      original: false,
+    );
+  });
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    key: Key('remote_photo_${widget.photo.id}'),
+    onTap: () => showDialog<void>(
+      context: context,
+      builder: (_) => _RemoteOriginalDialog(photo: widget.photo),
+    ),
+    child: Stack(
+      children: [
+        SizedBox.square(
+          dimension: 88,
+          child: FutureBuilder<Uint8List>(
+            future: _thumb,
+            builder: (context, snapshot) {
+              if (snapshot.hasData) {
+                return ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.memory(snapshot.data!, fit: BoxFit.cover),
+                );
+              }
+              if (snapshot.hasError) {
+                return OutlinedButton(
+                  key: Key('remote_photo_retry_${widget.photo.id}'),
+                  onPressed: _retry,
+                  child: const Text('Imagen no disponible\nReintentar'),
+                );
+              }
+              return const Center(child: CircularProgressIndicator());
+            },
+          ),
+        ),
+        if (widget.photo.purpose != null)
+          Positioned(
+            left: 3,
+            top: 3,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: Colors.black87,
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                child: Text(
+                  photoPurposeLabel(widget.photo.purpose!),
+                  style: const TextStyle(color: Colors.white, fontSize: 10),
+                ),
+              ),
+            ),
+          ),
+      ],
+    ),
+  );
+}
+
+class _RemoteOriginalDialog extends StatefulWidget {
+  const _RemoteOriginalDialog({required this.photo});
+  final RemoteConstructionPhoto photo;
+
+  @override
+  State<_RemoteOriginalDialog> createState() => _RemoteOriginalDialogState();
+}
+
+class _RemoteOriginalDialogState extends State<_RemoteOriginalDialog> {
+  Future<Uint8List>? _original;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _original ??= context.read<AppController>().remotePhotoBytes(
+      widget.photo,
+      original: true,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => Dialog(
+    child: FutureBuilder<Uint8List>(
+      future: _original,
+      builder: (context, snapshot) {
+        if (snapshot.hasData) {
+          return InteractiveViewer(child: Image.memory(snapshot.data!));
+        }
+        if (snapshot.hasError) {
+          return Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('Imagen no disponible temporalmente'),
+                TextButton(
+                  onPressed: () => setState(() {
+                    _original = context.read<AppController>().remotePhotoBytes(
+                      widget.photo,
+                      original: true,
+                    );
+                  }),
+                  child: const Text('Reintentar'),
+                ),
+              ],
+            ),
+          );
+        }
+        return const Padding(
+          padding: EdgeInsets.all(48),
+          child: CircularProgressIndicator(),
+        );
+      },
+    ),
+  );
 }
 
 String stepStateLabel(StepState state) => switch (state) {

@@ -392,13 +392,15 @@ class BaseSurvey {
     required this.syncState,
     required this.currentStep,
     required this.steps,
+    this.contractorUserId,
     this.accountNumber,
     this.canonicalLocation,
     this.rejectionReason,
     this.corrections = const [],
+    this.remotePhotos = const [],
   });
   final String id, displayIdentifier, contractorName;
-  final String? accountNumber, rejectionReason;
+  final String? contractorUserId, accountNumber, rejectionReason;
   final DateTime createdAt, updatedAt;
   final SurveyStatus status;
   final LocalSurveyState localState;
@@ -406,16 +408,19 @@ class BaseSurvey {
   final int currentStep;
   final List<SurveyStep> steps;
   final List<CorrectionRound> corrections;
+  final List<RemoteConstructionPhoto> remotePhotos;
   final GeoPoint? canonicalLocation;
   BaseSurvey copyWith({
     String? displayIdentifier,
     String? contractorName,
+    String? contractorUserId,
     SurveyStatus? status,
     LocalSurveyState? localState,
     SyncState? syncState,
     int? currentStep,
     List<SurveyStep>? steps,
     List<CorrectionRound>? corrections,
+    List<RemoteConstructionPhoto>? remotePhotos,
     GeoPoint? canonicalLocation,
     String? rejectionReason,
     DateTime? updatedAt,
@@ -428,6 +433,7 @@ class BaseSurvey {
         ? null
         : accountNumber ?? this.accountNumber,
     contractorName: contractorName ?? this.contractorName,
+    contractorUserId: contractorUserId ?? this.contractorUserId,
     createdAt: createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     status: status ?? this.status,
@@ -436,6 +442,7 @@ class BaseSurvey {
     currentStep: currentStep ?? this.currentStep,
     steps: steps ?? this.steps,
     corrections: corrections ?? this.corrections,
+    remotePhotos: remotePhotos ?? this.remotePhotos,
     canonicalLocation: canonicalLocation ?? this.canonicalLocation,
     rejectionReason: rejectionReason ?? this.rejectionReason,
   );
@@ -444,6 +451,7 @@ class BaseSurvey {
     'displayIdentifier': displayIdentifier,
     'accountNumber': accountNumber,
     'contractorName': contractorName,
+    'contractorUserId': contractorUserId,
     'createdAt': createdAt.toIso8601String(),
     'updatedAt': updatedAt.toIso8601String(),
     'status': status.name,
@@ -452,6 +460,7 @@ class BaseSurvey {
     'currentStep': currentStep,
     'steps': steps.map((e) => e.toJson()).toList(),
     'corrections': corrections.map((e) => e.toJson()).toList(),
+    'remotePhotos': remotePhotos.map((e) => e.toJson()).toList(),
     'canonicalLocation': canonicalLocation?.toJson(),
     'rejectionReason': rejectionReason,
   };
@@ -460,6 +469,7 @@ class BaseSurvey {
     displayIdentifier: j['displayIdentifier'] as String,
     accountNumber: j['accountNumber'] as String?,
     contractorName: j['contractorName'] as String? ?? '',
+    contractorUserId: canonicalUuidOrNull(j['contractorUserId']?.toString()),
     createdAt: DateTime.parse(j['createdAt'] as String),
     updatedAt: DateTime.parse(j['updatedAt'] as String),
     status: SurveyStatus.values.byName(j['status'] as String),
@@ -474,6 +484,13 @@ class BaseSurvey {
           (e) => CorrectionRound.fromJson(Map<String, dynamic>.from(e as Map)),
         )
         .toList(),
+    remotePhotos: (j['remotePhotos'] as List? ?? const [])
+        .map(
+          (e) => RemoteConstructionPhoto.fromJson(
+            Map<String, dynamic>.from(e as Map),
+          ),
+        )
+        .toList(),
     canonicalLocation: j['canonicalLocation'] == null
         ? null
         : GeoPoint.fromJson(
@@ -481,6 +498,103 @@ class BaseSurvey {
           ),
     rejectionReason: j['rejectionReason'] as String?,
   );
+}
+
+/// Server-owned, read-only evidence metadata. It is deliberately separate
+/// from [ConstructionPhoto], so viewing it can never create upload work or a
+/// capture journal entry.
+class RemoteConstructionPhoto {
+  const RemoteConstructionPhoto({
+    required this.id,
+    required this.surveyId,
+    required this.context,
+    required this.capturedAt,
+    required this.uploadStatus,
+    required this.integrityStatus,
+    this.stepNumber,
+    this.correctionRound,
+    this.purpose,
+    this.latitude,
+    this.longitude,
+    this.horizontalAccuracy,
+    this.altitude,
+  });
+
+  final String id, surveyId, context, uploadStatus, integrityStatus;
+  final int? stepNumber, correctionRound;
+  final PhotoPurpose? purpose;
+  final DateTime capturedAt;
+  final double? latitude, longitude, horizontalAccuracy, altitude;
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'surveyId': surveyId,
+    'context': context,
+    'stepNumber': stepNumber,
+    'correctionRound': correctionRound,
+    'purpose': purpose?.name,
+    'capturedAt': capturedAt.toIso8601String(),
+    'latitude': latitude,
+    'longitude': longitude,
+    'horizontalAccuracy': horizontalAccuracy,
+    'altitude': altitude,
+    'uploadStatus': uploadStatus,
+    'integrityStatus': integrityStatus,
+  };
+
+  factory RemoteConstructionPhoto.fromJson(Map<String, dynamic> j) =>
+      RemoteConstructionPhoto(
+        id: canonicalUuid('${j['id']}'),
+        surveyId: canonicalUuid('${j['surveyId']}'),
+        context: '${j['context']}',
+        stepNumber: (j['stepNumber'] as num?)?.toInt(),
+        correctionRound: (j['correctionRound'] as num?)?.toInt(),
+        purpose: _photoPurpose(j['purpose']),
+        capturedAt:
+            DateTime.tryParse('${j['capturedAt']}') ??
+            DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
+        latitude: (j['latitude'] as num?)?.toDouble(),
+        longitude: (j['longitude'] as num?)?.toDouble(),
+        horizontalAccuracy: (j['horizontalAccuracy'] as num?)?.toDouble(),
+        altitude: (j['altitude'] as num?)?.toDouble(),
+        uploadStatus: '${j['uploadStatus']}',
+        integrityStatus: '${j['integrityStatus']}',
+      );
+
+  factory RemoteConstructionPhoto.fromWire(
+    String surveyId,
+    Map<String, dynamic> j,
+  ) => RemoteConstructionPhoto(
+    id: canonicalUuid('${j['photo_id'] ?? j['photoId']}'),
+    surveyId: canonicalUuid(surveyId),
+    context: '${j['photo_context'] ?? j['photoContext'] ?? 'step'}',
+    stepNumber: (j['step_number'] ?? j['stepNumber'] as num?) is num
+        ? (j['step_number'] ?? j['stepNumber'] as num).toInt()
+        : null,
+    correctionRound:
+        (j['correction_round'] ?? j['correctionRound'] as num?) is num
+        ? (j['correction_round'] ?? j['correctionRound'] as num).toInt()
+        : null,
+    purpose: _photoPurpose(j['photo_purpose'] ?? j['photoPurpose']),
+    capturedAt:
+        DateTime.tryParse('${j['captured_at'] ?? j['capturedAt']}') ??
+        DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
+    latitude: (j['latitude'] as num?)?.toDouble(),
+    longitude: (j['longitude'] as num?)?.toDouble(),
+    horizontalAccuracy:
+        (j['horizontal_accuracy'] ?? j['horizontalAccuracy'] as num?) is num
+        ? (j['horizontal_accuracy'] ?? j['horizontalAccuracy'] as num)
+              .toDouble()
+        : null,
+    altitude: (j['altitude'] as num?)?.toDouble(),
+    uploadStatus: '${j['upload_status'] ?? j['uploadStatus'] ?? ''}',
+    integrityStatus: '${j['integrity_status'] ?? j['integrityStatus'] ?? ''}',
+  );
+}
+
+PhotoPurpose? _photoPurpose(Object? raw) {
+  final value = raw?.toString().toLowerCase();
+  return PhotoPurpose.values.where((item) => item.name == value).firstOrNull;
 }
 
 class ConstructionProfile {

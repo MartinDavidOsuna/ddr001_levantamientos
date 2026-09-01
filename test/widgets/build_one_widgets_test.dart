@@ -35,7 +35,10 @@ class WidgetSessions implements SessionStore {
   Future<void> save(FieldSession value) async {}
 }
 
-Future<(AppController, Directory)> controller(ConstructionRole role) async {
+Future<(AppController, Directory)> controller(
+  ConstructionRole role, {
+  Dio? dio,
+}) async {
   final root = await Directory.systemTemp.createTemp('ddr001-widget-');
   Hive.init(root.path);
   final local = await LocalStore.open(),
@@ -48,7 +51,7 @@ Future<(AppController, Directory)> controller(ConstructionRole role) async {
     config: config,
     local: local,
     sessions: sessions,
-    api: ApiClient(config: config, sessions: sessions, dio: Dio()),
+    api: ApiClient(config: config, sessions: sessions, dio: dio ?? Dio()),
     packageInfo: PackageInfo(
       appName: 'DDR001',
       packageName: 'com.aquafim.ddr001levantamientos',
@@ -362,6 +365,78 @@ void main() {
       findsOneWidget,
     );
     expect(find.byKey(const Key('more_photos_1')), findsNothing);
+  });
+  testWidgets('remote photos load thumb lazily and original only on tap', (
+    tester,
+  ) async {
+    final requests = <RequestOptions>[];
+    final dio = Dio()
+      ..interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (options, handler) {
+            requests.add(options);
+            handler.resolve(
+              Response<List<int>>(
+                requestOptions: options,
+                data: File('assets/branding/logo_symbol.png').readAsBytesSync(),
+                statusCode: 200,
+              ),
+            );
+          },
+        ),
+      );
+    final (app, root) = (await tester.runAsync(
+      () => controller(ConstructionRole.contractor, dio: dio),
+    ))!;
+    addTearDown(() async {
+      await Hive.close();
+      await root.delete(recursive: true);
+    });
+    final survey = (await tester.runAsync(
+      () => app.createSurvey('Remoto lazy'),
+    ))!;
+    const photoId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+    app.surveys = [
+      survey.copyWith(
+        steps: [
+          survey.steps.first,
+          survey.steps[1].copyWith(state: StepState.completedServer),
+          ...survey.steps.skip(2),
+        ],
+        remotePhotos: [
+          RemoteConstructionPhoto(
+            id: photoId,
+            surveyId: survey.id,
+            context: 'step',
+            stepNumber: 2,
+            capturedAt: DateTime.utc(2026, 8, 30),
+            uploadStatus: 'verified',
+            integrityStatus: 'confirmed',
+          ),
+        ],
+      ),
+    ];
+
+    await tester.pumpWidget(page(app, SurveyDetailPage(surveyId: survey.id)));
+    expect(requests, isEmpty, reason: 'collapsed steps must not fetch thumbs');
+
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('step_2')),
+      400,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.byKey(const Key('step_2')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(requests, hasLength(1));
+    expect(requests.single.queryParameters['size'], 'thumb');
+
+    final remotePhoto = find.byKey(const Key('remote_photo_$photoId'));
+    tester.widget<GestureDetector>(remotePhoto).onTap!();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(requests, hasLength(2));
+    expect(requests.last.queryParameters['size'], 'original');
   });
   testWidgets('step 6 requests cardinal directions before additional photos', (
     tester,

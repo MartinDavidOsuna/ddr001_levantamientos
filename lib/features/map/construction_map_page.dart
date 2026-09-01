@@ -21,7 +21,9 @@ class ConstructionMapPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final app = context.watch<AppController>(),
-        points = app.surveys.where((s) => s.canonicalLocation != null).toList();
+        points = app.visibleSurveys
+            .where((s) => s.canonicalLocation != null)
+            .toList();
     return Scaffold(
       appBar: AppBar(
         title: BrandedAppBarTitle(

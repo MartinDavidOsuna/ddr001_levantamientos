@@ -76,9 +76,9 @@ class ProfilePage extends StatelessWidget {
                   leading: const Icon(Icons.sync),
                   title: const Text('Sincronización'),
                   subtitle: Text(
-                    app.queue.isEmpty
+                    app.visibleQueue.isEmpty
                         ? 'Sincronizado'
-                        : '${app.queue.length} elementos pendientes',
+                        : '${app.visibleQueue.length} elementos pendientes',
                   ),
                 ),
                 ListTile(
@@ -95,7 +95,7 @@ class ProfilePage extends StatelessWidget {
           OutlinedButton.icon(
             key: const Key('logout'),
             onPressed: () async {
-              if (app.queue.isNotEmpty) {
+              if (app.visibleQueue.isNotEmpty) {
                 final proceed =
                     await showDialog<bool>(
                       context: context,

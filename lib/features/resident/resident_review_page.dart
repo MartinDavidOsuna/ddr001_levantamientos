@@ -39,7 +39,7 @@ class _ResidentReviewPageState extends State<ResidentReviewPage> {
   @override
   Widget build(BuildContext context) {
     final app = context.watch<AppController>();
-    final items = app.surveys
+    final items = app.visibleSurveys
         .where(
           (s) =>
               (filter == null || s.status == filter) &&
@@ -132,14 +132,41 @@ class _ResidentReviewPageState extends State<ResidentReviewPage> {
   }
 }
 
-class _ResidentDetail extends StatelessWidget {
+class _ResidentDetail extends StatefulWidget {
   const _ResidentDetail({required this.surveyId});
   final String surveyId;
+
+  @override
+  State<_ResidentDetail> createState() => _ResidentDetailState();
+}
+
+class _ResidentDetailState extends State<_ResidentDetail> {
+  bool requested = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (requested) return;
+    requested = true;
+    final app = context.read<AppController>();
+    if (app.canCurrentSessionViewSurveyId(widget.surveyId) && app.online) {
+      app.loadSurveyDetail(widget.surveyId).catchError((_) {});
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final app = context.watch<AppController>(),
-        survey = app.survey(surveyId),
-        submitting = app.reviewSubmitting(surveyId);
+    final app = context.watch<AppController>();
+    if (!app.canCurrentSessionViewSurveyId(widget.surveyId)) {
+      return Scaffold(
+        appBar: AppBar(title: const BrandedAppBarTitle('Acceso denegado')),
+        body: const Center(
+          child: Text('Este levantamiento no está autorizado.'),
+        ),
+      );
+    }
+    final survey = app.survey(widget.surveyId),
+        submitting = app.reviewSubmitting(widget.surveyId);
     return Scaffold(
       appBar: AppBar(title: BrandedAppBarTitle(survey.displayIdentifier)),
       body: ListView(
@@ -166,6 +193,19 @@ class _ResidentDetail extends StatelessWidget {
           _ReviewValue(
             label: 'ÚLTIMA ACTUALIZACIÓN',
             value: _dateLabel(survey.updatedAt),
+          ),
+          OutlinedButton.icon(
+            key: const Key('review_remote_evidence'),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => SurveyDetailPage(surveyId: survey.id),
+              ),
+            ),
+            icon: const Icon(Icons.photo_library_outlined),
+            label: Text(
+              'Ver etapas y evidencia (${survey.remotePhotos.length} fotos)',
+            ),
           ),
           if (survey.rejectionReason?.isNotEmpty == true)
             _ReviewValue(

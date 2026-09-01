@@ -185,16 +185,41 @@ void main() {
       isEmpty,
     );
   });
+  test('survey owner UUID is canonical and legacy omission stays unknown', () {
+    final owned = _survey(contractorUserId: 'USER-A');
+    expect(BaseSurvey.fromJson(owned.toJson()).contractorUserId, 'user-a');
+    final legacy = owned.toJson()..remove('contractorUserId');
+    expect(BaseSurvey.fromJson(legacy).contractorUserId, isNull);
+  });
+
+  test('remote evidence metadata round-trips without local capture fields', () {
+    final photo = RemoteConstructionPhoto.fromWire('SURVEY', {
+      'photo_id': 'PHOTO',
+      'photo_context': 'correction',
+      'correction_round': 2,
+      'photo_purpose': 'west',
+      'captured_at': DateTime.utc(2026).toIso8601String(),
+      'upload_status': 'verified',
+      'integrity_status': 'confirmed',
+    });
+    final restored = RemoteConstructionPhoto.fromJson(photo.toJson());
+    expect(restored.id, 'photo');
+    expect(restored.surveyId, 'survey');
+    expect(restored.correctionRound, 2);
+    expect(restored.purpose, PhotoPurpose.west);
+  });
 }
 
 BaseSurvey _survey({
   GeoPoint? canonical,
   List<CorrectionRound> corrections = const [],
   SurveyStatus status = SurveyStatus.created,
+  String? contractorUserId,
 }) => BaseSurvey(
   id: 's',
   displayIdentifier: 'Losa 1',
   contractorName: 'A',
+  contractorUserId: contractorUserId,
   createdAt: DateTime.utc(2026),
   updatedAt: DateTime.utc(2026),
   status: status,

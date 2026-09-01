@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 // ConstructionApi intentionally keeps its compact one-line endpoint methods.
 // ignore_for_file: annotate_overrides
 import 'package:device_info_plus/device_info_plus.dart';
@@ -68,6 +69,11 @@ abstract interface class ConstructionRemote {
     String? status,
   });
   Future<Map<String, dynamic>> detail(String surveyId);
+  Future<Uint8List> photoContent(
+    String surveyId,
+    String photoId, {
+    required bool original,
+  });
   Future<void> residentUpdate(String id, Map<String, dynamic> values);
   Future<void> residentAction(
     String id,
@@ -308,6 +314,19 @@ class ConstructionApi implements ConstructionRemote {
         '/construction/base-surveys/${canonicalUuid(surveyId)}',
       )).data ??
       const {};
+
+  Future<Uint8List> photoContent(
+    String surveyId,
+    String photoId, {
+    required bool original,
+  }) async {
+    final response = await client.dio.get<List<int>>(
+      '/construction/base-surveys/${canonicalUuid(surveyId)}/photos/${canonicalUuid(photoId)}/content',
+      queryParameters: {'size': original ? 'original' : 'thumb'},
+      options: Options(responseType: ResponseType.bytes),
+    );
+    return Uint8List.fromList(response.data ?? const []);
+  }
 
   Future<void> residentUpdate(String id, Map<String, dynamic> values) =>
       client.dio.patch<void>(

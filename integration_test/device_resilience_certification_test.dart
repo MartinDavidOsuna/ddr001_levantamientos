@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:ddr001_levantamientos/core/config/app_config.dart';
 import 'package:ddr001_levantamientos/core/network/api_client.dart';
@@ -27,6 +28,13 @@ class DeviceRemote implements ConstructionRemote {
     'photos': [],
     'corrections': [],
   };
+
+  @override
+  Future<Uint8List> photoContent(
+    String surveyId,
+    String photoId, {
+    required bool original,
+  }) async => Uint8List(0);
 
   @override
   Future<void> openStep(String survey, int step) async {
@@ -109,6 +117,7 @@ class DeviceRemote implements ConstructionRemote {
 
 BaseSurvey survey(String id) => BaseSurvey(
   id: id,
+  contractorUserId: '10000000-0000-4000-8000-000000000002',
   displayIdentifier: 'Physical certification $id',
   contractorName: 'Certification',
   createdAt: DateTime.utc(2026, 8, 30),
@@ -221,6 +230,17 @@ void main() {
     }
 
     if (stage == 'bulk') {
+      app.session ??= const FieldSession(
+        sessionId: '10000000-0000-4000-8000-000000000001',
+        userId: '10000000-0000-4000-8000-000000000002',
+        accessToken: 'device-certification-access',
+        refreshToken: 'device-certification-refresh',
+        installationId: '10000000-0000-4000-8000-000000000003',
+        name: 'Certification',
+        email: 'certification@example.com',
+        phone: '1234567890',
+      );
+      app.profile = await remote.profile();
       app.surveys = [];
       app.photos = [];
       app.queue = [];

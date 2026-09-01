@@ -61,7 +61,7 @@ class _SurveysPageState extends State<SurveysPage> {
   @override
   Widget build(BuildContext context) {
     final app = context.watch<AppController>(),
-        items = app.surveys.where((s) {
+        items = app.visibleSurveys.where((s) {
           final query = search.trim().toLowerCase(),
               matches =
                   query.isEmpty ||
