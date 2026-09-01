@@ -49,18 +49,21 @@ class _LoginPageState extends State<LoginPage> {
   @override
   Widget build(BuildContext context) {
     final app = context.watch<AppController>();
+    final screenHeight = MediaQuery.sizeOf(context).height;
+    final keyboardHeight = MediaQuery.viewInsetsOf(context).bottom;
     final inputStyle = Theme.of(
       context,
     ).textTheme.bodyLarge?.copyWith(color: _silver);
     return Scaffold(
       backgroundColor: Colors.white,
+      resizeToAvoidBottomInset: false,
       body: SafeArea(
         child: Stack(
           children: [
             Positioned.fill(
               child: Center(
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(20, 24, 20, 54),
+                  padding: EdgeInsets.fromLTRB(20, 24, 20, keyboardHeight + 54),
                   child: ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 460),
                     child: Column(
@@ -216,14 +219,14 @@ class _LoginPageState extends State<LoginPage> {
             Positioned(
               left: 0,
               right: 0,
-              bottom: 5,
+              bottom: screenHeight * 0.05,
               child: IgnorePointer(
                 child: Text(
                   'v${app.packageInfo.version}',
                   key: const Key('login_version'),
                   textAlign: TextAlign.center,
                   style: const TextStyle(
-                    color: Color(0xff6b7280),
+                    color: Color(0xffaeb4bf),
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
                   ),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/services/app_controller.dart';
+import '../../core/widgets/branded_app_bar_title.dart';
 import '../../domain/construction/construction_models.dart';
 import '../surveys/survey_detail_page.dart';
 
@@ -30,7 +31,7 @@ class _ResidentReviewPageState extends State<ResidentReviewPage> {
         )
         .toList();
     return Scaffold(
-      appBar: AppBar(title: const Text('Revisión de base')),
+      appBar: AppBar(title: const BrandedAppBarTitle('Revisión de base')),
       body: Column(
         children: [
           Padding(
@@ -94,7 +95,7 @@ class _ResidentDetail extends StatelessWidget {
         survey = app.survey(surveyId),
         submitting = app.reviewSubmitting(surveyId);
     return Scaffold(
-      appBar: AppBar(title: Text(survey.displayIdentifier)),
+      appBar: AppBar(title: BrandedAppBarTitle(survey.displayIdentifier)),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [

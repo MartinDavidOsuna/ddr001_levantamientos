@@ -12,6 +12,7 @@ import '../identity/uuid_identity.dart';
 import '../location/location_service.dart';
 import '../media/photo_capture_service.dart';
 import '../network/api_client.dart';
+import '../persistence/construction_operation_journal.dart';
 import '../persistence/local_store.dart';
 import '../persistence/uuid_hive_migration.dart';
 import '../security/field_identity.dart';
@@ -30,7 +31,7 @@ class AppController extends ChangeNotifier {
     PhotoCaptureService? camera,
   }) : remote = remote ?? ConstructionApi(api, sessions, packageInfo),
        locations = locations ?? LocationService(),
-       camera = camera ?? PhotoCaptureService();
+       camera = camera ?? PhotoCaptureService(local: local);
   final AppConfig config;
   final LocalStore local;
   final SessionStore sessions;
@@ -44,6 +45,9 @@ class AppController extends ChangeNotifier {
   List<ConstructionPhoto> photos = [];
   List<SyncQueueItem> queue = [];
   bool busy = false, online = true, syncing = false;
+  bool transportAvailable = true;
+  bool apiReachable = true;
+  bool get degraded => transportAvailable && !apiReachable;
   String? reviewMutationSurveyId;
   String? message;
   String? pendingTakeoverToken;
@@ -153,6 +157,7 @@ class AppController extends ChangeNotifier {
 
   StreamSubscription<List<ConnectivityResult>>? _connectivity;
   Timer? _offlineConnectivityPoll;
+  Timer? _nextAttemptTimer;
   StreamSubscription<LocationFix>? _locationFixes;
   final Map<String, Timer> _locationDeadlines = {};
   int _locationFlowDepth = 0;
@@ -165,6 +170,7 @@ class AppController extends ChangeNotifier {
     queue = local.queue();
     profile = local.profile();
     session = await sessions.read();
+    await recoverLocalState();
     await _recoverPendingLocations();
     final connectivity = Connectivity();
     _setConnectivity(await connectivity.checkConnectivity());
@@ -182,23 +188,174 @@ class AppController extends ChangeNotifier {
     }
   }
 
+  Future<void> recoverLocalState({bool recoverCamera = true}) async {
+    for (final deletion in local.journal.pending().where(
+      (entry) => entry.operation == ConstructionJournalOperation.deletePhoto,
+    )) {
+      final photo = photos
+          .where((value) => uuidEquals(value.id, deletion.photoId))
+          .firstOrNull;
+      if (photo != null && photo.syncState != PhotoSyncState.deleted) {
+        await _replacePhoto(photo.copyWith(syncState: PhotoSyncState.deleted));
+      }
+      await _unlinkDeletedPhoto(deletion);
+      if (deletion.remotePossible) {
+        await _enqueue(
+          deletion.surveyId,
+          QueueOperation.deletePhoto,
+          photoId: deletion.photoId,
+          step: deletion.step,
+          correctionId: deletion.correctionId,
+        );
+      } else {
+        await _purgeDeletedPhoto(deletion);
+      }
+    }
+    final recovered = recoverCamera
+        ? await camera.recoverPendingCaptures()
+        : const <ConstructionPhoto>[];
+    for (final candidate in recovered) {
+      var photo = photos
+          .where((value) => uuidEquals(value.id, candidate.id))
+          .firstOrNull;
+      if (photo == null) {
+        photo = candidate;
+        photos = [...photos, photo];
+        await local.savePhoto(photo);
+        await camera.advance(
+          photo.id,
+          ConstructionJournalState.metadataPersisted,
+        );
+      }
+      await _repairPhotoLink(photo);
+    }
+
+    // Older builds opened the next stage only in the local projection. Repair
+    // the durable causal commands so later evidence cannot be stranded behind
+    // a server-side "Evidence context not found" response.
+    for (final survey in [...surveys]) {
+      for (final step in survey.steps.where(
+        (candidate) => candidate.state == StepState.completedLocal,
+      )) {
+        await _enqueue(survey.id, QueueOperation.openStep, step: step.number);
+        await _enqueue(
+          survey.id,
+          QueueOperation.completeStep,
+          step: step.number,
+        );
+        if (step.number < survey.steps.length) {
+          await _enqueue(
+            survey.id,
+            QueueOperation.openStep,
+            step: step.number + 1,
+          );
+        }
+      }
+    }
+
+    for (final original in [...photos]) {
+      var photo = original;
+      if (photo.syncState == PhotoSyncState.deleted) continue;
+      if (!File(photo.localPath).existsSync()) {
+        photo = photo.copyWith(syncState: PhotoSyncState.missingLocal);
+        await _replacePhoto(photo);
+        continue;
+      }
+      if (photo.syncState == PhotoSyncState.uploading) {
+        photo = photo.copyWith(syncState: PhotoSyncState.retryRequired);
+        await _replacePhoto(photo);
+      } else if (photo.syncState == PhotoSyncState.verifying) {
+        photo = photo.copyWith(syncState: PhotoSyncState.uploadedUnverified);
+        await _replacePhoto(photo);
+      }
+      await _repairPhotoLink(photo);
+      if (photo.syncState == PhotoSyncState.uploadedUnverified) {
+        await _enqueue(
+          photo.surveyId,
+          QueueOperation.verifyPhotos,
+          photoId: photo.id,
+          step: photo.stepNumber,
+          correctionId: photo.correctionId,
+        );
+      } else if (photo.locationConfirmed &&
+          const {
+            PhotoSyncState.localOnly,
+            PhotoSyncState.queued,
+            PhotoSyncState.retryRequired,
+          }.contains(photo.syncState)) {
+        await _enqueue(
+          photo.surveyId,
+          QueueOperation.uploadPhoto,
+          photoId: photo.id,
+          step: photo.stepNumber,
+          correctionId: photo.correctionId,
+        );
+      }
+    }
+  }
+
+  Future<void> _repairPhotoLink(ConstructionPhoto photo) async {
+    final index = surveys.indexWhere(
+      (value) => uuidEquals(value.id, photo.surveyId),
+    );
+    if (index < 0) return;
+    final current = surveys[index];
+    if (photo.correctionId != null) {
+      final correctionIndex = current.corrections.indexWhere(
+        (value) => uuidEquals(value.id, photo.correctionId),
+      );
+      if (correctionIndex < 0) return;
+      final correction = current.corrections[correctionIndex];
+      if (!correction.photoIds.any((id) => uuidEquals(id, photo.id))) {
+        final corrections = [...current.corrections];
+        corrections[correctionIndex] = CorrectionRound(
+          id: correction.id,
+          round: correction.round,
+          state: correction.state,
+          comment: correction.comment,
+          photoIds: [...correction.photoIds, photo.id],
+        );
+        await _replaceSurvey(current.copyWith(corrections: corrections));
+      }
+    } else if (photo.stepNumber != null &&
+        photo.stepNumber! >= 1 &&
+        photo.stepNumber! <= current.steps.length) {
+      final stepIndex = photo.stepNumber! - 1;
+      final step = current.steps[stepIndex];
+      if (!step.photoIds.any((id) => uuidEquals(id, photo.id))) {
+        final steps = [...current.steps];
+        steps[stepIndex] = step.copyWith(
+          photoIds: [...step.photoIds, photo.id],
+        );
+        await _replaceSurvey(current.copyWith(steps: steps));
+      }
+    }
+    await camera.advance(photo.id, ConstructionJournalState.linked);
+  }
+
   void _setConnectivity(List<ConnectivityResult> values) {
     final wasOnline = online;
-    online = values.any((result) => result != ConnectivityResult.none);
-    if (online) {
+    final previousTransport = transportAvailable;
+    transportAvailable = values.any(
+      (result) => result != ConnectivityResult.none,
+    );
+    online = transportAvailable;
+    if (transportAvailable) {
       _offlineConnectivityPoll?.cancel();
       _offlineConnectivityPoll = null;
     } else {
       _startOfflineConnectivityPoll();
     }
-    notifyListeners();
+    if (previousTransport != transportAvailable || wasOnline != online) {
+      notifyListeners();
+    }
     if (online && session != null && (!wasOnline || queue.isNotEmpty)) {
       unawaited(synchronize());
     }
   }
 
   void _startOfflineConnectivityPoll() {
-    _offlineConnectivityPoll ??= Timer.periodic(const Duration(seconds: 3), (
+    _offlineConnectivityPoll ??= Timer.periodic(const Duration(seconds: 45), (
       _,
     ) async {
       try {
@@ -216,6 +373,7 @@ class AppController extends ChangeNotifier {
   void dispose() {
     _connectivity?.cancel();
     _offlineConnectivityPoll?.cancel();
+    _nextAttemptTimer?.cancel();
     _locationFixes?.cancel();
     for (final timer in _locationDeadlines.values) {
       timer.cancel();
@@ -232,10 +390,7 @@ class AppController extends ChangeNotifier {
 
   void leaveLocationFlow() {
     _locationFlowDepth = (_locationFlowDepth - 1).clamp(0, 1000);
-    if (_locationFlowDepth == 0 &&
-        !photos.any((photo) => photo.locationPending)) {
-      unawaited(locations.stopPrewarm());
-    }
+    _stopLocationWhenIdle();
   }
 
   void _ensureLocationListener() {
@@ -426,6 +581,10 @@ class AppController extends ChangeNotifier {
     if (pending == null) return;
     photos = [...photos, pending];
     await local.savePhoto(pending);
+    await camera.advance(
+      pending.id,
+      ConstructionJournalState.metadataPersisted,
+    );
     final steps = [...s.steps];
     steps[step - 1] = current.copyWith(
       photoIds: [...current.photoIds, pending.id],
@@ -437,6 +596,7 @@ class AppController extends ChangeNotifier {
         syncState: SyncState.pending,
       ),
     );
+    await camera.advance(pending.id, ConstructionJournalState.linked);
     notifyListeners();
     _beginLocationAcquisition(pending.id);
   }
@@ -449,7 +609,9 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> _recoverPendingLocations() async {
-    _ensureLocationListener();
+    if (photos.any((photo) => photo.locationPending)) {
+      _ensureLocationListener();
+    }
     final now = DateTime.now().toUtc();
     for (final photo in [...photos]) {
       if (!photo.locationPending) continue;
@@ -464,6 +626,8 @@ class AppController extends ChangeNotifier {
     }
     if (photos.any((photo) => photo.locationPending)) {
       unawaited(locations.startPrewarm());
+    } else {
+      _stopLocationWhenIdle();
     }
   }
 
@@ -570,6 +734,8 @@ class AppController extends ChangeNotifier {
         photoId: photo.id,
         step: photo.stepNumber,
       );
+      await camera.advance(photo.id, ConstructionJournalState.committed);
+      _stopLocationWhenIdle();
     }
   }
 
@@ -622,6 +788,18 @@ class AppController extends ChangeNotifier {
       );
     }
     _locationDeadlines.remove(photo.id)?.cancel();
+    _stopLocationWhenIdle();
+  }
+
+  void _stopLocationWhenIdle() {
+    if (_locationFlowDepth != 0 ||
+        photos.any((photo) => photo.locationPending)) {
+      return;
+    }
+    final subscription = _locationFixes;
+    _locationFixes = null;
+    unawaited(subscription?.cancel());
+    unawaited(locations.stopPrewarm());
   }
 
   Future<void> deletePhoto(String surveyId, int step, String photoId) async {
@@ -631,12 +809,33 @@ class AppController extends ChangeNotifier {
     }
     final photo = photos.firstWhere((p) => uuidEquals(p.id, photoId));
     final needsRemoteDelete = const {
+      PhotoSyncState.uploading,
       PhotoSyncState.uploadedUnverified,
       PhotoSyncState.verifying,
       PhotoSyncState.confirmed,
       PhotoSyncState.retryRequired,
       PhotoSyncState.mappingConflict,
     }.contains(photo.syncState);
+    final captureJournal = local.journal.find(photo.id);
+    final deletion = ConstructionJournalEntry(
+      id: 'delete-${canonicalUuid(photo.id)}',
+      operation: ConstructionJournalOperation.deletePhoto,
+      state: ConstructionJournalState.prepared,
+      surveyId: canonicalUuid(surveyId),
+      photoId: canonicalUuid(photo.id),
+      step: step,
+      correctionId: photo.correctionId,
+      sourcePath: captureJournal?.sourcePath,
+      uploadPath: photo.localPath,
+      thumbnailPath: photo.thumbnailPath,
+      sha256: photo.sha256,
+      fileSize: File(photo.localPath).existsSync()
+          ? File(photo.localPath).lengthSync()
+          : null,
+      remotePossible: needsRemoteDelete,
+      createdAt: DateTime.now().toUtc(),
+    );
+    await local.journal.save(deletion);
     final photoQueue = queue
         .where((item) => uuidEquals(item.photoId, photoId))
         .toList();
@@ -644,14 +843,7 @@ class AppController extends ChangeNotifier {
       await local.deleteQueue(item.id);
     }
     queue = queue.where((item) => !uuidEquals(item.photoId, photoId)).toList();
-    await File(
-      photo.localPath,
-    ).delete().catchError((_) => File(photo.localPath));
-    await File(
-      photo.thumbnailPath,
-    ).delete().catchError((_) => File(photo.thumbnailPath));
-    photos = photos.where((p) => !uuidEquals(p.id, photoId)).toList();
-    await local.deletePhoto(canonicalUuid(photoId));
+    await _replacePhoto(photo.copyWith(syncState: PhotoSyncState.deleted));
     final steps = [...s.steps];
     steps[step - 1] = current.copyWith(
       photoIds: current.photoIds
@@ -666,7 +858,69 @@ class AppController extends ChangeNotifier {
         photoId: photoId,
         step: step,
       );
+      await local.journal.save(
+        deletion.copyWith(state: ConstructionJournalState.queued),
+      );
+    } else {
+      await _purgeDeletedPhoto(deletion);
     }
+  }
+
+  Future<void> _purgeDeletedPhoto(ConstructionJournalEntry deletion) async {
+    for (final path in {
+      deletion.sourcePath,
+      deletion.uploadPath,
+      deletion.thumbnailPath,
+    }.whereType<String>()) {
+      final file = File(path);
+      if (await file.exists()) await file.delete();
+    }
+    final photoId = deletion.photoId;
+    if (photoId != null) {
+      photos = photos.where((photo) => !uuidEquals(photo.id, photoId)).toList();
+      await local.deletePhoto(photoId);
+    }
+    await local.journal.save(
+      deletion.copyWith(state: ConstructionJournalState.committed),
+    );
+  }
+
+  Future<void> _unlinkDeletedPhoto(ConstructionJournalEntry deletion) async {
+    final surveyIndex = surveys.indexWhere(
+      (value) => uuidEquals(value.id, deletion.surveyId),
+    );
+    final photoId = deletion.photoId;
+    if (surveyIndex < 0 || photoId == null) return;
+    final current = surveys[surveyIndex];
+    if (deletion.correctionId != null) {
+      final corrections = current.corrections
+          .map(
+            (correction) => uuidEquals(correction.id, deletion.correctionId)
+                ? CorrectionRound(
+                    id: correction.id,
+                    round: correction.round,
+                    state: correction.state,
+                    comment: correction.comment,
+                    photoIds: correction.photoIds
+                        .where((id) => !uuidEquals(id, photoId))
+                        .toList(),
+                  )
+                : correction,
+          )
+          .toList();
+      await _replaceSurvey(current.copyWith(corrections: corrections));
+      return;
+    }
+    final steps = current.steps
+        .map(
+          (step) => step.copyWith(
+            photoIds: step.photoIds
+                .where((id) => !uuidEquals(id, photoId))
+                .toList(),
+          ),
+        )
+        .toList();
+    await _replaceSurvey(current.copyWith(steps: steps));
   }
 
   bool canFinalize(String surveyId, int step) {
@@ -732,6 +986,9 @@ class AppController extends ChangeNotifier {
     );
     await _enqueue(surveyId, QueueOperation.openStep, step: step);
     await _enqueue(surveyId, QueueOperation.completeStep, step: step);
+    if (step < 6) {
+      await _enqueue(surveyId, QueueOperation.openStep, step: step + 1);
+    }
     notifyListeners();
     if (online) unawaited(synchronize());
   }
@@ -787,6 +1044,10 @@ class AppController extends ChangeNotifier {
     if (pending == null) return;
     photos = [...photos, pending];
     await local.savePhoto(pending);
+    await camera.advance(
+      pending.id,
+      ConstructionJournalState.metadataPersisted,
+    );
     final corrections = s.corrections
         .map(
           (c) => uuidEquals(c.id, correctionId)
@@ -803,6 +1064,7 @@ class AppController extends ChangeNotifier {
     await _replaceSurvey(
       s.copyWith(corrections: corrections, syncState: SyncState.pending),
     );
+    await camera.advance(pending.id, ConstructionJournalState.linked);
     _beginLocationAcquisition(pending.id);
   }
 
@@ -898,6 +1160,7 @@ class AppController extends ChangeNotifier {
       } catch (error) {
         if (error is DioException && error.response?.statusCode != 401) {
           online = false;
+          apiReachable = false;
         }
         if (kDebugMode) {
           debugPrint(
@@ -925,9 +1188,19 @@ class AppController extends ChangeNotifier {
             if (_isGlobalSyncError(error)) {
               if (error is DioException && error.response?.statusCode != 401) {
                 online = false;
+                apiReachable = false;
               }
               await _recordRetry(item, error, global: true);
               return;
+            }
+            final localReview = _localReviewCode(error);
+            if (localReview != null) {
+              await _recordRequiresReview(item, localReview);
+              continue;
+            }
+            if (_isStructuralConflict(error)) {
+              await _recordStructuralConflict(item, error as DioException);
+              continue;
             }
             await _recordRetry(
               item,
@@ -1016,6 +1289,20 @@ class AppController extends ChangeNotifier {
                       ? PhotoSyncState.confirmed
                       : PhotoSyncState.uploadedUnverified,
                 ),
+              );
+            }
+            // A server-side photo proves that the multipart mutation was
+            // committed, even when its response was lost. Integrity remains
+            // a separate durable operation: never retire the ambiguous
+            // upload unless confirmation is final or verify work exists.
+            if (!confirmed &&
+                item.operation == QueueOperation.uploadPhoto &&
+                item.photoId != null) {
+              await _enqueue(
+                item.surveyId,
+                QueueOperation.verifyPhotos,
+                photoId: item.photoId,
+                step: item.step,
               );
             }
           }
@@ -1113,6 +1400,54 @@ class AppController extends ChangeNotifier {
     return const {'STEP_SEQUENCE', 'EVIDENCE_NOT_SYNCED'}.contains(code);
   }
 
+  bool _isStructuralConflict(Object error) =>
+      error is DioException &&
+      error.response?.statusCode == 409 &&
+      !_isDependencyResponse(error);
+
+  Future<void> _recordStructuralConflict(
+    SyncQueueItem item,
+    DioException error,
+  ) async {
+    final data = error.response?.data;
+    final code = data is Map
+        ? '${data['code'] ?? 'STRUCTURAL_CONFLICT'}'
+        : 'STRUCTURAL_CONFLICT';
+    await _recordRequiresReview(item, code);
+  }
+
+  String? _localReviewCode(Object error) {
+    if (error is! StateError) return null;
+    final value = error.message.toString();
+    return const {
+          'MISSING_LOCAL_FILE',
+          'LOCAL_CORRUPTION',
+          'MAPPING_CONFLICT',
+        }.contains(value)
+        ? value
+        : null;
+  }
+
+  Future<void> _recordRequiresReview(SyncQueueItem item, String code) async {
+    final blocked = item.copyWith(
+      requiresReview: true,
+      lastErrorCode: code,
+      clearNextAttempt: true,
+    );
+    queue = queue
+        .map((candidate) => candidate.id == item.id ? blocked : candidate)
+        .toList();
+    await local.saveQueue(blocked);
+    final current = surveys
+        .where((survey) => uuidEquals(survey.id, item.surveyId))
+        .firstOrNull;
+    if (current != null) {
+      await _replaceSurvey(
+        current.copyWith(syncState: SyncState.requiresReview),
+      );
+    }
+  }
+
   bool _isGlobalSyncError(Object error) {
     if (error is! DioException) return false;
     if (error.response?.statusCode == 401) return true;
@@ -1135,13 +1470,14 @@ class AppController extends ChangeNotifier {
           (earliest, date) =>
               earliest == null || date.isBefore(earliest) ? date : earliest,
         );
+    _nextAttemptTimer?.cancel();
+    _nextAttemptTimer = null;
     if (next == null || !online || session == null) return;
     final wait = next.difference(DateTime.now());
-    unawaited(
-      Future<void>.delayed(wait, () {
-        if (online && session != null) unawaited(synchronize());
-      }),
-    );
+    _nextAttemptTimer = Timer(wait, () {
+      _nextAttemptTimer = null;
+      if (online && session != null) unawaited(synchronize());
+    });
   }
 
   void _logBlockedQueue(DateTime now) {
@@ -1183,7 +1519,18 @@ class AppController extends ChangeNotifier {
       case QueueOperation.openStep:
         await remote.openStep(s.id, item.step!);
       case QueueOperation.deletePhoto:
-        await remote.deletePhoto(s.id, item.photoId!);
+        try {
+          await remote.deletePhoto(s.id, item.photoId!);
+        } on DioException catch (error) {
+          // A retry after an ambiguous successful delete commonly observes
+          // 404. The desired remote state is already true, so this is a
+          // successful idempotent replay rather than a permanent conflict.
+          if (error.response?.statusCode != 404) rethrow;
+        }
+        final deletion = local.journal.find(
+          'delete-${canonicalUuid(item.photoId!)}',
+        );
+        if (deletion != null) await _purgeDeletedPhoto(deletion);
       case QueueOperation.updateComment:
         await remote.commentStep(
           s.id,
@@ -1192,6 +1539,30 @@ class AppController extends ChangeNotifier {
         );
       case QueueOperation.uploadPhoto:
         final p = photos.firstWhere((x) => uuidEquals(x.id, item.photoId));
+        final uploadFile = File(p.localPath);
+        if (!uploadFile.existsSync()) {
+          await _replacePhoto(
+            p.copyWith(syncState: PhotoSyncState.missingLocal),
+          );
+          throw StateError('MISSING_LOCAL_FILE');
+        }
+        final capture = local.journal.find(p.id);
+        if (capture?.fileSize != null &&
+            await uploadFile.length() != capture!.fileSize) {
+          await _replacePhoto(
+            p.copyWith(syncState: PhotoSyncState.permanentFailure),
+          );
+          throw StateError('LOCAL_CORRUPTION');
+        }
+        final digest = await sha256File(uploadFile);
+        if (digest.toLowerCase() != p.sha256.toLowerCase() ||
+            (capture?.sha256 != null &&
+                digest.toLowerCase() != capture!.sha256!.toLowerCase())) {
+          await _replacePhoto(
+            p.copyWith(syncState: PhotoSyncState.permanentFailure),
+          );
+          throw StateError('LOCAL_CORRUPTION');
+        }
         await _replacePhoto(p.copyWith(syncState: PhotoSyncState.uploading));
         await remote.upload(p);
         await _replacePhoto(
@@ -1253,6 +1624,9 @@ class AppController extends ChangeNotifier {
       _ => PhotoSyncState.retryRequired,
     };
     await _replacePhoto(p.copyWith(syncState: next));
+    if (next == PhotoSyncState.mappingConflict) {
+      throw StateError('MAPPING_CONFLICT');
+    }
     if (next == PhotoSyncState.retryRequired &&
         const {
           'missing_original',
@@ -1265,6 +1639,7 @@ class AppController extends ChangeNotifier {
         photoId: p.id,
         step: p.stepNumber,
       );
+      throw StateError('PHOTO_REUPLOAD_REQUIRED');
     }
     if (next == PhotoSyncState.retryRequired &&
         const {
@@ -1371,8 +1746,10 @@ class AppController extends ChangeNotifier {
         }
       }
       online = true;
+      apiReachable = true;
     } catch (_) {
       online = false;
+      apiReachable = false;
     }
     notifyListeners();
   }

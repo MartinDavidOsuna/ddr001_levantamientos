@@ -2,8 +2,10 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:convert';
 
+import 'package:crypto/crypto.dart';
 import 'package:ddr001_levantamientos/core/config/app_config.dart';
 import 'package:ddr001_levantamientos/core/network/api_client.dart';
+import 'package:ddr001_levantamientos/core/persistence/construction_operation_journal.dart';
 import 'package:ddr001_levantamientos/core/persistence/local_store.dart';
 import 'package:ddr001_levantamientos/core/persistence/uuid_hive_migration.dart';
 import 'package:ddr001_levantamientos/core/security/session_store.dart';
@@ -62,23 +64,27 @@ ConstructionPhoto evidence({
   int? step = 1,
   String? correction,
   PhotoSyncState state = PhotoSyncState.confirmed,
-}) => ConstructionPhoto(
-  id: id,
-  surveyId: survey,
-  localPath: '/tmp/$id.jpg',
-  thumbnailPath: '/tmp/${id}_thumb.jpg',
-  sha256: List.filled(64, 'a').join(),
-  capturedAt: epoch,
-  stepNumber: step,
-  correctionId: correction,
-  location: GeoPoint(
-    latitude: 20,
-    longitude: -100,
-    accuracy: 5,
+}) {
+  final path = '/tmp/$id.jpg';
+  File(path).writeAsBytesSync([1, 2, 3]);
+  return ConstructionPhoto(
+    id: id,
+    surveyId: survey,
+    localPath: path,
+    thumbnailPath: path,
+    sha256: sha256.convert(const [1, 2, 3]).toString(),
     capturedAt: epoch,
-  ),
-  syncState: state,
-);
+    stepNumber: step,
+    correctionId: correction,
+    location: GeoPoint(
+      latitude: 20,
+      longitude: -100,
+      accuracy: 5,
+      capturedAt: epoch,
+    ),
+    syncState: state,
+  );
+}
 
 BaseSurvey baseSurvey(String id) => BaseSurvey(
   id: id,
@@ -117,12 +123,16 @@ class FakeRemote implements ConstructionRemote {
   final serverPhotos = <String, Map<String, dynamic>>{};
   final failOpen = <String>{};
   final dependencyOpen = <String>{};
+  final structuralOpen = <String>{};
   final reviewActions = <String>[];
   Completer<void>? reviewGate;
   Object? reviewFailure;
   Object? authFailure;
   Object? profileFailure;
   Object? logoutFailure;
+  Object? openFailure;
+  Object? deleteFailure;
+  String verifyStatus = 'confirmed';
   ConstructionRole profileRole = ConstructionRole.contractor;
   int fieldLoginAttempts = 0;
   (String, String, String)? lastFieldIdentity;
@@ -158,7 +168,19 @@ class FakeRemote implements ConstructionRemote {
         type: DioExceptionType.badResponse,
       );
     }
+    if (structuralOpen.contains(id)) {
+      throw DioException(
+        requestOptions: RequestOptions(path: '/open'),
+        response: Response(
+          requestOptions: RequestOptions(path: '/open'),
+          statusCode: 409,
+          data: {'code': 'STRUCTURAL_CONFLICT'},
+        ),
+        type: DioExceptionType.badResponse,
+      );
+    }
     if (failOpen.contains(id)) throw StateError('survey failure');
+    if (openFailure case final failure?) throw failure;
     steps.putIfAbsent(id, () => {})[step] = 'open';
   }
 
@@ -186,6 +208,14 @@ class FakeRemote implements ConstructionRemote {
 
   @override
   Future<Map<String, dynamic>> verify(List<String> ids) async {
+    if (verifyStatus != 'confirmed') {
+      events.add('verify:$verifyStatus');
+      return {
+        'items': [
+          for (final id in ids) {'photoId': id, 'status': verifyStatus},
+        ],
+      };
+    }
     for (final id in ids) {
       serverPhotos[id.toLowerCase()]?['integrity_status'] = 'confirmed';
     }
@@ -218,7 +248,11 @@ class FakeRemote implements ConstructionRemote {
   }
 
   @override
-  Future<void> deletePhoto(String surveyId, String photoId) async {}
+  Future<void> deletePhoto(String surveyId, String photoId) async {
+    events.add('${surveyId.toLowerCase()}:delete:${photoId.toLowerCase()}');
+    if (deleteFailure case final failure?) throw failure;
+  }
+
   @override
   Future<ConstructionProfile> profile() async {
     if (profileFailure case final failure?) throw failure;
@@ -666,6 +700,184 @@ void main() {
       expect(app.queue.single.nextAttemptAt, isNotNull);
     });
 
+    test('timeout before commit preserves queue and local survey', () async {
+      app.surveys = [baseSurvey(surveyA)];
+      app.queue = [job(QueueOperation.openStep, step: 1)];
+      remote.openFailure = DioException(
+        requestOptions: RequestOptions(path: '/open'),
+        type: DioExceptionType.sendTimeout,
+      );
+
+      await app.synchronize();
+
+      expect(app.surveys, hasLength(1));
+      expect(app.queue.single.attempts, 1);
+      expect(app.queue.single.nextAttemptAt, isNotNull);
+    });
+
+    test('HTTP 500 backs off without blocking or deleting work', () async {
+      app.surveys = [baseSurvey(surveyA)];
+      app.queue = [job(QueueOperation.openStep, step: 1)];
+      remote.openFailure = DioException(
+        requestOptions: RequestOptions(path: '/open'),
+        response: Response(
+          requestOptions: RequestOptions(path: '/open'),
+          statusCode: 500,
+        ),
+        type: DioExceptionType.badResponse,
+      );
+
+      await app.synchronize();
+
+      expect(app.online, isTrue);
+      expect(app.surveys, hasLength(1));
+      expect(app.queue.single.nextAttemptAt, isNotNull);
+    });
+
+    test(
+      'same-size upload mutation is quarantined without sending bytes',
+      () async {
+        final photo = evidence(state: PhotoSyncState.queued);
+        File(photo.localPath).writeAsBytesSync(const [3, 2, 1]);
+        app.surveys = [baseSurvey(surveyA)];
+        app.photos = [photo];
+        app.queue = [job(QueueOperation.uploadPhoto, step: 1, photo: photo.id)];
+
+        await app.synchronize();
+
+        expect(app.photos.single.syncState, PhotoSyncState.permanentFailure);
+        expect(app.queue.single.requiresReview, isTrue);
+        expect(app.queue.single.lastErrorCode, 'LOCAL_CORRUPTION');
+        expect(
+          remote.events,
+          isNot(contains('${surveyA.toLowerCase()}:upload:1')),
+        );
+        expect(File(photo.localPath).readAsBytesSync(), const [3, 2, 1]);
+      },
+    );
+
+    test(
+      '404 on ambiguous delete completes tombstone and purges bytes',
+      () async {
+        final photo = evidence(state: PhotoSyncState.deleted);
+        app.surveys = [baseSurvey(surveyA)];
+        app.photos = [photo];
+        app.queue = [job(QueueOperation.deletePhoto, step: 1, photo: photo.id)];
+        await local.savePhoto(photo);
+        await local.saveQueue(app.queue.single);
+        await local.journal.save(
+          ConstructionJournalEntry(
+            id: 'delete-${photo.id.toLowerCase()}',
+            operation: ConstructionJournalOperation.deletePhoto,
+            state: ConstructionJournalState.queued,
+            surveyId: surveyA.toLowerCase(),
+            photoId: photo.id.toLowerCase(),
+            step: 1,
+            uploadPath: photo.localPath,
+            thumbnailPath: photo.thumbnailPath,
+            sha256: photo.sha256,
+            fileSize: File(photo.localPath).lengthSync(),
+            remotePossible: true,
+            createdAt: epoch,
+          ),
+        );
+        remote.deleteFailure = DioException(
+          requestOptions: RequestOptions(path: '/photo'),
+          response: Response(
+            requestOptions: RequestOptions(path: '/photo'),
+            statusCode: 404,
+          ),
+          type: DioExceptionType.badResponse,
+        );
+
+        await app.synchronize();
+
+        expect(app.queue, isEmpty);
+        expect(app.photos, isEmpty);
+        expect(File(photo.localPath).existsSync(), isFalse);
+        expect(
+          local.journal.find('delete-${photo.id.toLowerCase()}')!.state,
+          ConstructionJournalState.committed,
+        );
+      },
+    );
+
+    for (final status in const [
+      'missing_original',
+      'hash_mismatch',
+      'not_found',
+      'missing_thumbnail',
+      'missing_mapping',
+      'not_verified',
+      'mapping_conflict',
+      'deleted',
+    ]) {
+      test(
+        'verify $status preserves original and follows recovery policy',
+        () async {
+          final photo = evidence(state: PhotoSyncState.uploadedUnverified);
+          app.surveys = [baseSurvey(surveyA)];
+          app.photos = [photo];
+          app.queue = [
+            job(QueueOperation.verifyPhotos, step: 1, photo: photoA),
+          ];
+          remote.verifyStatus = status;
+
+          await app.synchronize();
+
+          expect(File(photo.localPath).existsSync(), isTrue);
+          if (status == 'mapping_conflict') {
+            expect(app.photos.single.syncState, PhotoSyncState.mappingConflict);
+            expect(app.queue.single.requiresReview, isTrue);
+          } else if (status == 'deleted') {
+            expect(
+              app.photos.single.syncState,
+              PhotoSyncState.permanentFailure,
+            );
+            expect(app.queue, isEmpty);
+          } else {
+            expect(app.queue, isNotEmpty);
+            expect(app.queue.any((item) => item.nextAttemptAt != null), isTrue);
+            if (const {
+              'missing_original',
+              'hash_mismatch',
+              'not_found',
+            }.contains(status)) {
+              expect(
+                remote.events,
+                contains('${surveyA.toLowerCase()}:upload:1'),
+              );
+            } else {
+              expect(
+                remote.events,
+                isNot(contains('${surveyA.toLowerCase()}:upload:1')),
+              );
+            }
+          }
+        },
+      );
+    }
+
+    test('structural 409 requires review without a retry loop', () async {
+      app.surveys = [baseSurvey(surveyA), baseSurvey(surveyB)];
+      app.queue = [
+        job(QueueOperation.openStep, step: 1),
+        job(QueueOperation.openStep, survey: surveyB, step: 1),
+      ];
+      remote.structuralOpen.add(surveyA.toLowerCase());
+
+      await app.synchronize();
+
+      final blocked = app.queue.single;
+      expect(blocked.requiresReview, isTrue);
+      expect(blocked.lastErrorCode, 'STRUCTURAL_CONFLICT');
+      expect(app.survey(surveyA).syncState, SyncState.requiresReview);
+      expect(
+        app.queue.any((item) => item.surveyId.toLowerCase() == surveyB),
+        isFalse,
+      );
+    });
+
     test(
       'reconciliation removes an operation already satisfied by server',
       () async {
@@ -676,6 +888,32 @@ void main() {
         await app.synchronize();
         expect(app.queue, isEmpty);
         expect(remote.events, isEmpty);
+      },
+    );
+
+    test(
+      'reconciliation creates missing verify after ambiguous upload',
+      () async {
+        app.surveys = [baseSurvey(surveyA)];
+        app.photos = [evidence(state: PhotoSyncState.uploading)];
+        app.queue = [job(QueueOperation.uploadPhoto, step: 1, photo: photoA)];
+        await local.savePhoto(app.photos.single);
+        await local.saveQueue(app.queue.single);
+        remote.serverPhotos[photoA.toLowerCase()] = {
+          'photo_id': photoA.toLowerCase(),
+          'surveyId': surveyA.toLowerCase(),
+          'integrity_status': 'not_verified',
+        };
+
+        await app.synchronize();
+
+        expect(
+          remote.events,
+          isNot(contains('${surveyA.toLowerCase()}:upload:1')),
+        );
+        expect(remote.events, contains('verify'));
+        expect(app.photos.single.syncState, PhotoSyncState.confirmed);
+        expect(app.queue, isEmpty);
       },
     );
 

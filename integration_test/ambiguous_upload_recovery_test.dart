@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:ddr001_levantamientos/core/config/app_config.dart';
+import 'package:ddr001_levantamientos/core/media/photo_capture_service.dart';
 import 'package:ddr001_levantamientos/core/network/api_client.dart';
 import 'package:ddr001_levantamientos/core/persistence/local_store.dart';
 import 'package:ddr001_levantamientos/core/persistence/uuid_hive_migration.dart';
@@ -91,7 +92,8 @@ class AmbiguousUploadRemote implements ConstructionRemote {
   );
 
   @override
-  Future<Map<String, dynamic>> createSurvey(BaseSurvey survey) async => const {};
+  Future<Map<String, dynamic>> createSurvey(BaseSurvey survey) async =>
+      const {};
   @override
   Future<void> openStep(String survey, int step) async {}
   @override
@@ -146,7 +148,9 @@ void main() {
   testWidgets(
     'timeout after server photo commit never strands media as uploadedUnverified',
     (tester) async {
-      final root = await Directory.systemTemp.createTemp('ambiguous-upload-e2e-');
+      final root = await Directory.systemTemp.createTemp(
+        'ambiguous-upload-e2e-',
+      );
       addTearDown(() async {
         await Hive.close();
         await root.delete(recursive: true);
@@ -200,7 +204,7 @@ void main() {
         surveyId: surveyId,
         localPath: file.path,
         thumbnailPath: file.path,
-        sha256: List.filled(64, 'a').join(),
+        sha256: await sha256File(file),
         capturedAt: DateTime.utc(2026, 8, 30),
         stepNumber: 1,
         location: GeoPoint(
@@ -239,9 +243,14 @@ void main() {
       await app.synchronize();
       expect(remote.uploadCalls, 1);
       expect(remote.serverHasPhoto, isTrue);
-      expect(app.queue, isNotEmpty, reason: 'timeout must preserve durable work');
+      expect(
+        app.queue,
+        isNotEmpty,
+        reason: 'timeout must preserve durable work',
+      );
 
-      app.online = true; // Simulate connectivity returning after process/network loss.
+      app.online =
+          true; // Simulate connectivity returning after process/network loss.
       await app.synchronize();
 
       final current = app.photos.single;

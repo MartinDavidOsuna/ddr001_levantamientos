@@ -521,6 +521,8 @@ class SyncQueueItem {
     this.correctionId,
     this.attempts = 0,
     this.nextAttemptAt,
+    this.requiresReview = false,
+    this.lastErrorCode,
   });
   final String id, surveyId;
   final String? photoId, correctionId;
@@ -529,10 +531,14 @@ class SyncQueueItem {
   final int attempts;
   final DateTime createdAt;
   final DateTime? nextAttemptAt;
+  final bool requiresReview;
+  final String? lastErrorCode;
   SyncQueueItem copyWith({
     int? attempts,
     DateTime? nextAttemptAt,
     bool clearNextAttempt = false,
+    bool? requiresReview,
+    String? lastErrorCode,
   }) => SyncQueueItem(
     id: id,
     surveyId: surveyId,
@@ -545,6 +551,8 @@ class SyncQueueItem {
     nextAttemptAt: clearNextAttempt
         ? null
         : nextAttemptAt ?? this.nextAttemptAt,
+    requiresReview: requiresReview ?? this.requiresReview,
+    lastErrorCode: lastErrorCode ?? this.lastErrorCode,
   );
   SyncQueueItem retry(DateTime now) {
     final seconds = (1 << attempts.clamp(0, 8)) * 2;
@@ -560,6 +568,8 @@ class SyncQueueItem {
       nextAttemptAt: now.add(
         Duration(seconds: seconds + id.hashCode.abs() % 5),
       ),
+      requiresReview: requiresReview,
+      lastErrorCode: lastErrorCode,
     );
   }
 
@@ -573,6 +583,8 @@ class SyncQueueItem {
     'attempts': attempts,
     'createdAt': createdAt.toIso8601String(),
     'nextAttemptAt': nextAttemptAt?.toIso8601String(),
+    'requiresReview': requiresReview,
+    'lastErrorCode': lastErrorCode,
   };
   factory SyncQueueItem.fromJson(Map<String, dynamic> j) => SyncQueueItem(
     id: j['id'] as String,
@@ -586,6 +598,8 @@ class SyncQueueItem {
     nextAttemptAt: j['nextAttemptAt'] == null
         ? null
         : DateTime.parse(j['nextAttemptAt'] as String),
+    requiresReview: j['requiresReview'] as bool? ?? false,
+    lastErrorCode: j['lastErrorCode'] as String?,
   );
 }
 

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/services/app_controller.dart';
+import '../../core/widgets/branded_app_bar_title.dart';
 import 'survey_detail_page.dart';
 
 class NewSurveyPage extends StatefulWidget {
@@ -15,7 +16,7 @@ class _NewSurveyPageState extends State<NewSurveyPage> {
   String? error;
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Nuevo levantamiento')),
+    appBar: AppBar(title: const BrandedAppBarTitle('Nuevo levantamiento')),
     body: Padding(
       padding: const EdgeInsets.all(20),
       child: Column(

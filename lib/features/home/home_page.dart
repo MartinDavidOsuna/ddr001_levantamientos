@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/services/app_controller.dart';
+import '../../core/widgets/branded_app_bar_title.dart';
 import '../../domain/construction/construction_models.dart';
 import '../surveys/new_survey_page.dart';
 import '../resident/resident_review_page.dart';
@@ -13,7 +14,7 @@ class HomePage extends StatelessWidget {
     final app = context.watch<AppController>(),
         reviewer = app.profile?.role.isReviewer ?? false;
     return Scaffold(
-      appBar: AppBar(title: const Text('DDR001 Levantamientos')),
+      appBar: AppBar(title: const BrandedAppBarTitle('DDR001 Levantamientos')),
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
