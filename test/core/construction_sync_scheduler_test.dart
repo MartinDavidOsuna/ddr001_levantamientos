@@ -155,7 +155,7 @@ class FakeRemote implements ConstructionRemote {
   String verifyStatus = 'confirmed';
   ConstructionRole profileRole = ConstructionRole.contractor;
   int fieldLoginAttempts = 0;
-  (String, String, String)? lastFieldIdentity;
+  (String, String, String, String)? lastFieldIdentity;
   SessionKind? logoutKind;
   String? revokedTakeoverToken;
 
@@ -306,9 +306,10 @@ class FakeRemote implements ConstructionRemote {
     required String name,
     required String email,
     required String phone,
+    required String crew,
   }) async {
     fieldLoginAttempts++;
-    lastFieldIdentity = (name, email, phone);
+    lastFieldIdentity = (name, email, phone, crew);
     if (authFailure case final failure?) throw failure;
     return FieldSession(
       sessionId: '00000000-0000-4000-8000-000000000001',
@@ -319,6 +320,7 @@ class FakeRemote implements ConstructionRemote {
       name: name,
       email: email,
       phone: phone,
+      crew: crew,
     );
   }
 
@@ -562,9 +564,11 @@ void main() {
         name: '  María   Residente  ',
         email: ' RESIDENT@Example.COM ',
         phone: '1234567890',
+        crew: ' cuadrilla   norte ',
       );
       expect(error, isNull);
       expect(app.session?.kind, SessionKind.field);
+      expect(app.session?.crew, 'CUADRILLA NORTE');
       expect(app.profile?.role, ConstructionRole.resident);
       expect(app.profile?.role.isReviewer, isTrue);
       expect(remote.fieldLoginAttempts, 1);
@@ -572,6 +576,7 @@ void main() {
         'María Residente',
         'resident@example.com',
         '1234567890',
+        'CUADRILLA NORTE',
       ));
     });
 
@@ -591,6 +596,7 @@ void main() {
         name: 'Usuario',
         email: 'usuario@example.com',
         phone: '1234567890',
+        crew: 'CUADRILLA A',
       );
 
       expect(error, contains('conflicto'));
@@ -620,6 +626,7 @@ void main() {
           name: 'Usuario',
           email: 'usuario@example.com',
           phone: '1234567890',
+          crew: 'CUADRILLA A',
         );
 
         expect(error, contains('Esta instalación'));
