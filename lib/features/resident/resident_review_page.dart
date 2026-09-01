@@ -4,6 +4,7 @@ import '../../core/services/app_controller.dart';
 import '../../core/widgets/branded_app_bar_title.dart';
 import '../../domain/construction/construction_models.dart';
 import '../surveys/survey_detail_page.dart';
+import '../surveys/survey_filters.dart';
 
 class ResidentReviewPage extends StatefulWidget {
   const ResidentReviewPage({super.key});
@@ -13,14 +14,36 @@ class ResidentReviewPage extends StatefulWidget {
 
 class _ResidentReviewPageState extends State<ResidentReviewPage> {
   String search = '';
-  SurveyStatus? filter = SurveyStatus.executed;
+  SurveyListFilter? filter = SurveyListFilter.executed;
+  bool refreshing = false;
+
+  Future<void> _refresh(AppController app, {bool showFeedback = false}) async {
+    if (refreshing) return;
+    setState(() => refreshing = true);
+    try {
+      await app.refreshServer();
+      if (!mounted || !showFeedback) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            app.apiReachable
+                ? 'Revisiones actualizadas.'
+                : 'Sin conexión con el servidor. Se conservan los datos locales.',
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => refreshing = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final app = context.watch<AppController>();
-    final items = app.surveys
+    final items = app.visibleSurveys
         .where(
           (s) =>
-              (filter == null || s.status == filter) &&
+              surveyMatchesFilter(s, filter) &&
               (search.isEmpty ||
                   s.displayIdentifier.toLowerCase().contains(
                     search.toLowerCase(),
@@ -31,12 +54,33 @@ class _ResidentReviewPageState extends State<ResidentReviewPage> {
         )
         .toList();
     return Scaffold(
-      appBar: AppBar(title: const BrandedAppBarTitle('Revisión de base')),
+      appBar: AppBar(
+        title: const BrandedAppBarTitle('Revisión de base'),
+        actions: [
+          TextButton.icon(
+            key: const Key('resident_review_refresh'),
+            style: TextButton.styleFrom(
+              foregroundColor: Theme.of(context).colorScheme.onPrimary,
+            ),
+            onPressed: refreshing
+                ? null
+                : () => _refresh(app, showFeedback: true),
+            icon: refreshing
+                ? const SizedBox.square(
+                    dimension: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.refresh),
+            label: const Text('Actualizar'),
+          ),
+        ],
+      ),
       body: Column(
         children: [
           Padding(
             padding: const EdgeInsets.all(12),
             child: TextField(
+              key: const Key('resident_review_search'),
               onChanged: (v) => setState(() => search = v),
               decoration: const InputDecoration(
                 prefixIcon: Icon(Icons.search),
@@ -44,40 +88,37 @@ class _ResidentReviewPageState extends State<ResidentReviewPage> {
               ),
             ),
           ),
-          DropdownButton<SurveyStatus?>(
-            value: filter,
-            items: [
-              const DropdownMenuItem(value: null, child: Text('Todos')),
-              ...SurveyStatus.values.map(
-                (s) => DropdownMenuItem(
-                  value: s,
-                  child: Text(surveyStatusLabel(s)),
-                ),
-              ),
-            ],
-            onChanged: (v) => setState(() => filter = v),
+          SurveyFilterChips(
+            keyPrefix: 'review_filter',
+            selected: filter,
+            onSelected: (value) => setState(() => filter = value),
           ),
+          const SizedBox(height: 8),
           Expanded(
-            child: ListView(
-              children: items
-                  .map(
-                    (s) => Card(
-                      child: ListTile(
-                        title: Text(s.displayIdentifier),
-                        subtitle: Text(
-                          '${surveyStatusLabel(s.status)} · Etapa ${s.currentStep}/6\n'
-                          'Contratista: ${s.contractorName}',
-                        ),
-                        onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => _ResidentDetail(surveyId: s.id),
+            child: RefreshIndicator(
+              onRefresh: () => _refresh(app),
+              child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                children: items
+                    .map(
+                      (s) => Card(
+                        child: ListTile(
+                          title: Text(s.displayIdentifier),
+                          subtitle: Text(
+                            '${surveyStatusLabel(s.status)} · Etapa ${s.currentStep}/6\n'
+                            'Contratista: ${s.contractorName}',
+                          ),
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => _ResidentDetail(surveyId: s.id),
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                  )
-                  .toList(),
+                    )
+                    .toList(),
+              ),
             ),
           ),
         ],
@@ -86,14 +127,41 @@ class _ResidentReviewPageState extends State<ResidentReviewPage> {
   }
 }
 
-class _ResidentDetail extends StatelessWidget {
+class _ResidentDetail extends StatefulWidget {
   const _ResidentDetail({required this.surveyId});
   final String surveyId;
+
+  @override
+  State<_ResidentDetail> createState() => _ResidentDetailState();
+}
+
+class _ResidentDetailState extends State<_ResidentDetail> {
+  bool requested = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (requested) return;
+    requested = true;
+    final app = context.read<AppController>();
+    if (app.canCurrentSessionViewSurveyId(widget.surveyId) && app.online) {
+      app.loadSurveyDetail(widget.surveyId).catchError((_) {});
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final app = context.watch<AppController>(),
-        survey = app.survey(surveyId),
-        submitting = app.reviewSubmitting(surveyId);
+    final app = context.watch<AppController>();
+    if (!app.canCurrentSessionViewSurveyId(widget.surveyId)) {
+      return Scaffold(
+        appBar: AppBar(title: const BrandedAppBarTitle('Acceso denegado')),
+        body: const Center(
+          child: Text('Este levantamiento no está autorizado.'),
+        ),
+      );
+    }
+    final survey = app.survey(widget.surveyId),
+        submitting = app.reviewSubmitting(widget.surveyId);
     return Scaffold(
       appBar: AppBar(title: BrandedAppBarTitle(survey.displayIdentifier)),
       body: ListView(
@@ -120,6 +188,19 @@ class _ResidentDetail extends StatelessWidget {
           _ReviewValue(
             label: 'ÚLTIMA ACTUALIZACIÓN',
             value: _dateLabel(survey.updatedAt),
+          ),
+          OutlinedButton.icon(
+            key: const Key('review_remote_evidence'),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => SurveyDetailPage(surveyId: survey.id),
+              ),
+            ),
+            icon: const Icon(Icons.photo_library_outlined),
+            label: Text(
+              'Ver etapas y evidencia (${survey.remotePhotos.length} fotos)',
+            ),
           ),
           if (survey.rejectionReason?.isNotEmpty == true)
             _ReviewValue(

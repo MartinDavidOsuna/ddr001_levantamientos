@@ -1,3 +1,6 @@
+import 'dart:io';
+
+import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/services/app_controller.dart';
@@ -5,11 +8,51 @@ import '../../core/widgets/branded_app_bar_title.dart';
 import '../../domain/construction/construction_models.dart';
 import '../../shared/widgets/app_brand_logo.dart';
 
-class ProfilePage extends StatelessWidget {
-  const ProfilePage({super.key});
+typedef DeviceLabelLoader = Future<String> Function();
+
+Future<String> loadCurrentDeviceLabel() async {
+  final deviceInfo = DeviceInfoPlugin();
+  if (Platform.isAndroid) {
+    final info = await deviceInfo.androidInfo;
+    final manufacturer = info.manufacturer.trim();
+    final model = info.model.trim();
+    final hardware = [
+      manufacturer,
+      model,
+    ].where((part) => part.isNotEmpty).join(' ');
+    return '$hardware · Android ${info.version.release.trim()}'.trim();
+  }
+  if (Platform.isIOS) {
+    final info = await deviceInfo.iosInfo;
+    return '${info.name.trim()} ${info.model.trim()} · iOS ${info.systemVersion.trim()}'
+        .trim();
+  }
+  return '${Platform.operatingSystem} ${Platform.operatingSystemVersion}'
+      .trim();
+}
+
+class ProfilePage extends StatefulWidget {
+  const ProfilePage({
+    super.key,
+    this.deviceLabelLoader = loadCurrentDeviceLabel,
+  });
+
+  final DeviceLabelLoader deviceLabelLoader;
+
+  @override
+  State<ProfilePage> createState() => _ProfilePageState();
+}
+
+class _ProfilePageState extends State<ProfilePage> {
+  late final Future<String> deviceLabel = widget.deviceLabelLoader();
+
   @override
   Widget build(BuildContext context) {
     final app = context.watch<AppController>(), profile = app.profile;
+    final profileCrew = profile?.crew.trim() ?? '';
+    final crew = profileCrew.isNotEmpty
+        ? profileCrew
+        : app.session?.crew.trim() ?? '';
     return Scaffold(
       appBar: AppBar(title: const BrandedAppBarTitle('Perfil')),
       body: ListView(
@@ -54,6 +97,11 @@ class ProfilePage extends StatelessWidget {
                   subtitle: Text(profile?.phone ?? app.session?.phone ?? ''),
                 ),
                 ListTile(
+                  leading: const Icon(Icons.groups),
+                  title: const Text('Empresa'),
+                  subtitle: Text(crew.isEmpty ? 'No registrada' : crew),
+                ),
+                ListTile(
                   leading: const Icon(Icons.badge),
                   title: const Text('Rol'),
                   subtitle: Text(profile?.role.displayLabel ?? 'Contratista'),
@@ -61,22 +109,35 @@ class ProfilePage extends StatelessWidget {
                 ListTile(
                   leading: const Icon(Icons.phone_android),
                   title: const Text('Dispositivo'),
-                  subtitle: Text(app.session?.installationId ?? ''),
+                  subtitle: FutureBuilder<String>(
+                    future: deviceLabel,
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState != ConnectionState.done) {
+                        return const Text('Consultando…');
+                      }
+                      final label = snapshot.data?.trim() ?? '';
+                      return Text(
+                        snapshot.hasError || label.isEmpty
+                            ? 'No disponible'
+                            : label,
+                      );
+                    },
+                  ),
                 ),
                 ListTile(
                   leading: const Icon(Icons.sync),
                   title: const Text('Sincronización'),
                   subtitle: Text(
-                    app.queue.isEmpty
+                    app.visibleQueue.isEmpty
                         ? 'Sincronizado'
-                        : '${app.queue.length} elementos pendientes',
+                        : '${app.visibleQueue.length} elementos pendientes',
                   ),
                 ),
                 ListTile(
                   leading: const Icon(Icons.info),
                   title: const Text('Versión'),
                   subtitle: Text(
-                    '${app.packageInfo.version}+${app.packageInfo.buildNumber} · ${app.config.environment}',
+                    '${app.packageInfo.version}+${app.packageInfo.buildNumber}',
                   ),
                 ),
               ],
@@ -86,7 +147,7 @@ class ProfilePage extends StatelessWidget {
           OutlinedButton.icon(
             key: const Key('logout'),
             onPressed: () async {
-              if (app.queue.isNotEmpty) {
+              if (app.visibleQueue.isNotEmpty) {
                 final proceed =
                     await showDialog<bool>(
                       context: context,

@@ -1,5 +1,5 @@
 import 'package:ddr001_levantamientos/domain/construction/construction_models.dart';
-import 'package:ddr001_levantamientos/features/surveys/surveys_page.dart';
+import 'package:ddr001_levantamientos/features/surveys/survey_filters.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -167,16 +167,59 @@ void main() {
     );
     expect(BaseSurvey.fromJson(survey.toJson()).corrections.single.round, 2);
   });
+  test('construction profile reads crew and tolerates a legacy omission', () {
+    final profile = ConstructionProfile.fromJson({
+      'userId': '00000000-0000-4000-8000-000000000001',
+      'displayName': 'Usuario',
+      'email': 'usuario@example.com',
+      'phone': '1234567890',
+      'crew': 'CUADRILLA NORTE',
+      'constructionRole': 'contractor',
+    });
+    expect(profile.crew, 'CUADRILLA NORTE');
+    expect(
+      ConstructionProfile.fromJson({
+        'userId': '00000000-0000-4000-8000-000000000001',
+        'constructionRole': 'contractor',
+      }).crew,
+      isEmpty,
+    );
+  });
+  test('survey owner UUID is canonical and legacy omission stays unknown', () {
+    final owned = _survey(contractorUserId: 'USER-A');
+    expect(BaseSurvey.fromJson(owned.toJson()).contractorUserId, 'user-a');
+    final legacy = owned.toJson()..remove('contractorUserId');
+    expect(BaseSurvey.fromJson(legacy).contractorUserId, isNull);
+  });
+
+  test('remote evidence metadata round-trips without local capture fields', () {
+    final photo = RemoteConstructionPhoto.fromWire('SURVEY', {
+      'photo_id': 'PHOTO',
+      'photo_context': 'correction',
+      'correction_round': 2,
+      'photo_purpose': 'west',
+      'captured_at': DateTime.utc(2026).toIso8601String(),
+      'upload_status': 'verified',
+      'integrity_status': 'confirmed',
+    });
+    final restored = RemoteConstructionPhoto.fromJson(photo.toJson());
+    expect(restored.id, 'photo');
+    expect(restored.surveyId, 'survey');
+    expect(restored.correctionRound, 2);
+    expect(restored.purpose, PhotoPurpose.west);
+  });
 }
 
 BaseSurvey _survey({
   GeoPoint? canonical,
   List<CorrectionRound> corrections = const [],
   SurveyStatus status = SurveyStatus.created,
+  String? contractorUserId,
 }) => BaseSurvey(
   id: 's',
   displayIdentifier: 'Losa 1',
   contractorName: 'A',
+  contractorUserId: contractorUserId,
   createdAt: DateTime.utc(2026),
   updatedAt: DateTime.utc(2026),
   status: status,

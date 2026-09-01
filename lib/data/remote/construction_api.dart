@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 // ConstructionApi intentionally keeps its compact one-line endpoint methods.
 // ignore_for_file: annotate_overrides
 import 'package:device_info_plus/device_info_plus.dart';
@@ -17,14 +18,12 @@ Map<String, dynamic> surveyCreatePayload(BaseSurvey survey) => {
 
 const constructionCausalIdempotencyVersion = 'causal-v1';
 const fieldClientApp = 'ddr001_levantamientos';
-// The unchanged legacy Field endpoint requires this transport attribute. It is
-// not user-selectable, persisted, displayed, or used by Construction features.
-const _legacyFieldSessionScope = 'DDR001 LEVANTAMIENTOS';
 
 Map<String, dynamic> fieldSessionStartPayload({
   required String name,
   required String email,
   required String phone,
+  required String crew,
   required String installationId,
   required String platform,
   required String manufacturer,
@@ -35,7 +34,7 @@ Map<String, dynamic> fieldSessionStartPayload({
   'name': name.trim().replaceAll(RegExp(r'\s+'), ' '),
   'email': email.trim().toLowerCase(),
   'phone': phone.trim(),
-  'crew': _legacyFieldSessionScope,
+  'crew': crew.trim().replaceAll(RegExp(r'\s+'), ' ').toUpperCase(),
   'client_app': fieldClientApp,
   'device': {
     'installationId': installationId,
@@ -52,6 +51,7 @@ abstract interface class ConstructionRemote {
     required String name,
     required String email,
     required String phone,
+    required String crew,
   });
   Future<void> revokeExisting(String takeoverToken);
   Future<ConstructionProfile> profile();
@@ -69,6 +69,11 @@ abstract interface class ConstructionRemote {
     String? status,
   });
   Future<Map<String, dynamic>> detail(String surveyId);
+  Future<Uint8List> photoContent(
+    String surveyId,
+    String photoId, {
+    required bool original,
+  });
   Future<void> residentUpdate(String id, Map<String, dynamic> values);
   Future<void> residentAction(
     String id,
@@ -97,6 +102,7 @@ class ConstructionApi implements ConstructionRemote {
     required String name,
     required String email,
     required String phone,
+    required String crew,
   }) async {
     final installation = await sessions.installationId();
     var manufacturer = 'Apple',
@@ -119,6 +125,7 @@ class ConstructionApi implements ConstructionRemote {
         name: name,
         email: email,
         phone: phone,
+        crew: crew,
         installationId: installation,
         platform: Platform.operatingSystem,
         manufacturer: manufacturer,
@@ -129,6 +136,10 @@ class ConstructionApi implements ConstructionRemote {
       options: Options(extra: {'skipAuth': true}),
     );
     final j = response.data ?? const {};
+    final normalizedCrew = crew
+        .trim()
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .toUpperCase();
     final value = FieldSession(
       sessionId: canonicalUuid('${j['sessionId']}'),
       userId: canonicalUuid('${j['userId']}'),
@@ -138,6 +149,7 @@ class ConstructionApi implements ConstructionRemote {
       name: name.trim(),
       email: email.trim().toLowerCase(),
       phone: phone.trim(),
+      crew: normalizedCrew,
     );
     await sessions.save(value);
     return value;
@@ -302,6 +314,19 @@ class ConstructionApi implements ConstructionRemote {
         '/construction/base-surveys/${canonicalUuid(surveyId)}',
       )).data ??
       const {};
+
+  Future<Uint8List> photoContent(
+    String surveyId,
+    String photoId, {
+    required bool original,
+  }) async {
+    final response = await client.dio.get<List<int>>(
+      '/construction/base-surveys/${canonicalUuid(surveyId)}/photos/${canonicalUuid(photoId)}/content',
+      queryParameters: {'size': original ? 'original' : 'thumb'},
+      options: Options(responseType: ResponseType.bytes),
+    );
+    return Uint8List.fromList(response.data ?? const []);
+  }
 
   Future<void> residentUpdate(String id, Map<String, dynamic> values) =>
       client.dio.patch<void>(

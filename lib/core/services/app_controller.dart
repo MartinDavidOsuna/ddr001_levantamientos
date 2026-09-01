@@ -48,9 +48,46 @@ class AppController extends ChangeNotifier {
   bool transportAvailable = true;
   bool apiReachable = true;
   bool get degraded => transportAvailable && !apiReachable;
+  int get unownedPendingCount => queue
+      .where((item) => _surveyAny(item.surveyId)?.contractorUserId == null)
+      .length;
   String? reviewMutationSurveyId;
   String? message;
   String? pendingTakeoverToken;
+  final Map<String, Uint8List> _remotePhotoBytes = {};
+
+  String? get currentUserId => canonicalUuidOrNull(
+    profile?.userId.isNotEmpty == true ? profile!.userId : session?.userId,
+  );
+
+  bool get canViewAllSurveys => profile?.role.canViewAllSurveys ?? false;
+
+  bool canCurrentSessionViewSurvey(BaseSurvey value) {
+    if (session == null) return false;
+    if (canViewAllSurveys) return true;
+    final owner = canonicalUuidOrNull(value.contractorUserId);
+    final user = currentUserId;
+    return owner != null && user != null && uuidEquals(owner, user);
+  }
+
+  bool canCurrentSessionViewSurveyId(String surveyId) {
+    final value = _surveyAny(surveyId);
+    return value != null && canCurrentSessionViewSurvey(value);
+  }
+
+  List<BaseSurvey> get visibleSurveys =>
+      surveys.where(canCurrentSessionViewSurvey).toList(growable: false);
+
+  List<SyncQueueItem> get visibleQueue => (profile?.role.isReviewer ?? false)
+      ? const []
+      : queue
+            .where((item) => canCurrentSessionViewSurveyId(item.surveyId))
+            .toList(growable: false);
+
+  List<SyncQueueItem> get _eligibleQueue {
+    if (profile?.role.isReviewer ?? false) return const [];
+    return visibleQueue;
+  }
 
   bool reviewSubmitting(String surveyId) =>
       reviewMutationSurveyId != null &&
@@ -178,7 +215,9 @@ class AppController extends ChangeNotifier {
     if (session != null) {
       try {
         profile = await remote.profile();
+        await _adoptProfileCrew();
         await local.saveProfile(profile!);
+        _reportUnownedPendingWork();
         online = true;
         unawaited(refreshServer());
         unawaited(synchronize());
@@ -403,23 +442,32 @@ class AppController extends ChangeNotifier {
     required String name,
     required String email,
     required String phone,
+    required String crew,
   }) async {
     busy = true;
     message = null;
     pendingTakeoverToken = null;
     notifyListeners();
     try {
-      final identity = FieldIdentity(name: name, email: email, phone: phone);
+      final identity = FieldIdentity(
+        name: name,
+        email: email,
+        phone: phone,
+        crew: crew,
+      );
       final validation = identity.validate();
       if (validation != null) return validation;
       session = await remote.fieldLogin(
         name: identity.normalizedName,
         email: identity.normalizedEmail,
         phone: identity.normalizedPhone,
+        crew: identity.normalizedCrew,
       );
       try {
         profile = await remote.profile();
+        await _adoptProfileCrew();
         await local.saveProfile(profile!);
+        _reportUnownedPendingWork();
       } catch (_) {
         final incomplete = session;
         if (incomplete != null) {
@@ -430,7 +478,7 @@ class AppController extends ChangeNotifier {
         rethrow;
       }
       online = true;
-      if (profile!.role.isReviewer) unawaited(refreshServer());
+      unawaited(refreshServer());
       return null;
     } on DioException catch (error) {
       final data = error.response?.data;
@@ -480,7 +528,7 @@ class AppController extends ChangeNotifier {
 
   bool duplicateKnown(String identifier) {
     final normalized = normalizeIdentifier(identifier);
-    return surveys.any(
+    return visibleSurveys.any(
       (s) => normalizeIdentifier(s.displayIdentifier) == normalized,
     );
   }
@@ -505,6 +553,7 @@ class AppController extends ChangeNotifier {
           ? null
           : cleanAccount,
       contractorName: profile?.displayName ?? session?.name ?? '',
+      contractorUserId: currentUserId,
       createdAt: now,
       updatedAt: now,
       status: SurveyStatus.created,
@@ -527,16 +576,43 @@ class AppController extends ChangeNotifier {
     return survey;
   }
 
-  BaseSurvey survey(String id) =>
-      surveys.firstWhere((s) => uuidEquals(s.id, id));
+  BaseSurvey? _surveyAny(String id) =>
+      surveys.where((s) => uuidEquals(s.id, id)).firstOrNull;
+
+  BaseSurvey survey(String id) {
+    final value = _surveyAny(id);
+    if (value == null) throw StateError('Levantamiento no encontrado.');
+    if (session != null && !canCurrentSessionViewSurvey(value)) {
+      throw StateError('No tienes acceso a este levantamiento.');
+    }
+    return value;
+  }
+
   List<ConstructionPhoto> photosForStep(String surveyId, int step) => photos
       .where(
         (p) =>
+            (session == null || canCurrentSessionViewSurveyId(p.surveyId)) &&
             uuidEquals(p.surveyId, surveyId) &&
             p.stepNumber == step &&
             p.syncState != PhotoSyncState.deleted,
       )
       .toList();
+
+  List<RemoteConstructionPhoto> remotePhotosForStep(String surveyId, int step) {
+    if (!canCurrentSessionViewSurveyId(surveyId)) return const [];
+    return survey(surveyId).remotePhotos
+        .where((photo) => photo.context == 'step' && photo.stepNumber == step)
+        .toList(growable: false);
+  }
+
+  int photoCountForStep(String surveyId, int step) => {
+    ...photosForStep(surveyId, step).map((photo) => canonicalUuid(photo.id)),
+    ...remotePhotosForStep(
+      surveyId,
+      step,
+    ).map((photo) => canonicalUuid(photo.id)),
+  }.length;
+
   Future<void> updateComment(String surveyId, int step, String comment) async {
     final s = survey(surveyId), steps = [...s.steps], current = steps[step - 1];
     if (current.state != StepState.open) {
@@ -1022,10 +1098,35 @@ class AppController extends ChangeNotifier {
   List<ConstructionPhoto> photosForCorrection(String correctionId) => photos
       .where(
         (p) =>
+            (session == null || canCurrentSessionViewSurveyId(p.surveyId)) &&
             uuidEquals(p.correctionId, correctionId) &&
             p.syncState != PhotoSyncState.deleted,
       )
       .toList();
+
+  List<RemoteConstructionPhoto> remotePhotosForCorrection(
+    String surveyId,
+    int correctionRound,
+  ) {
+    if (!canCurrentSessionViewSurveyId(surveyId)) return const [];
+    return survey(surveyId).remotePhotos
+        .where(
+          (photo) =>
+              photo.context == 'correction' &&
+              photo.correctionRound == correctionRound,
+        )
+        .toList(growable: false);
+  }
+
+  int photoCountForCorrection(String surveyId, CorrectionRound correction) => {
+    ...photosForCorrection(
+      correction.id,
+    ).map((photo) => canonicalUuid(photo.id)),
+    ...remotePhotosForCorrection(
+      surveyId,
+      correction.round,
+    ).map((photo) => canonicalUuid(photo.id)),
+  }.length;
 
   Future<void> captureCorrectionPhoto(
     String surveyId,
@@ -1130,23 +1231,25 @@ class AppController extends ChangeNotifier {
 
   Future<void> synchronize({bool force = false}) async {
     if (syncing || session == null || (!online && !force)) return;
+    if (profile?.role.isReviewer ?? false) return;
     if (force && !online) {
       online = true;
       notifyListeners();
     }
     if (force) {
-      final delayed = queue
+      final delayed = _eligibleQueue
           .where((item) => item.nextAttemptAt != null)
           .toList();
       if (delayed.isNotEmpty) {
+        final delayedIds = delayed.map((item) => item.id).toSet();
         queue = queue
             .map(
-              (item) => item.nextAttemptAt == null
-                  ? item
-                  : item.copyWith(clearNextAttempt: true),
+              (item) => delayedIds.contains(item.id)
+                  ? item.copyWith(clearNextAttempt: true)
+                  : item,
             )
             .toList();
-        for (final item in queue.where(
+        for (final item in _eligibleQueue.where(
           (candidate) => delayed.any((previous) => previous.id == candidate.id),
         )) {
           await local.saveQueue(item);
@@ -1157,7 +1260,7 @@ class AppController extends ChangeNotifier {
     notifyListeners();
     try {
       try {
-        await _reconcilePendingSurveys();
+        await _reconcilePendingSurveys(_eligibleQueue);
       } catch (error) {
         if (error is DioException && error.response?.statusCode != 401) {
           online = false;
@@ -1170,8 +1273,16 @@ class AppController extends ChangeNotifier {
         }
         return;
       }
-      while (online && queue.isNotEmpty) {
-        final ready = _scheduler.readyRound(queue, photos, DateTime.now());
+      while (online && _eligibleQueue.isNotEmpty) {
+        final eligible = _eligibleQueue;
+        final eligiblePhotos = photos
+            .where((photo) => canCurrentSessionViewSurveyId(photo.surveyId))
+            .toList(growable: false);
+        final ready = _scheduler.readyRound(
+          eligible,
+          eligiblePhotos,
+          DateTime.now(),
+        );
         if (ready.isEmpty) {
           _logBlockedQueue(DateTime.now());
           break;
@@ -1211,7 +1322,9 @@ class AppController extends ChangeNotifier {
           }
         }
         if (!progressed &&
-            _scheduler.readyRound(queue, photos, DateTime.now()).isEmpty) {
+            _scheduler
+                .readyRound(_eligibleQueue, eligiblePhotos, DateTime.now())
+                .isEmpty) {
           _logBlockedQueue(DateTime.now());
           break;
         }
@@ -1223,8 +1336,10 @@ class AppController extends ChangeNotifier {
     }
   }
 
-  Future<void> _reconcilePendingSurveys() async {
-    final surveyIds = queue.map((item) => canonicalUuid(item.surveyId)).toSet();
+  Future<void> _reconcilePendingSurveys(List<SyncQueueItem> eligible) async {
+    final surveyIds = eligible
+        .map((item) => canonicalUuid(item.surveyId))
+        .toSet();
     for (final surveyId in surveyIds) {
       Map<String, dynamic> detail;
       try {
@@ -1256,7 +1371,7 @@ class AppController extends ChangeNotifier {
           .where((candidate) => uuidEquals(candidate.id, surveyId))
           .firstOrNull;
       if (localSurvey != null) {
-        final dependentSteps = queue
+        final dependentSteps = eligible
             .where(
               (item) =>
                   uuidEquals(item.surveyId, surveyId) &&
@@ -1279,7 +1394,7 @@ class AppController extends ChangeNotifier {
         }
       }
       final satisfied = <SyncQueueItem>[];
-      for (final item in queue.where(
+      for (final item in eligible.where(
         (candidate) => uuidEquals(candidate.surveyId, surveyId),
       )) {
         var done = item.operation == QueueOperation.createSurvey;
@@ -1492,7 +1607,7 @@ class AppController extends ChangeNotifier {
   }
 
   void _scheduleNextAttempt() {
-    final next = queue
+    final next = _eligibleQueue
         .map((item) => item.nextAttemptAt)
         .whereType<DateTime>()
         .where((date) => date.isAfter(DateTime.now()))
@@ -1513,8 +1628,12 @@ class AppController extends ChangeNotifier {
 
   void _logBlockedQueue(DateTime now) {
     if (!kDebugMode) return;
-    for (final item in queue) {
-      final state = _scheduler.readiness(item, queue, photos, now);
+    final eligible = _eligibleQueue;
+    final eligiblePhotos = photos
+        .where((photo) => canCurrentSessionViewSurveyId(photo.surveyId))
+        .toList(growable: false);
+    for (final item in eligible) {
+      final state = _scheduler.readiness(item, eligible, eligiblePhotos, now);
       if (!state.isReady) {
         _logQueue(item, ready: false, dependency: state.dependency);
       }
@@ -1692,10 +1811,14 @@ class AppController extends ChangeNotifier {
       );
       for (final row in rows) {
         final id = canonicalUuid('${row['survey_id'] ?? row['surveyId']}');
+        final remoteOwner = _ownerFromServerRow(row);
         final index = surveys.indexWhere((s) => uuidEquals(s.id, id));
         if (index >= 0) {
           final localSurvey = surveys[index],
-              wireStatus = _status('${row['status']}');
+              wireStatus = _status('${row['status']}'),
+              hasPendingLocalState =
+                  localSurvey.syncState != SyncState.synchronized ||
+                  queue.any((item) => uuidEquals(item.surveyId, id));
           var corrections = localSurvey.corrections;
           if (wireStatus == SurveyStatus.rejected && corrections.isEmpty) {
             final detail = await remote.detail(id);
@@ -1717,14 +1840,16 @@ class AppController extends ChangeNotifier {
             accountNumber: mergeAccountNumber(localSurvey.accountNumber, row),
             contractorName:
                 '${row['contractor_name'] ?? row['contractorName'] ?? localSurvey.contractorName}',
-            status: wireStatus,
+            contractorUserId: remoteOwner,
+            status: hasPendingLocalState ? localSurvey.status : wireStatus,
             rejectionReason: row['rejection_reason']?.toString(),
-            syncState: localSurvey.syncState == SyncState.requiresReview
-                ? SyncState.requiresReview
+            syncState: hasPendingLocalState
+                ? localSurvey.syncState
                 : SyncState.synchronized,
-            currentStep:
-                (row['current_step'] as num?)?.toInt() ??
-                localSurvey.currentStep,
+            currentStep: _newestStep(
+              localSurvey.currentStep,
+              (row['current_step'] as num?)?.toInt(),
+            ),
             corrections: corrections,
           );
           await local.saveSurvey(surveys[index]);
@@ -1742,6 +1867,7 @@ class AppController extends ChangeNotifier {
                 row['accountNumber']?.toString(),
             contractorName:
                 '${row['contractor_name'] ?? row['contractorName'] ?? ''}',
+            contractorUserId: remoteOwner,
             createdAt: DateTime.tryParse('${row['created_at'] ?? ''}') ?? now,
             updatedAt: now,
             status: _status('${row['status']}'),
@@ -1783,6 +1909,142 @@ class AppController extends ChangeNotifier {
       apiReachable = false;
     }
     notifyListeners();
+  }
+
+  String? _ownerFromServerRow(Map<String, dynamic> row) {
+    final explicit = canonicalUuidOrNull(
+      row['contractor_user_id']?.toString() ??
+          row['contractorUserId']?.toString(),
+    );
+    if (explicit != null) return explicit;
+    // The contractor list is server-filtered by the authenticated UUID, so
+    // membership itself is authoritative. Reviewer responses must carry the
+    // explicit owner and are never guessed.
+    return canViewAllSurveys ? null : currentUserId;
+  }
+
+  Future<void> loadSurveyDetail(String surveyId) async {
+    final current = survey(surveyId);
+    final detail = await remote.detail(current.id);
+    final wireOwner = _ownerFromServerRow(detail);
+    if (!canViewAllSurveys &&
+        wireOwner != null &&
+        !uuidEquals(wireOwner, currentUserId)) {
+      throw StateError('No tienes acceso a este levantamiento.');
+    }
+    final remotePhotos = (detail['photos'] as List? ?? const [])
+        .whereType<Map>()
+        .map((row) => Map<String, dynamic>.from(row))
+        .where((row) => row['deleted_at'] == null && row['deletedAt'] == null)
+        .map((row) => RemoteConstructionPhoto.fromWire(current.id, row))
+        .toList(growable: false);
+    final wireSteps = (detail['steps'] as List? ?? const [])
+        .whereType<Map>()
+        .map((row) => Map<String, dynamic>.from(row))
+        .toList(growable: false);
+    final wireCorrections = (detail['corrections'] as List? ?? const [])
+        .whereType<Map>()
+        .map((row) => Map<String, dynamic>.from(row))
+        .toList(growable: false);
+    final pending =
+        current.syncState != SyncState.synchronized ||
+        queue.any((item) => uuidEquals(item.surveyId, current.id));
+    final steps = List.generate(6, (index) {
+      final number = index + 1;
+      final localStep = current.steps[index];
+      final row = wireSteps
+          .where(
+            (candidate) =>
+                (candidate['step_number'] as num?)?.toInt() == number,
+          )
+          .firstOrNull;
+      if (row == null || pending) return localStep;
+      final status = '${row['status']}';
+      return localStep.copyWith(
+        state: status == 'completed'
+            ? StepState.completedServer
+            : status == 'open'
+            ? StepState.open
+            : StepState.locked,
+        comment: row['comment']?.toString(),
+      );
+    });
+    final corrections = wireCorrections
+        .map((row) {
+          final round = (row['round_number'] as num?)?.toInt() ?? 0;
+          return CorrectionRound(
+            id: canonicalUuid('${row['correction_id']}'),
+            round: round,
+            state: '${row['status']}' == 'completed'
+                ? StepState.completedServer
+                : StepState.open,
+            comment: row['comment']?.toString(),
+            photoIds: remotePhotos
+                .where((photo) => photo.correctionRound == round)
+                .map((photo) => photo.id)
+                .toList(growable: false),
+          );
+        })
+        .toList(growable: false);
+    final updated = current.copyWith(
+      contractorUserId: wireOwner,
+      contractorName:
+          '${detail['contractor_name'] ?? detail['contractorName'] ?? current.contractorName}',
+      accountNumber: mergeAccountNumber(current.accountNumber, detail),
+      status: pending ? current.status : _status('${detail['status']}'),
+      currentStep: pending
+          ? current.currentStep
+          : (detail['current_step'] as num?)?.toInt(),
+      steps: steps,
+      corrections: pending && corrections.isEmpty
+          ? current.corrections
+          : corrections,
+      remotePhotos: remotePhotos,
+      updatedAt:
+          DateTime.tryParse('${detail['updated_at'] ?? detail['updatedAt']}') ??
+          current.updatedAt,
+    );
+    await _replaceSurvey(updated);
+  }
+
+  Future<Uint8List> remotePhotoBytes(
+    RemoteConstructionPhoto photo, {
+    required bool original,
+  }) async {
+    if (!canCurrentSessionViewSurveyId(photo.surveyId)) {
+      throw StateError('No tienes acceso a esta fotografía.');
+    }
+    final key = '${photo.id}:${original ? 'original' : 'thumb'}';
+    final cached = _remotePhotoBytes[key];
+    if (cached != null) return cached;
+    final bytes = await remote.photoContent(
+      photo.surveyId,
+      photo.id,
+      original: original,
+    );
+    _remotePhotoBytes[key] = bytes;
+    return bytes;
+  }
+
+  Future<void> _adoptProfileCrew() async {
+    final current = session;
+    final profileCrew = profile?.crew.trim() ?? '';
+    if (current == null ||
+        current.kind != SessionKind.field ||
+        profileCrew.isEmpty ||
+        current.crew == profileCrew) {
+      return;
+    }
+    session = current.copyWith(crew: profileCrew);
+    await sessions.save(session!);
+  }
+
+  void _reportUnownedPendingWork() {
+    if (profile?.role == ConstructionRole.contractor &&
+        unownedPendingCount > 0) {
+      message =
+          'Hay operaciones legacy con propietario desconocido. Se conservaron sin enviar para revisión.';
+    }
   }
 
   SurveyStatus _status(String value) => switch (value) {
@@ -1847,3 +2109,6 @@ String? mergeAccountNumber(
     serverRow['account_number']?.toString() ??
     serverRow['accountNumber']?.toString() ??
     localAccount;
+
+int _newestStep(int localStep, int? remoteStep) =>
+    remoteStep != null && remoteStep > localStep ? remoteStep : localStep;

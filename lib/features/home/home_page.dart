@@ -43,7 +43,7 @@ class HomePage extends StatelessWidget {
               key: const Key('my_surveys_action'),
               icon: Icons.list_alt,
               title: 'MIS LEVANTAMIENTOS',
-              subtitle: '${app.surveys.length} guardados en este dispositivo',
+              subtitle: '${app.visibleSurveys.length} levantamientos propios',
               onTap: onSurveysTap ?? () {},
             ),
           ] else ...[
@@ -68,6 +68,17 @@ class HomePage extends StatelessWidget {
             ),
           ],
           const SizedBox(height: 20),
+          if (app.unownedPendingCount > 0 && !reviewer)
+            Card(
+              color: Theme.of(context).colorScheme.errorContainer,
+              child: ListTile(
+                leading: const Icon(Icons.warning_amber),
+                title: const Text('Pendientes legacy protegidos'),
+                subtitle: Text(
+                  '${app.unownedPendingCount} operaciones se conservaron sin enviar porque su propietario no está identificado.',
+                ),
+              ),
+            ),
           Card(
             child: ListTile(
               leading: _SyncStatusIcon(
@@ -78,12 +89,14 @@ class HomePage extends StatelessWidget {
                 app.syncing
                     ? 'Sincronizando'
                     : app.online
-                    ? app.queue.isEmpty
+                    ? app.visibleQueue.isEmpty
                           ? 'Sincronizado'
                           : 'Información pendiente'
                     : 'Sin conexión',
               ),
-              subtitle: Text('${app.queue.length} operaciones pendientes'),
+              subtitle: Text(
+                '${app.visibleQueue.length} operaciones pendientes',
+              ),
               trailing: IconButton(
                 tooltip: 'Intentar sincronizar',
                 onPressed: app.session != null && !app.syncing

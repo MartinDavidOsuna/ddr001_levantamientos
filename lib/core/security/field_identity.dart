@@ -5,15 +5,19 @@ class FieldIdentity {
     required this.name,
     required this.email,
     required this.phone,
+    required this.crew,
   });
 
   final String name;
   final String email;
   final String phone;
+  final String crew;
 
   String get normalizedName => name.trim().replaceAll(RegExp(r'\s+'), ' ');
   String get normalizedEmail => email.trim().toLowerCase();
   String get normalizedPhone => phone.trim();
+  String get normalizedCrew =>
+      crew.trim().replaceAll(RegExp(r'\s+'), ' ').toUpperCase();
 
   String? validate() {
     if (normalizedName.length < 3) {
@@ -24,6 +28,9 @@ class FieldIdentity {
     }
     if (!RegExp(r'^\d{10}$').hasMatch(normalizedPhone)) {
       return 'El teléfono debe contener exactamente 10 dígitos.';
+    }
+    if (normalizedCrew.isEmpty || normalizedCrew.length > 180) {
+      return 'Ingresa una empresa válida.';
     }
     return null;
   }

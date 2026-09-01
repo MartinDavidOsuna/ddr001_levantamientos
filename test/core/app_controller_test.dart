@@ -62,6 +62,17 @@ void main() {
       phone: '1234567890',
       role: ConstructionRole.contractor,
     );
+    app.session = const FieldSession(
+      sessionId: 'session',
+      userId: 'u',
+      accessToken: 'token',
+      refreshToken: 'refresh',
+      installationId: 'installation',
+      name: 'Contratista',
+      email: 'a@b.mx',
+      phone: '1234567890',
+    );
+    app.online = false;
   });
   tearDown(() async {
     await Hive.close();

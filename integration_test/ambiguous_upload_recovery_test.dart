@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:ddr001_levantamientos/core/config/app_config.dart';
 import 'package:ddr001_levantamientos/core/media/photo_capture_service.dart';
@@ -73,6 +74,13 @@ class AmbiguousUploadRemote implements ConstructionRemote {
   };
 
   @override
+  Future<Uint8List> photoContent(
+    String surveyId,
+    String photoId, {
+    required bool original,
+  }) async => Uint8List(0);
+
+  @override
   Future<Map<String, dynamic>> verify(List<String> ids) async {
     verifyCalls++;
     return {
@@ -135,6 +143,7 @@ class AmbiguousUploadRemote implements ConstructionRemote {
     required String name,
     required String email,
     required String phone,
+    required String crew,
   }) => throw UnsupportedError('not used');
   @override
   Future<void> logout(FieldSession session) async {}
@@ -183,6 +192,7 @@ void main() {
       final file = File('${root.path}/photo.jpg')..writeAsBytesSync([1, 2, 3]);
       final survey = BaseSurvey(
         id: surveyId,
+        contractorUserId: '10000000-0000-4000-8000-000000000002',
         displayIdentifier: 'E2E ambiguous upload',
         contractorName: 'E2E',
         createdAt: DateTime.utc(2026, 8, 30),
