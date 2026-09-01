@@ -1,10 +1,11 @@
+:setvar RuntimePassword "<RUNTIME_PASSWORD_FROM_SECRET_MANAGER>"
 USE [master];
 SET NOCOUNT ON;
 IF CONVERT(sysname,SERVERPROPERTY('ServerName'))<>N'WIN-5RQE8N8NQ9V' THROW 51070,'STOP: servidor incorrecto.',1;
 IF DB_ID(N'DDR001_Hidrantes_TEST') IS NULL THROW 51071,'STOP: TEST no existe.',1;
-IF N'Agrienlace2001!' LIKE N'<%>' THROW 51072,'STOP: sustituya <RUNTIME_PASSWORD>.',1;
+IF N'$(RuntimePassword)' LIKE N'<%>' THROW 51072,'STOP: proporcione RuntimePassword mediante sqlcmd -v.',1;
 IF SUSER_ID(N'DDR001_Levantamientos_TEST_Runtime') IS NOT NULL THROW 51073,'STOP: login Runtime ya existe; no se reemplazó.',1;
-CREATE LOGIN [DDR001_Levantamientos_TEST_Runtime] WITH PASSWORD=N'Agrienlace2001!',DEFAULT_DATABASE=[DDR001_Hidrantes_TEST],CHECK_POLICY=ON,CHECK_EXPIRATION=OFF;
+CREATE LOGIN [DDR001_Levantamientos_TEST_Runtime] WITH PASSWORD=N'$(RuntimePassword)',DEFAULT_DATABASE=[DDR001_Hidrantes_TEST],CHECK_POLICY=ON,CHECK_EXPIRATION=OFF;
 DENY VIEW ANY DATABASE TO [DDR001_Levantamientos_TEST_Runtime];
 
 USE [DDR001_Hidrantes_TEST];
