@@ -522,6 +522,7 @@ class AppController extends ChangeNotifier {
     surveys = [survey, ...surveys];
     await local.saveSurvey(survey);
     await _enqueue(survey.id, QueueOperation.createSurvey);
+    await _enqueue(survey.id, QueueOperation.openStep, step: 1);
     notifyListeners();
     return survey;
   }
@@ -1247,6 +1248,36 @@ class AppController extends ChangeNotifier {
           .whereType<Map>()
           .map((row) => Map<String, dynamic>.from(row))
           .toList();
+      final serverSteps = steps
+          .map((row) => (row['step_number'] as num?)?.toInt())
+          .whereType<int>()
+          .toSet();
+      final localSurvey = surveys
+          .where((candidate) => uuidEquals(candidate.id, surveyId))
+          .firstOrNull;
+      if (localSurvey != null) {
+        final dependentSteps = queue
+            .where(
+              (item) =>
+                  uuidEquals(item.surveyId, surveyId) &&
+                  const {
+                    QueueOperation.updateComment,
+                    QueueOperation.uploadPhoto,
+                    QueueOperation.completeStep,
+                  }.contains(item.operation),
+            )
+            .map((item) => item.step)
+            .whereType<int>()
+            .toSet();
+        for (final step in localSurvey.steps.where(
+          (candidate) =>
+              candidate.state != StepState.locked &&
+              dependentSteps.contains(candidate.number) &&
+              !serverSteps.contains(candidate.number),
+        )) {
+          await _enqueue(surveyId, QueueOperation.openStep, step: step.number);
+        }
+      }
       final satisfied = <SyncQueueItem>[];
       for (final item in queue.where(
         (candidate) => uuidEquals(candidate.surveyId, surveyId),

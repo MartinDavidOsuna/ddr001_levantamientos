@@ -67,10 +67,19 @@ void main() {
     await Hive.close();
     await root.delete(recursive: true);
   });
-  test('survey creation works offline and queues create command', () async {
+  test('C01 new offline survey persists create then initial open', () async {
     final survey = await app.createSurvey('Losa E2E');
     expect(survey.localState, LocalSurveyState.createdLocal);
-    expect(app.queue.single.operation, QueueOperation.createSurvey);
+    expect(app.queue.map((item) => (item.operation, item.step)), [
+      (QueueOperation.createSurvey, null),
+      (QueueOperation.openStep, 1),
+    ]);
+    expect(
+      app.queue.where(
+        (item) => item.operation == QueueOperation.openStep && item.step == 1,
+      ),
+      hasLength(1),
+    );
   });
   test(
     'account survives offline create, Hive reload and sync payload',
@@ -392,7 +401,7 @@ void main() {
   );
 
   test(
-    'finalizing a stage durably queues the next remote stage opening',
+    'C09 finalizing a stage durably queues the next remote stage opening',
     () async {
       final survey = await app.createSurvey('Next stage causal order');
       app.queue = [];

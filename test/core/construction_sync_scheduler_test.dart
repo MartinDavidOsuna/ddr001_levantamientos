@@ -105,6 +105,25 @@ BaseSurvey baseSurvey(String id) => BaseSurvey(
   ),
 );
 
+BaseSurvey affectedSurvey(String id) => BaseSurvey(
+  id: id,
+  displayIdentifier: 'Affected',
+  contractorName: 'Contractor',
+  createdAt: epoch,
+  updatedAt: epoch,
+  status: SurveyStatus.created,
+  localState: LocalSurveyState.createdLocal,
+  syncState: SyncState.pending,
+  currentStep: 0,
+  steps: List.generate(
+    6,
+    (index) => SurveyStep(
+      number: index + 1,
+      state: index == 0 ? StepState.open : StepState.locked,
+    ),
+  ),
+);
+
 class MemorySessions implements SessionStore {
   FieldSession? value;
   @override
@@ -132,6 +151,7 @@ class FakeRemote implements ConstructionRemote {
   Object? logoutFailure;
   Object? openFailure;
   Object? deleteFailure;
+  bool requireOpenStepForUpload = false;
   String verifyStatus = 'confirmed';
   ConstructionRole profileRole = ConstructionRole.contractor;
   int fieldLoginAttempts = 0;
@@ -198,6 +218,22 @@ class FakeRemote implements ConstructionRemote {
 
   @override
   Future<void> upload(ConstructionPhoto photo) async {
+    final survey = photo.surveyId.toLowerCase();
+    if (requireOpenStepForUpload &&
+        steps[survey]?[photo.stepNumber] != 'open') {
+      throw DioException(
+        requestOptions: RequestOptions(path: '/photos'),
+        response: Response(
+          requestOptions: RequestOptions(path: '/photos'),
+          statusCode: 404,
+          data: const {
+            'code': 'NOT_FOUND',
+            'detail': 'Evidence context not found.',
+          },
+        ),
+        type: DioExceptionType.badResponse,
+      );
+    }
     events.add('${photo.surveyId.toLowerCase()}:upload:${photo.stepNumber}');
     serverPhotos[photo.id.toLowerCase()] = {
       'photo_id': photo.id.toLowerCase(),
@@ -369,6 +405,26 @@ void main() {
       'openStep:1',
     );
     expect(scheduler.readiness(queue[0], queue, [], epoch).isReady, isFalse);
+  });
+
+  test('C02 create and open causally block initial evidence', () {
+    final create = job(QueueOperation.createSurvey);
+    final open = job(QueueOperation.openStep, step: 1, offset: 1);
+    final upload = job(
+      QueueOperation.uploadPhoto,
+      step: 1,
+      photo: photoA,
+      offset: 2,
+    );
+    final queue = [create, open, upload];
+
+    expect(scheduler.readyRound(queue, [evidence()], epoch), [create]);
+    final afterCreate = [open, upload];
+    expect(scheduler.readyRound(afterCreate, [evidence()], epoch), [open]);
+    expect(
+      scheduler.readiness(upload, afterCreate, [evidence()], epoch).dependency,
+      'openStep:1',
+    );
   });
 
   test('step 6 cardinal media and corrections use the same media barrier', () {
@@ -625,6 +681,224 @@ void main() {
         expect(remote.events, contains('${surveyA.toLowerCase()}:open:1'));
       },
     );
+
+    test('C03 reconciliation persists missing initial open', () async {
+      final survey = affectedSurvey(surveyA);
+      final photo = evidence(state: PhotoSyncState.queued);
+      app.surveys = [survey];
+      app.photos = [photo];
+      app.queue = [job(QueueOperation.uploadPhoto, step: 1, photo: photo.id)];
+      await local.saveSurvey(survey);
+      await local.savePhoto(photo);
+      await local.saveQueue(app.queue.single);
+      remote.requireOpenStepForUpload = true;
+      remote.openFailure = DioException(
+        requestOptions: RequestOptions(path: '/open'),
+        type: DioExceptionType.sendTimeout,
+      );
+
+      await app.synchronize();
+
+      expect(
+        app.queue.where(
+          (item) => item.operation == QueueOperation.openStep && item.step == 1,
+        ),
+        hasLength(1),
+      );
+      expect(
+        app.queue.where((item) => item.operation == QueueOperation.uploadPhoto),
+        hasLength(1),
+      );
+      expect(
+        local.queue().where(
+          (item) => item.operation == QueueOperation.openStep && item.step == 1,
+        ),
+        hasLength(1),
+      );
+    });
+
+    test('C04 repaired replay opens before upload and verify', () async {
+      final survey = affectedSurvey(surveyA);
+      final photo = evidence(state: PhotoSyncState.queued);
+      app.surveys = [survey];
+      app.photos = [photo];
+      app.queue = [job(QueueOperation.uploadPhoto, step: 1, photo: photo.id)];
+      await local.saveSurvey(survey);
+      await local.savePhoto(photo);
+      await local.saveQueue(app.queue.single);
+      remote.requireOpenStepForUpload = true;
+
+      await app.synchronize();
+
+      expect(remote.events, [
+        '${surveyA.toLowerCase()}:open:1',
+        '${surveyA.toLowerCase()}:upload:1',
+        'verify',
+      ]);
+      expect(app.photos.single.syncState, PhotoSyncState.confirmed);
+      expect(app.queue, isEmpty);
+    });
+
+    test('C05 process restart durably reconstructs missing open', () async {
+      final survey = affectedSurvey(surveyA);
+      final photo = evidence(state: PhotoSyncState.queued);
+      await local.saveSurvey(survey);
+      await local.savePhoto(photo);
+      await local.saveQueue(
+        job(QueueOperation.uploadPhoto, step: 1, photo: photo.id),
+      );
+      await Hive.close();
+
+      Hive.init(root.path);
+      local = await LocalStore.open();
+      final sessions = MemorySessions();
+      final restarted = AppController(
+        config: AppConfig.fromEnvironment(
+          environment: 'test',
+          baseUrl: 'http://127.0.0.1:3003/api/v1',
+        ),
+        local: local,
+        sessions: sessions,
+        api: ApiClient(
+          config: AppConfig.fromEnvironment(
+            environment: 'test',
+            baseUrl: 'http://127.0.0.1:3003/api/v1',
+          ),
+          sessions: sessions,
+          dio: Dio(),
+        ),
+        packageInfo: PackageInfo(
+          appName: 'DDR001',
+          packageName: 'test',
+          version: '1',
+          buildNumber: '1',
+        ),
+        remote: remote,
+      );
+      restarted.session = const FieldSession(
+        sessionId: 'session',
+        userId: 'user',
+        accessToken: 'token',
+        refreshToken: 'refresh',
+        installationId: 'installation',
+        name: 'Contractor',
+        email: 'a@b.mx',
+        phone: '1234567890',
+      );
+      restarted.surveys = local.surveys();
+      restarted.photos = local.photos();
+      restarted.queue = local.queue();
+      remote.openFailure = DioException(
+        requestOptions: RequestOptions(path: '/open'),
+        type: DioExceptionType.sendTimeout,
+      );
+
+      await restarted.recoverLocalState(recoverCamera: false);
+      await restarted.synchronize();
+
+      expect(
+        local.queue().where(
+          (item) => item.operation == QueueOperation.openStep && item.step == 1,
+        ),
+        hasLength(1),
+      );
+      expect(local.photos().single.id, photoA.toLowerCase());
+    });
+
+    test('C06 existing initial open is never duplicated', () async {
+      final survey = affectedSurvey(surveyA);
+      final photo = evidence(state: PhotoSyncState.queued);
+      app.surveys = [survey];
+      app.photos = [photo];
+      app.queue = [
+        job(QueueOperation.openStep, step: 1),
+        job(QueueOperation.uploadPhoto, step: 1, photo: photo.id),
+      ];
+      for (final item in app.queue) {
+        await local.saveQueue(item);
+      }
+      remote.openFailure = DioException(
+        requestOptions: RequestOptions(path: '/open'),
+        type: DioExceptionType.sendTimeout,
+      );
+
+      await app.synchronize();
+
+      expect(
+        app.queue.where(
+          (item) => item.operation == QueueOperation.openStep && item.step == 1,
+        ),
+        hasLength(1),
+      );
+    });
+
+    test('C07 server step suppresses unnecessary open repair', () async {
+      final survey = affectedSurvey(surveyA);
+      final photo = evidence(state: PhotoSyncState.queued);
+      app.surveys = [survey];
+      app.photos = [photo];
+      app.queue = [job(QueueOperation.uploadPhoto, step: 1, photo: photo.id)];
+      remote.steps[surveyA.toLowerCase()] = {1: 'open'};
+      remote.requireOpenStepForUpload = true;
+
+      await app.synchronize();
+
+      expect(remote.events, ['${surveyA.toLowerCase()}:upload:1', 'verify']);
+      expect(app.queue, isEmpty);
+    });
+
+    test('C08 locked local step is not opened automatically', () async {
+      final locked = affectedSurvey(surveyA).copyWith(
+        steps: List.generate(
+          6,
+          (index) => SurveyStep(number: index + 1, state: StepState.locked),
+        ),
+      );
+      final photo = evidence(state: PhotoSyncState.queued);
+      app.surveys = [locked];
+      app.photos = [photo];
+      app.queue = [job(QueueOperation.uploadPhoto, step: 1, photo: photo.id)];
+      remote.requireOpenStepForUpload = true;
+
+      await app.synchronize();
+
+      expect(
+        app.queue.where((item) => item.operation == QueueOperation.openStep),
+        isEmpty,
+      );
+      expect(
+        app.queue.where((item) => item.operation == QueueOperation.uploadPhoto),
+        hasLength(1),
+      );
+    });
+
+    test('C10 recovery never discards or rewrites pending evidence', () async {
+      final survey = affectedSurvey(surveyA);
+      final photo = evidence(state: PhotoSyncState.queued);
+      final originalBytes = File(photo.localPath).readAsBytesSync();
+      app.surveys = [survey];
+      app.photos = [photo];
+      app.queue = [job(QueueOperation.uploadPhoto, step: 1, photo: photo.id)];
+      await local.saveSurvey(survey);
+      await local.savePhoto(photo);
+      await local.saveQueue(app.queue.single);
+      remote.openFailure = DioException(
+        requestOptions: RequestOptions(path: '/open'),
+        type: DioExceptionType.sendTimeout,
+      );
+
+      await app.synchronize();
+
+      expect(app.surveys.single.id.toLowerCase(), surveyA.toLowerCase());
+      expect(app.surveys.single.syncState, isNot(SyncState.synchronized));
+      expect(app.photos.single.id.toLowerCase(), photoA.toLowerCase());
+      expect(app.photos.single.localPath, photo.localPath);
+      expect(File(photo.localPath).readAsBytesSync(), originalBytes);
+      expect(
+        app.queue.where((item) => item.operation == QueueOperation.uploadPhoto),
+        hasLength(1),
+      );
+    });
 
     test('legacy step 1 to 2 replay drains pending count', () async {
       app.surveys = [baseSurvey(surveyA)];
