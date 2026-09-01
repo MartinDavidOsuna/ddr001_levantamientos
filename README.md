@@ -21,13 +21,18 @@ No se debe usar `uninstall`, `pm clear` ni clear storage como procedimiento
 normal de actualización o recuperación: esas operaciones destruyen el estado
 local que la aplicación está diseñada para preservar.
 
-La autenticación móvil usa exclusivamente Field Auth: nombre, correo y teléfono,
-sin contraseña, selector de dominio ni selector de rol. El dispositivo se
-vincula mediante Installation ID y el perfil Construction recibido del servidor
-define las capabilities. Para revisión móvil, resident debe existir como usuario
-Field. El cliente se identifica establemente como `ddr001_levantamientos`; otra
-app o instalación del mismo usuario mantiene su propia sesión y familia de
-refresh.
+La autenticación móvil usa exclusivamente Field Auth: nombre, correo, teléfono y
+cuadrilla, sin contraseña, selector de dominio ni selector de rol. La cuadrilla se
+normaliza según el contrato de Field Sessions y queda asociada a la sesión de
+trabajo; el dispositivo se vincula mediante Installation ID y el perfil Construction
+recibido del servidor define las capabilities. Para revisión móvil, resident debe
+existir como usuario Field. El cliente se identifica establemente como
+`ddr001_levantamientos`; otra app o instalación del mismo usuario mantiene su propia
+sesión y familia de refresh.
+
+Los listados de levantamientos incluyen pull-to-refresh y una acción visible
+**Actualizar**. La actualización reconcilia por UUID con el servidor y no reemplaza
+ni elimina surveys, fotografías, correcciones o colas locales pendientes.
 
 ## API utilizada en la certificación
 
