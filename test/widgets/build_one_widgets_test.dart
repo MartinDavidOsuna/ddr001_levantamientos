@@ -65,6 +65,7 @@ Future<(AppController, Directory)> controller(ConstructionRole role) async {
     name: 'Usuario',
     email: 'u@example.com',
     phone: '1234567890',
+    crew: 'CUADRILLA NORTE',
   );
   app.profile = ConstructionProfile(
     userId: 'u',
@@ -101,9 +102,7 @@ BaseSurvey reviewSurvey() => BaseSurvey(
 );
 
 void main() {
-  testWidgets('login is Field-only, ordered and hides removed controls', (
-    tester,
-  ) async {
+  testWidgets('login is Field-only, ordered and includes crew', (tester) async {
     final (app, root) = (await tester.runAsync(
       () => controller(ConstructionRole.contractor),
     ))!;
@@ -120,22 +119,24 @@ void main() {
     expect(find.byKey(const Key('login_name')), findsOneWidget);
     expect(find.byKey(const Key('login_email')), findsOneWidget);
     expect(find.byKey(const Key('login_phone')), findsOneWidget);
+    expect(find.byKey(const Key('login_crew')), findsOneWidget);
     expect(find.byKey(const Key('login_submit')), findsOneWidget);
     expect(find.byKey(const Key('login_version')), findsOneWidget);
     expect(find.text('v0.1.0'), findsOneWidget);
     expect(find.text('Nombre'), findsOneWidget);
     expect(find.text('Correo'), findsOneWidget);
     expect(find.text('Teléfono'), findsOneWidget);
+    expect(find.text('Cuadrilla'), findsOneWidget);
     final fields = tester
         .widgetList<TextField>(find.byType(TextField))
         .toList();
-    expect(fields, hasLength(3));
+    expect(fields, hasLength(4));
     expect(fields[0].key, const Key('login_name'));
     expect(fields[1].key, const Key('login_email'));
     expect(fields[2].key, const Key('login_phone'));
+    expect(fields[3].key, const Key('login_crew'));
     expect(fields[2].keyboardType, TextInputType.phone);
     expect(find.text('Contraseña'), findsNothing);
-    expect(find.text('Cuadrilla'), findsNothing);
     expect(find.text('Acceso seguro'), findsNothing);
     expect(find.text('Campo'), findsNothing);
     expect(find.text('Administración'), findsNothing);
@@ -397,7 +398,7 @@ void main() {
     expect(find.text('SUR'), findsOneWidget);
     expect(find.text('OESTE'), findsOneWidget);
   });
-  testWidgets('surveys offers search and filters', (tester) async {
+  testWidgets('surveys offers search, filters and update action', (tester) async {
     final (app, root) = (await tester.runAsync(
       () => controller(ConstructionRole.contractor),
     ))!;
@@ -407,6 +408,8 @@ void main() {
     });
     await tester.pumpWidget(page(app, const SurveysPage()));
     expect(find.byKey(const Key('survey_search')), findsOneWidget);
+    expect(find.byKey(const Key('survey_refresh')), findsOneWidget);
+    expect(find.text('Actualizar'), findsOneWidget);
     expect(find.text('Todos'), findsOneWidget);
     expect(find.widgetWithText(FilterChip, 'En proceso'), findsOneWidget);
   });
@@ -511,9 +514,10 @@ void main() {
     expect(find.text('Nombre'), findsOneWidget);
     expect(find.text('Correo'), findsOneWidget);
     expect(find.text('Teléfono'), findsOneWidget);
+    expect(find.text('Cuadrilla'), findsOneWidget);
+    expect(find.text('CUADRILLA NORTE'), findsOneWidget);
     expect(find.text('Rol'), findsOneWidget);
     expect(find.text('Dispositivo'), findsOneWidget);
-    expect(find.text('Cuadrilla'), findsNothing);
     await tester.drag(find.byType(ListView), const Offset(0, -500));
     await tester.pump();
     expect(find.byKey(const Key('logout')), findsOneWidget);
@@ -589,6 +593,7 @@ void main() {
       await tester.pumpWidget(page(reviewer, const SurveysPage()));
       expect(find.text('Levantamientos'), findsOneWidget);
       expect(find.textContaining('Contratista: Juan Pérez'), findsOneWidget);
+      expect(find.byKey(const Key('survey_refresh')), findsOneWidget);
     },
   );
 }
