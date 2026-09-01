@@ -30,7 +30,7 @@ class FieldIdentity {
       return 'El teléfono debe contener exactamente 10 dígitos.';
     }
     if (normalizedCrew.isEmpty || normalizedCrew.length > 180) {
-      return 'Ingresa una cuadrilla válida.';
+      return 'Ingresa una empresa válida.';
     }
     return null;
   }

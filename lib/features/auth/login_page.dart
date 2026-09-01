@@ -157,7 +157,7 @@ class _LoginPageState extends State<LoginPage> {
                                   textInputAction: TextInputAction.done,
                                   maxLength: 180,
                                   decoration: _decoration(
-                                    'Cuadrilla',
+                                    'Empresa',
                                     Icons.groups_outlined,
                                   ),
                                 ),

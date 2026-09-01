@@ -1,5 +1,5 @@
 import 'package:ddr001_levantamientos/domain/construction/construction_models.dart';
-import 'package:ddr001_levantamientos/features/surveys/surveys_page.dart';
+import 'package:ddr001_levantamientos/features/surveys/survey_filters.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

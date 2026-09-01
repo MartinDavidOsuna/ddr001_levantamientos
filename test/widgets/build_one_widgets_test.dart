@@ -38,14 +38,17 @@ class WidgetSessions implements SessionStore {
 Future<(AppController, Directory)> controller(
   ConstructionRole role, {
   Dio? dio,
+  String environment = 'test',
 }) async {
   final root = await Directory.systemTemp.createTemp('ddr001-widget-');
   Hive.init(root.path);
   final local = await LocalStore.open(),
       sessions = WidgetSessions(),
       config = AppConfig.fromEnvironment(
-        environment: 'test',
-        baseUrl: 'http://127.0.0.1:3003/api/v1',
+        environment: environment,
+        baseUrl: environment == 'production'
+            ? AppConfig.productionHttpApiBaseUrl
+            : 'http://127.0.0.1:3003/api/v1',
       );
   final app = AppController(
     config: config,
@@ -87,17 +90,25 @@ Widget page(AppController app, Widget child) => ChangeNotifierProvider.value(
 
 void ignoreComment(String _) {}
 
-BaseSurvey reviewSurvey() => BaseSurvey(
-  id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-  displayIdentifier: 'Base Norte',
+BaseSurvey reviewSurvey({
+  String id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  String displayIdentifier = 'Base Norte',
+  String? contractorUserId,
+  SurveyStatus status = SurveyStatus.executed,
+  GeoPoint? canonicalLocation,
+}) => BaseSurvey(
+  id: id,
+  displayIdentifier: displayIdentifier,
   accountNumber: '890',
   contractorName: 'Juan Pérez',
+  contractorUserId: contractorUserId,
   createdAt: DateTime.utc(2026, 8, 1),
   updatedAt: DateTime.utc(2026, 8, 2),
-  status: SurveyStatus.executed,
+  status: status,
   localState: LocalSurveyState.executedLocal,
   syncState: SyncState.synchronized,
   currentStep: 6,
+  canonicalLocation: canonicalLocation,
   steps: List.generate(
     6,
     (index) => SurveyStep(number: index + 1, state: StepState.completedServer),
@@ -105,7 +116,7 @@ BaseSurvey reviewSurvey() => BaseSurvey(
 );
 
 void main() {
-  testWidgets('login is Field-only, ordered and includes crew', (tester) async {
+  testWidgets('login is Field-only, ordered and shows Empresa', (tester) async {
     final (app, root) = (await tester.runAsync(
       () => controller(ConstructionRole.contractor),
     ))!;
@@ -129,7 +140,8 @@ void main() {
     expect(find.text('Nombre'), findsOneWidget);
     expect(find.text('Correo'), findsOneWidget);
     expect(find.text('Teléfono'), findsOneWidget);
-    expect(find.text('Cuadrilla'), findsOneWidget);
+    expect(find.text('Empresa'), findsOneWidget);
+    expect(find.text('Cuadrilla'), findsNothing);
     final fields = tester
         .widgetList<TextField>(find.byType(TextField))
         .toList();
@@ -489,6 +501,12 @@ void main() {
     expect(find.text('Actualizar'), findsOneWidget);
     expect(find.text('Todos'), findsOneWidget);
     expect(find.widgetWithText(FilterChip, 'En proceso'), findsOneWidget);
+    expect(
+      tester
+          .widget<FilterChip>(find.byKey(const Key('surveys_filter_all')))
+          .selected,
+      isTrue,
+    );
   });
   testWidgets('survey account is rendered instead of Sin cuenta', (
     tester,
@@ -577,7 +595,7 @@ void main() {
     tester,
   ) async {
     final (app, root) = (await tester.runAsync(
-      () => controller(ConstructionRole.contractor),
+      () => controller(ConstructionRole.contractor, environment: 'production'),
     ))!;
     addTearDown(() async {
       await Hive.close();
@@ -585,19 +603,117 @@ void main() {
     });
     await tester.pumpWidget(page(app, const ConstructionMapPage()));
     expect(find.textContaining('ubicación aparecerán'), findsOneWidget);
-    await tester.pumpWidget(page(app, const ProfilePage()));
+    expect(
+      tester
+          .widget<FilterChip>(find.byKey(const Key('map_filter_all')))
+          .selected,
+      isTrue,
+    );
+    await tester.pumpWidget(
+      page(
+        app,
+        ProfilePage(
+          deviceLabelLoader: () async => 'Google Pixel 7 Pro · Android 17',
+        ),
+      ),
+    );
+    await tester.pump();
     expect(find.byKey(const ValueKey('app-brand-logo-symbol')), findsOneWidget);
     expect(find.text('Contratista'), findsWidgets);
     expect(find.text('Nombre'), findsOneWidget);
     expect(find.text('Correo'), findsOneWidget);
     expect(find.text('Teléfono'), findsOneWidget);
-    expect(find.text('Cuadrilla'), findsOneWidget);
+    expect(find.text('Empresa'), findsOneWidget);
+    expect(find.text('Cuadrilla'), findsNothing);
     expect(find.text('CUADRILLA NORTE'), findsOneWidget);
     expect(find.text('Rol'), findsOneWidget);
     expect(find.text('Dispositivo'), findsOneWidget);
+    expect(find.text('Google Pixel 7 Pro · Android 17'), findsOneWidget);
+    expect(find.text('0.1.0+1'), findsOneWidget);
+    expect(find.textContaining('0.1.0+1 ·'), findsNothing);
+    expect(find.textContaining('production'), findsNothing);
     await tester.drag(find.byType(ListView), const Offset(0, -500));
     await tester.pump();
     expect(find.byKey(const Key('logout')), findsOneWidget);
+  });
+  testWidgets('map status filter follows visibility before status', (
+    tester,
+  ) async {
+    final (app, root) = (await tester.runAsync(
+      () => controller(ConstructionRole.contractor),
+    ))!;
+    addTearDown(() async {
+      await Hive.close();
+      await root.delete(recursive: true);
+    });
+    GeoPoint location(double latitude) => GeoPoint(
+      latitude: latitude,
+      longitude: -110,
+      accuracy: 5,
+      capturedAt: DateTime.utc(2026, 8, 1),
+    );
+    app.surveys = [
+      reviewSurvey(contractorUserId: 'u', canonicalLocation: location(29)),
+      reviewSurvey(
+        id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+        displayIdentifier: 'Base Rechazada',
+        contractorUserId: 'u',
+        status: SurveyStatus.rejected,
+        canonicalLocation: location(29.001),
+      ),
+      reviewSurvey(
+        id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+        displayIdentifier: 'Base Ajena',
+        contractorUserId: 'another-user',
+        canonicalLocation: location(29.002),
+      ),
+    ];
+
+    await tester.pumpWidget(page(app, const ConstructionMapPage()));
+    expect(
+      find.byKey(const Key('map_survey_aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('map_survey_bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('map_survey_cccccccc-cccc-4ccc-8ccc-cccccccccccc')),
+      findsNothing,
+    );
+
+    tester
+        .widget<FilterChip>(find.byKey(const Key('map_filter_executed')))
+        .onSelected!(true);
+    await tester.pump();
+    expect(
+      find.byKey(const Key('map_survey_aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('map_survey_bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb')),
+      findsNothing,
+    );
+
+    app.profile = ConstructionProfile(
+      userId: 'reviewer',
+      displayName: 'Revisor',
+      email: 'reviewer@example.com',
+      phone: '1234567890',
+      role: ConstructionRole.resident,
+    );
+    await tester.pumpWidget(page(app, const ConstructionMapPage()));
+    expect(
+      tester
+          .widget<FilterChip>(find.byKey(const Key('map_filter_executed')))
+          .selected,
+      isTrue,
+    );
+    expect(
+      find.byKey(const Key('map_survey_cccccccc-cccc-4ccc-8ccc-cccccccccccc')),
+      findsOneWidget,
+    );
   });
   testWidgets('resident home includes review and future installation', (
     tester,
@@ -629,6 +745,13 @@ void main() {
       await tester.pumpWidget(page(app, const ResidentReviewPage()));
       expect(find.byKey(const Key('resident_review_refresh')), findsOneWidget);
       expect(find.text('Actualizar'), findsOneWidget);
+      expect(find.byType(DropdownButton), findsNothing);
+      expect(
+        tester
+            .widget<FilterChip>(find.byKey(const Key('review_filter_executed')))
+            .selected,
+        isTrue,
+      );
       expect(find.textContaining('Contratista: Juan Pérez'), findsOneWidget);
       await tester.tap(find.text('Base Norte'));
       await tester.pumpAndSettle();
@@ -657,6 +780,47 @@ void main() {
       );
     },
   );
+
+  testWidgets('review chips filter locally and retain selection on rebuild', (
+    tester,
+  ) async {
+    final (app, root) = (await tester.runAsync(
+      () => controller(ConstructionRole.resident),
+    ))!;
+    addTearDown(() async {
+      await Hive.close();
+      await root.delete(recursive: true);
+    });
+    app.surveys = [
+      reviewSurvey(),
+      reviewSurvey(
+        id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+        displayIdentifier: 'Base Rechazada',
+        status: SurveyStatus.rejected,
+      ),
+    ];
+    await tester.pumpWidget(page(app, const ResidentReviewPage()));
+    expect(find.text('Base Norte'), findsOneWidget);
+    expect(find.text('Base Rechazada'), findsNothing);
+
+    tester
+        .widget<FilterChip>(find.byKey(const Key('review_filter_rejected')))
+        .onSelected!(true);
+    await tester.pump();
+    expect(find.text('Base Norte'), findsNothing);
+    expect(find.text('Base Rechazada'), findsOneWidget);
+    await tester.enterText(
+      find.byKey(const Key('resident_review_search')),
+      'Rechazada',
+    );
+    await tester.pump();
+    expect(
+      tester
+          .widget<FilterChip>(find.byKey(const Key('review_filter_rejected')))
+          .selected,
+      isTrue,
+    );
+  });
 
   testWidgets(
     'reviewer survey title is global and contractor title remains own',

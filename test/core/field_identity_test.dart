@@ -74,7 +74,7 @@ void main() {
         phone: '6621234567',
         crew: '   ',
       ).validate(),
-      'Ingresa una cuadrilla válida.',
+      'Ingresa una empresa válida.',
     );
   });
 

@@ -4,6 +4,7 @@ import '../../core/services/app_controller.dart';
 import '../../core/widgets/branded_app_bar_title.dart';
 import '../../domain/construction/construction_models.dart';
 import '../surveys/survey_detail_page.dart';
+import '../surveys/survey_filters.dart';
 
 class ResidentReviewPage extends StatefulWidget {
   const ResidentReviewPage({super.key});
@@ -13,7 +14,7 @@ class ResidentReviewPage extends StatefulWidget {
 
 class _ResidentReviewPageState extends State<ResidentReviewPage> {
   String search = '';
-  SurveyStatus? filter = SurveyStatus.executed;
+  SurveyListFilter? filter = SurveyListFilter.executed;
   bool refreshing = false;
 
   Future<void> _refresh(AppController app, {bool showFeedback = false}) async {
@@ -42,7 +43,7 @@ class _ResidentReviewPageState extends State<ResidentReviewPage> {
     final items = app.visibleSurveys
         .where(
           (s) =>
-              (filter == null || s.status == filter) &&
+              surveyMatchesFilter(s, filter) &&
               (search.isEmpty ||
                   s.displayIdentifier.toLowerCase().contains(
                     search.toLowerCase(),
@@ -79,6 +80,7 @@ class _ResidentReviewPageState extends State<ResidentReviewPage> {
           Padding(
             padding: const EdgeInsets.all(12),
             child: TextField(
+              key: const Key('resident_review_search'),
               onChanged: (v) => setState(() => search = v),
               decoration: const InputDecoration(
                 prefixIcon: Icon(Icons.search),
@@ -86,19 +88,12 @@ class _ResidentReviewPageState extends State<ResidentReviewPage> {
               ),
             ),
           ),
-          DropdownButton<SurveyStatus?>(
-            value: filter,
-            items: [
-              const DropdownMenuItem(value: null, child: Text('Todos')),
-              ...SurveyStatus.values.map(
-                (s) => DropdownMenuItem(
-                  value: s,
-                  child: Text(surveyStatusLabel(s)),
-                ),
-              ),
-            ],
-            onChanged: (v) => setState(() => filter = v),
+          SurveyFilterChips(
+            keyPrefix: 'review_filter',
+            selected: filter,
+            onSelected: (value) => setState(() => filter = value),
           ),
+          const SizedBox(height: 8),
           Expanded(
             child: RefreshIndicator(
               onRefresh: () => _refresh(app),
