@@ -398,7 +398,9 @@ void main() {
     expect(find.text('SUR'), findsOneWidget);
     expect(find.text('OESTE'), findsOneWidget);
   });
-  testWidgets('surveys offers search, filters and update action', (tester) async {
+  testWidgets('surveys offers search, filters and update action', (
+    tester,
+  ) async {
     final (app, root) = (await tester.runAsync(
       () => controller(ConstructionRole.contractor),
     ))!;
@@ -550,6 +552,8 @@ void main() {
       });
       app.surveys = [reviewSurvey()];
       await tester.pumpWidget(page(app, const ResidentReviewPage()));
+      expect(find.byKey(const Key('resident_review_refresh')), findsOneWidget);
+      expect(find.text('Actualizar'), findsOneWidget);
       expect(find.textContaining('Contratista: Juan Pérez'), findsOneWidget);
       await tester.tap(find.text('Base Norte'));
       await tester.pumpAndSettle();

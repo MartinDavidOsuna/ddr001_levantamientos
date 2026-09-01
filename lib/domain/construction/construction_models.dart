@@ -490,14 +490,16 @@ class ConstructionProfile {
     required this.email,
     required this.phone,
     required this.role,
+    this.crew = '',
   });
-  final String userId, displayName, email, phone;
+  final String userId, displayName, email, phone, crew;
   final ConstructionRole role;
   Map<String, dynamic> toJson() => {
     'userId': userId,
     'displayName': displayName,
     'email': email,
     'phone': phone,
+    'crew': crew,
     'constructionRole': role.name,
   };
   factory ConstructionProfile.fromJson(Map<String, dynamic> j) =>
@@ -506,6 +508,7 @@ class ConstructionProfile {
         displayName: '${j['displayName'] ?? ''}',
         email: '${j['email'] ?? ''}',
         phone: '${j['phone'] ?? ''}',
+        crew: '${j['crew'] ?? ''}',
         role: ConstructionRole.values.byName('${j['constructionRole']}'),
       );
 }

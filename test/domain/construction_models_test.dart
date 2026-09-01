@@ -167,6 +167,24 @@ void main() {
     );
     expect(BaseSurvey.fromJson(survey.toJson()).corrections.single.round, 2);
   });
+  test('construction profile reads crew and tolerates a legacy omission', () {
+    final profile = ConstructionProfile.fromJson({
+      'userId': '00000000-0000-4000-8000-000000000001',
+      'displayName': 'Usuario',
+      'email': 'usuario@example.com',
+      'phone': '1234567890',
+      'crew': 'CUADRILLA NORTE',
+      'constructionRole': 'contractor',
+    });
+    expect(profile.crew, 'CUADRILLA NORTE');
+    expect(
+      ConstructionProfile.fromJson({
+        'userId': '00000000-0000-4000-8000-000000000001',
+        'constructionRole': 'contractor',
+      }).crew,
+      isEmpty,
+    );
+  });
 }
 
 BaseSurvey _survey({

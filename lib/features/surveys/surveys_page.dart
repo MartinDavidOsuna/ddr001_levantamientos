@@ -77,6 +77,9 @@ class _SurveysPageState extends State<SurveysPage> {
         actions: [
           TextButton.icon(
             key: const Key('survey_refresh'),
+            style: TextButton.styleFrom(
+              foregroundColor: Theme.of(context).colorScheme.onPrimary,
+            ),
             onPressed: refreshing
                 ? null
                 : () => _refresh(app, showFeedback: true),

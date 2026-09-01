@@ -152,7 +152,8 @@ class _LoginPageState extends State<LoginPage> {
                                   controller: crew,
                                   style: inputStyle,
                                   cursorColor: Colors.white,
-                                  textCapitalization: TextCapitalization.characters,
+                                  textCapitalization:
+                                      TextCapitalization.characters,
                                   textInputAction: TextInputAction.done,
                                   maxLength: 180,
                                   decoration: _decoration(

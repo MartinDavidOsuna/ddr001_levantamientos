@@ -151,9 +151,13 @@ class FakeRemote implements ConstructionRemote {
   Object? logoutFailure;
   Object? openFailure;
   Object? deleteFailure;
+  Object? listFailure;
   bool requireOpenStepForUpload = false;
   String verifyStatus = 'confirmed';
+  String profileCrew = '';
   ConstructionRole profileRole = ConstructionRole.contractor;
+  List<Map<String, dynamic>> serverRows = [];
+  int listCalls = 0;
   int fieldLoginAttempts = 0;
   (String, String, String, String)? lastFieldIdentity;
   SessionKind? logoutKind;
@@ -297,6 +301,7 @@ class FakeRemote implements ConstructionRemote {
       displayName: 'Usuario',
       email: 'a@b.mx',
       phone: '1234567890',
+      crew: profileCrew,
       role: profileRole,
     );
   }
@@ -340,7 +345,12 @@ class FakeRemote implements ConstructionRemote {
     bool resident = false,
     String? search,
     String? status,
-  }) async => [];
+  }) async {
+    listCalls++;
+    if (listFailure case final failure?) throw failure;
+    return serverRows;
+  }
+
   @override
   Future<void> residentAction(
     String id,
@@ -510,12 +520,13 @@ void main() {
     late LocalStore local;
     late AppController app;
     late FakeRemote remote;
+    late MemorySessions sessions;
 
     setUp(() async {
       root = await Directory.systemTemp.createTemp('causal-sync-');
       Hive.init(root.path);
       local = await LocalStore.open();
-      final sessions = MemorySessions();
+      sessions = MemorySessions();
       remote = FakeRemote();
       app = AppController(
         config: AppConfig.fromEnvironment(
@@ -578,6 +589,23 @@ void main() {
         '1234567890',
         'CUADRILLA NORTE',
       ));
+    });
+
+    test('profile crew becomes the persisted Field session crew', () async {
+      app.session = null;
+      remote.profileCrew = 'CUADRILLA DEL SERVIDOR';
+
+      final error = await app.login(
+        name: 'Usuario',
+        email: 'usuario@example.com',
+        phone: '1234567890',
+        crew: 'cuadrilla capturada',
+      );
+
+      expect(error, isNull);
+      expect(app.profile?.crew, 'CUADRILLA DEL SERVIDOR');
+      expect(app.session?.crew, 'CUADRILLA DEL SERVIDOR');
+      expect(sessions.value?.crew, 'CUADRILLA DEL SERVIDOR');
     });
 
     test('another identity conflict never offers device takeover', () async {
@@ -666,6 +694,88 @@ void main() {
         expect(app.session, same(current));
       },
     );
+
+    test(
+      'refresh reconciles without clearing pending survey, queue or photos',
+      () async {
+        final localSurvey = baseSurvey(
+          surveyA,
+        ).copyWith(accountNumber: '890', syncState: SyncState.requiresReview);
+        final pending = job(QueueOperation.openStep, step: 3);
+        final photo = evidence(state: PhotoSyncState.queued);
+        app.surveys = [localSurvey];
+        app.queue = [pending];
+        app.photos = [photo];
+        await local.saveSurvey(localSurvey);
+        await local.saveQueue(pending);
+        await local.savePhoto(photo);
+        remote.serverRows = [
+          {
+            'survey_id': surveyA,
+            'display_identifier': 'A remota',
+            'account_number': null,
+            'contractor_name': 'Servidor',
+            'status': 'created',
+            'current_step': 1,
+          },
+        ];
+
+        await app.refreshServer();
+
+        expect(remote.listCalls, 1);
+        expect(app.surveys, hasLength(1));
+        expect(app.survey(surveyA).accountNumber, '890');
+        expect(app.survey(surveyA).status, SurveyStatus.inProgress);
+        expect(app.survey(surveyA).currentStep, 2);
+        expect(app.survey(surveyA).syncState, SyncState.requiresReview);
+        expect(app.queue.single.id, pending.id);
+        expect(app.photos.single.id, photo.id);
+        expect(local.queue().single.id, pending.id);
+        expect(local.photos().single.id, photo.id.toLowerCase());
+      },
+    );
+
+    test('partial and failed refreshes never remove local surveys', () async {
+      final localSurvey = baseSurvey(surveyA);
+      app.surveys = [localSurvey];
+      await local.saveSurvey(localSurvey);
+      remote.serverRows = [
+        {
+          'survey_id': surveyB,
+          'display_identifier': 'Sólo remota',
+          'account_number': null,
+          'contractor_name': 'Servidor',
+          'status': 'in_progress',
+          'current_step': 1,
+        },
+      ];
+
+      await app.refreshServer();
+      expect(
+        app.surveys.map((survey) => survey.id.toLowerCase()),
+        containsAll([surveyA.toLowerCase(), surveyB]),
+      );
+
+      final snapshot = app.surveys.map((survey) => survey.id).toList();
+      remote.listFailure = DioException.connectionTimeout(
+        requestOptions: RequestOptions(path: '/construction/base-surveys'),
+        timeout: const Duration(seconds: 10),
+      );
+      await app.refreshServer();
+      expect(app.surveys.map((survey) => survey.id), snapshot);
+      expect(app.apiReachable, isFalse);
+
+      remote.listFailure = DioException.badResponse(
+        statusCode: 500,
+        requestOptions: RequestOptions(path: '/construction/base-surveys'),
+        response: Response<void>(
+          requestOptions: RequestOptions(path: '/construction/base-surveys'),
+          statusCode: 500,
+        ),
+      );
+      await app.refreshServer();
+      expect(app.surveys.map((survey) => survey.id), snapshot);
+    });
 
     test(
       'manual retry probes server even when connectivity state is stale',

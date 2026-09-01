@@ -178,6 +178,7 @@ class AppController extends ChangeNotifier {
     if (session != null) {
       try {
         profile = await remote.profile();
+        await _adoptProfileCrew();
         await local.saveProfile(profile!);
         online = true;
         unawaited(refreshServer());
@@ -426,6 +427,7 @@ class AppController extends ChangeNotifier {
       );
       try {
         profile = await remote.profile();
+        await _adoptProfileCrew();
         await local.saveProfile(profile!);
       } catch (_) {
         final incomplete = session;
@@ -1702,7 +1704,10 @@ class AppController extends ChangeNotifier {
         final index = surveys.indexWhere((s) => uuidEquals(s.id, id));
         if (index >= 0) {
           final localSurvey = surveys[index],
-              wireStatus = _status('${row['status']}');
+              wireStatus = _status('${row['status']}'),
+              hasPendingLocalState =
+                  localSurvey.syncState != SyncState.synchronized ||
+                  queue.any((item) => uuidEquals(item.surveyId, id));
           var corrections = localSurvey.corrections;
           if (wireStatus == SurveyStatus.rejected && corrections.isEmpty) {
             final detail = await remote.detail(id);
@@ -1724,14 +1729,15 @@ class AppController extends ChangeNotifier {
             accountNumber: mergeAccountNumber(localSurvey.accountNumber, row),
             contractorName:
                 '${row['contractor_name'] ?? row['contractorName'] ?? localSurvey.contractorName}',
-            status: wireStatus,
+            status: hasPendingLocalState ? localSurvey.status : wireStatus,
             rejectionReason: row['rejection_reason']?.toString(),
-            syncState: localSurvey.syncState == SyncState.requiresReview
-                ? SyncState.requiresReview
+            syncState: hasPendingLocalState
+                ? localSurvey.syncState
                 : SyncState.synchronized,
-            currentStep:
-                (row['current_step'] as num?)?.toInt() ??
-                localSurvey.currentStep,
+            currentStep: _newestStep(
+              localSurvey.currentStep,
+              (row['current_step'] as num?)?.toInt(),
+            ),
             corrections: corrections,
           );
           await local.saveSurvey(surveys[index]);
@@ -1790,6 +1796,19 @@ class AppController extends ChangeNotifier {
       apiReachable = false;
     }
     notifyListeners();
+  }
+
+  Future<void> _adoptProfileCrew() async {
+    final current = session;
+    final profileCrew = profile?.crew.trim() ?? '';
+    if (current == null ||
+        current.kind != SessionKind.field ||
+        profileCrew.isEmpty ||
+        current.crew == profileCrew) {
+      return;
+    }
+    session = current.copyWith(crew: profileCrew);
+    await sessions.save(session!);
   }
 
   SurveyStatus _status(String value) => switch (value) {
@@ -1854,3 +1873,6 @@ String? mergeAccountNumber(
     serverRow['account_number']?.toString() ??
     serverRow['accountNumber']?.toString() ??
     localAccount;
+
+int _newestStep(int localStep, int? remoteStep) =>
+    remoteStep != null && remoteStep > localStep ? remoteStep : localStep;

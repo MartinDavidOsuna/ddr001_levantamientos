@@ -38,20 +38,23 @@ class FieldSession {
       crew;
   final SessionKind kind;
   final String? adminRole;
-  FieldSession copyWith({String? accessToken, String? refreshToken}) =>
-      FieldSession(
-        sessionId: sessionId,
-        userId: userId,
-        accessToken: accessToken ?? this.accessToken,
-        refreshToken: refreshToken ?? this.refreshToken,
-        installationId: installationId,
-        name: name,
-        email: email,
-        phone: phone,
-        crew: crew,
-        kind: kind,
-        adminRole: adminRole,
-      );
+  FieldSession copyWith({
+    String? accessToken,
+    String? refreshToken,
+    String? crew,
+  }) => FieldSession(
+    sessionId: sessionId,
+    userId: userId,
+    accessToken: accessToken ?? this.accessToken,
+    refreshToken: refreshToken ?? this.refreshToken,
+    installationId: installationId,
+    name: name,
+    email: email,
+    phone: phone,
+    crew: crew ?? this.crew,
+    kind: kind,
+    adminRole: adminRole,
+  );
   Map<String, dynamic> toJson() => {
     'sessionId': sessionId,
     'userId': userId,

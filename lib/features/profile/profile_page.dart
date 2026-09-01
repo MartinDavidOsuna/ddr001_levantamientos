@@ -10,7 +10,10 @@ class ProfilePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final app = context.watch<AppController>(), profile = app.profile;
-    final crew = app.session?.crew.trim() ?? '';
+    final profileCrew = profile?.crew.trim() ?? '';
+    final crew = profileCrew.isNotEmpty
+        ? profileCrew
+        : app.session?.crew.trim() ?? '';
     return Scaffold(
       appBar: AppBar(title: const BrandedAppBarTitle('Perfil')),
       body: ListView(

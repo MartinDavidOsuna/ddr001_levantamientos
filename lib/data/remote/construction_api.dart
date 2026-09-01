@@ -130,8 +130,10 @@ class ConstructionApi implements ConstructionRemote {
       options: Options(extra: {'skipAuth': true}),
     );
     final j = response.data ?? const {};
-    final normalizedCrew =
-        crew.trim().replaceAll(RegExp(r'\s+'), ' ').toUpperCase();
+    final normalizedCrew = crew
+        .trim()
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .toUpperCase();
     final value = FieldSession(
       sessionId: canonicalUuid('${j['sessionId']}'),
       userId: canonicalUuid('${j['userId']}'),
