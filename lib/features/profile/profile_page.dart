@@ -10,6 +10,7 @@ class ProfilePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final app = context.watch<AppController>(), profile = app.profile;
+    final crew = app.session?.crew.trim() ?? '';
     return Scaffold(
       appBar: AppBar(title: const BrandedAppBarTitle('Perfil')),
       body: ListView(
@@ -52,6 +53,11 @@ class ProfilePage extends StatelessWidget {
                   leading: const Icon(Icons.phone),
                   title: const Text('Teléfono'),
                   subtitle: Text(profile?.phone ?? app.session?.phone ?? ''),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.groups),
+                  title: const Text('Cuadrilla'),
+                  subtitle: Text(crew.isEmpty ? 'No registrada' : crew),
                 ),
                 ListTile(
                   leading: const Icon(Icons.badge),
