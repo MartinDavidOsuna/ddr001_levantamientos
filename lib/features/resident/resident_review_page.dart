@@ -14,6 +14,28 @@ class ResidentReviewPage extends StatefulWidget {
 class _ResidentReviewPageState extends State<ResidentReviewPage> {
   String search = '';
   SurveyStatus? filter = SurveyStatus.executed;
+  bool refreshing = false;
+
+  Future<void> _refresh(AppController app, {bool showFeedback = false}) async {
+    if (refreshing) return;
+    setState(() => refreshing = true);
+    try {
+      await app.refreshServer();
+      if (!mounted || !showFeedback) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            app.apiReachable
+                ? 'Revisiones actualizadas.'
+                : 'Sin conexión con el servidor. Se conservan los datos locales.',
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => refreshing = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final app = context.watch<AppController>();
@@ -31,7 +53,24 @@ class _ResidentReviewPageState extends State<ResidentReviewPage> {
         )
         .toList();
     return Scaffold(
-      appBar: AppBar(title: const BrandedAppBarTitle('Revisión de base')),
+      appBar: AppBar(
+        title: const BrandedAppBarTitle('Revisión de base'),
+        actions: [
+          TextButton.icon(
+            key: const Key('resident_review_refresh'),
+            onPressed: refreshing
+                ? null
+                : () => _refresh(app, showFeedback: true),
+            icon: refreshing
+                ? const SizedBox.square(
+                    dimension: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.refresh),
+            label: const Text('Actualizar'),
+          ),
+        ],
+      ),
       body: Column(
         children: [
           Padding(
@@ -58,26 +97,30 @@ class _ResidentReviewPageState extends State<ResidentReviewPage> {
             onChanged: (v) => setState(() => filter = v),
           ),
           Expanded(
-            child: ListView(
-              children: items
-                  .map(
-                    (s) => Card(
-                      child: ListTile(
-                        title: Text(s.displayIdentifier),
-                        subtitle: Text(
-                          '${surveyStatusLabel(s.status)} · Etapa ${s.currentStep}/6\n'
-                          'Contratista: ${s.contractorName}',
-                        ),
-                        onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => _ResidentDetail(surveyId: s.id),
+            child: RefreshIndicator(
+              onRefresh: () => _refresh(app),
+              child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                children: items
+                    .map(
+                      (s) => Card(
+                        child: ListTile(
+                          title: Text(s.displayIdentifier),
+                          subtitle: Text(
+                            '${surveyStatusLabel(s.status)} · Etapa ${s.currentStep}/6\n'
+                            'Contratista: ${s.contractorName}',
+                          ),
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => _ResidentDetail(surveyId: s.id),
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                  )
-                  .toList(),
+                    )
+                    .toList(),
+              ),
             ),
           ),
         ],
