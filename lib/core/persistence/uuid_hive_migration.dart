@@ -156,6 +156,8 @@ SyncQueueItem mergeQueueItems(SyncQueueItem left, SyncQueueItem right) =>
       nextAttemptAt: _latest(left.nextAttemptAt, right.nextAttemptAt),
       requiresReview: left.requiresReview || right.requiresReview,
       lastErrorCode: right.lastErrorCode ?? left.lastErrorCode,
+      actorUserId: right.actorUserId ?? left.actorUserId,
+      crew: right.crew ?? left.crew,
     );
 
 DateTime? _latest(DateTime? left, DateTime? right) {

@@ -24,6 +24,7 @@ class FieldSession {
     required this.email,
     required this.phone,
     this.crew = '',
+    this.crewId,
     this.kind = SessionKind.field,
     this.adminRole,
   });
@@ -36,12 +37,14 @@ class FieldSession {
       email,
       phone,
       crew;
+  final String? crewId;
   final SessionKind kind;
   final String? adminRole;
   FieldSession copyWith({
     String? accessToken,
     String? refreshToken,
     String? crew,
+    String? crewId,
   }) => FieldSession(
     sessionId: sessionId,
     userId: userId,
@@ -52,6 +55,7 @@ class FieldSession {
     email: email,
     phone: phone,
     crew: crew ?? this.crew,
+    crewId: crewId ?? this.crewId,
     kind: kind,
     adminRole: adminRole,
   );
@@ -65,6 +69,7 @@ class FieldSession {
     'email': email,
     'phone': phone,
     'crew': crew,
+    'crewId': crewId,
     'kind': kind.name,
     'adminRole': adminRole,
   };
@@ -78,6 +83,7 @@ class FieldSession {
     email: '${j['email']}',
     phone: '${j['phone']}',
     crew: '${j['crew'] ?? ''}',
+    crewId: canonicalUuidOrNull(j['crewId']?.toString()),
     kind: SessionKind.values.byName('${j['kind'] ?? 'field'}'),
     adminRole: j['adminRole']?.toString(),
   );

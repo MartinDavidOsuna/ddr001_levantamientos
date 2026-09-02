@@ -59,6 +59,11 @@ class AppController extends ChangeNotifier {
   String? get currentUserId => canonicalUuidOrNull(
     profile?.userId.isNotEmpty == true ? profile!.userId : session?.userId,
   );
+  String? get currentCrewId =>
+      canonicalUuidOrNull(profile?.crewId ?? session?.crewId);
+  String get currentCrew =>
+      (profile?.crew.isNotEmpty == true ? profile!.crew : session?.crew ?? '')
+          .trim();
 
   bool get canViewAllSurveys => profile?.role.canViewAllSurveys ?? false;
 
@@ -67,6 +72,18 @@ class AppController extends ChangeNotifier {
     if (canViewAllSurveys) return true;
     final owner = canonicalUuidOrNull(value.contractorUserId);
     final user = currentUserId;
+    if (value.localState == LocalSurveyState.createdLocal) {
+      return owner != null && user != null && uuidEquals(owner, user);
+    }
+    final surveyCrewId = canonicalUuidOrNull(value.crewId);
+    final sessionCrewId = currentCrewId;
+    if (surveyCrewId != null && sessionCrewId != null) {
+      return uuidEquals(surveyCrewId, sessionCrewId);
+    }
+    final surveyCrew = value.crew?.trim() ?? '';
+    if (surveyCrew.isNotEmpty && currentCrew.isNotEmpty) {
+      return surveyCrew == currentCrew;
+    }
     return owner != null && user != null && uuidEquals(owner, user);
   }
 
@@ -78,10 +95,27 @@ class AppController extends ChangeNotifier {
   List<BaseSurvey> get visibleSurveys =>
       surveys.where(canCurrentSessionViewSurvey).toList(growable: false);
 
+  bool _queueBelongsToCurrentActor(SyncQueueItem item) {
+    final actor = canonicalUuidOrNull(item.actorUserId);
+    final user = currentUserId;
+    if (actor != null && user != null) return uuidEquals(actor, user);
+    final survey = _surveyAny(item.surveyId);
+    final legacyOwner = canonicalUuidOrNull(survey?.contractorUserId);
+    return legacyOwner != null && user != null && uuidEquals(legacyOwner, user);
+  }
+
+  bool _queueTransferableByCompany(SyncQueueItem item) =>
+      item.operation == QueueOperation.verifyPhotos &&
+      canCurrentSessionViewSurveyId(item.surveyId);
+
   List<SyncQueueItem> get visibleQueue => (profile?.role.isReviewer ?? false)
       ? const []
       : queue
-            .where((item) => canCurrentSessionViewSurveyId(item.surveyId))
+            .where(
+              (item) =>
+                  _queueBelongsToCurrentActor(item) ||
+                  _queueTransferableByCompany(item),
+            )
             .toList(growable: false);
 
   List<SyncQueueItem> get _eligibleQueue {
@@ -489,6 +523,10 @@ class AppController extends ChangeNotifier {
           pendingTakeoverToken = takeoverToken;
           return 'Esta instalación necesita recuperar su sesión.';
         }
+        if (code == 'COMPANY_MISMATCH' ||
+            code == 'COMPANY_OWNERSHIP_CONFLICT') {
+          return data['detail']?.toString() ?? fieldLoginErrorMessage(error);
+        }
         return 'Los datos de identidad entran en conflicto con otro usuario.';
       }
       return fieldLoginErrorMessage(error);
@@ -516,6 +554,11 @@ class AppController extends ChangeNotifier {
     if (current != null) {
       try {
         await remote.logout(current);
+      } on DioException catch (error) {
+        if (error.response?.statusCode != 401) {
+          return 'No fue posible cerrar la sesión. Intenta de nuevo.';
+        }
+        await sessions.clear();
       } catch (_) {
         return 'No fue posible cerrar la sesión. Intenta de nuevo.';
       }
@@ -554,6 +597,8 @@ class AppController extends ChangeNotifier {
           : cleanAccount,
       contractorName: profile?.displayName ?? session?.name ?? '',
       contractorUserId: currentUserId,
+      crewId: currentCrewId,
+      crew: currentCrew,
       createdAt: now,
       updatedAt: now,
       status: SurveyStatus.created,
@@ -1841,6 +1886,8 @@ class AppController extends ChangeNotifier {
             contractorName:
                 '${row['contractor_name'] ?? row['contractorName'] ?? localSurvey.contractorName}',
             contractorUserId: remoteOwner,
+            crewId: _crewIdFromServerRow(row) ?? localSurvey.crewId,
+            crew: _crewFromServerRow(row) ?? localSurvey.crew,
             status: hasPendingLocalState ? localSurvey.status : wireStatus,
             rejectionReason: row['rejection_reason']?.toString(),
             syncState: hasPendingLocalState
@@ -1868,6 +1915,8 @@ class AppController extends ChangeNotifier {
             contractorName:
                 '${row['contractor_name'] ?? row['contractorName'] ?? ''}',
             contractorUserId: remoteOwner,
+            crewId: _crewIdFromServerRow(row),
+            crew: _crewFromServerRow(row),
             createdAt: DateTime.tryParse('${row['created_at'] ?? ''}') ?? now,
             updatedAt: now,
             status: _status('${row['status']}'),
@@ -1917,19 +1966,26 @@ class AppController extends ChangeNotifier {
           row['contractorUserId']?.toString(),
     );
     if (explicit != null) return explicit;
-    // The contractor list is server-filtered by the authenticated UUID, so
-    // membership itself is authoritative. Reviewer responses must carry the
-    // explicit owner and are never guessed.
-    return canViewAllSurveys ? null : currentUserId;
+    return null;
+  }
+
+  String? _crewIdFromServerRow(Map<String, dynamic> row) => canonicalUuidOrNull(
+    row['crew_id']?.toString() ?? row['crewId']?.toString(),
+  );
+
+  String? _crewFromServerRow(Map<String, dynamic> row) {
+    final value = row['crew']?.toString() ?? row['contractor_crew']?.toString();
+    return value?.trim().isNotEmpty == true ? value!.trim() : null;
   }
 
   Future<void> loadSurveyDetail(String surveyId) async {
     final current = survey(surveyId);
     final detail = await remote.detail(current.id);
     final wireOwner = _ownerFromServerRow(detail);
-    if (!canViewAllSurveys &&
-        wireOwner != null &&
-        !uuidEquals(wireOwner, currentUserId)) {
+    final wireCrewId = _crewIdFromServerRow(detail);
+    final wireCrew = _crewFromServerRow(detail);
+    final scoped = current.copyWith(crewId: wireCrewId, crew: wireCrew);
+    if (!canViewAllSurveys && !canCurrentSessionViewSurvey(scoped)) {
       throw StateError('No tienes acceso a este levantamiento.');
     }
     final remotePhotos = (detail['photos'] as List? ?? const [])
@@ -1988,6 +2044,8 @@ class AppController extends ChangeNotifier {
         .toList(growable: false);
     final updated = current.copyWith(
       contractorUserId: wireOwner,
+      crewId: wireCrewId,
+      crew: wireCrew,
       contractorName:
           '${detail['contractor_name'] ?? detail['contractorName'] ?? current.contractorName}',
       accountNumber: mergeAccountNumber(current.accountNumber, detail),
@@ -2031,11 +2089,12 @@ class AppController extends ChangeNotifier {
     final profileCrew = profile?.crew.trim() ?? '';
     if (current == null ||
         current.kind != SessionKind.field ||
-        profileCrew.isEmpty ||
-        current.crew == profileCrew) {
+        profileCrew.isEmpty) {
       return;
     }
-    session = current.copyWith(crew: profileCrew);
+    if (current.crew != profileCrew || current.crewId != profile?.crewId) {
+      session = current.copyWith(crew: profileCrew, crewId: profile?.crewId);
+    }
     await sessions.save(session!);
   }
 
@@ -2070,6 +2129,8 @@ class AppController extends ChangeNotifier {
       photoId: canonicalUuidOrNull(photoId),
       step: step,
       correctionId: canonicalUuidOrNull(correctionId),
+      actorUserId: currentUserId,
+      crew: currentCrew,
     );
     final key = canonicalQueueItemId(normalized);
     if (queue.any((q) => q.id == key)) return;
@@ -2081,6 +2142,8 @@ class AppController extends ChangeNotifier {
       photoId: normalized.photoId,
       step: step,
       correctionId: normalized.correctionId,
+      actorUserId: currentUserId,
+      crew: currentCrew,
     );
     queue = [...queue, item];
     await local.saveQueue(item);

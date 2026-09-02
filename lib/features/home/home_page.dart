@@ -42,8 +42,9 @@ class HomePage extends StatelessWidget {
             _ActionCard(
               key: const Key('my_surveys_action'),
               icon: Icons.list_alt,
-              title: 'MIS LEVANTAMIENTOS',
-              subtitle: '${app.visibleSurveys.length} levantamientos propios',
+              title: 'LEVANTAMIENTOS DE EMPRESA #${app.currentCrew}',
+              subtitle:
+                  '${app.visibleSurveys.length} levantamientos compartidos',
               onTap: onSurveysTap ?? () {},
             ),
           ] else ...[

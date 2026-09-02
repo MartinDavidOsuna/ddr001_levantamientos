@@ -34,7 +34,7 @@ Map<String, dynamic> fieldSessionStartPayload({
   'name': name.trim().replaceAll(RegExp(r'\s+'), ' '),
   'email': email.trim().toLowerCase(),
   'phone': phone.trim(),
-  'crew': crew.trim().replaceAll(RegExp(r'\s+'), ' ').toUpperCase(),
+  'crew': crew.trim(),
   'client_app': fieldClientApp,
   'device': {
     'installationId': installationId,
@@ -136,10 +136,7 @@ class ConstructionApi implements ConstructionRemote {
       options: Options(extra: {'skipAuth': true}),
     );
     final j = response.data ?? const {};
-    final normalizedCrew = crew
-        .trim()
-        .replaceAll(RegExp(r'\s+'), ' ')
-        .toUpperCase();
+    final normalizedCrew = crew.trim();
     final value = FieldSession(
       sessionId: canonicalUuid('${j['sessionId']}'),
       userId: canonicalUuid('${j['userId']}'),
@@ -150,6 +147,7 @@ class ConstructionApi implements ConstructionRemote {
       email: email.trim().toLowerCase(),
       phone: phone.trim(),
       crew: normalizedCrew,
+      crewId: canonicalUuidOrNull(j['crewId']?.toString()),
     );
     await sessions.save(value);
     return value;

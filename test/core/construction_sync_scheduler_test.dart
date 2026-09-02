@@ -605,11 +605,11 @@ void main() {
         name: '  María   Residente  ',
         email: ' RESIDENT@Example.COM ',
         phone: '1234567890',
-        crew: ' cuadrilla   norte ',
+        crew: '1',
       );
       expect(error, isNull);
       expect(app.session?.kind, SessionKind.field);
-      expect(app.session?.crew, 'CUADRILLA NORTE');
+      expect(app.session?.crew, '1');
       expect(app.profile?.role, ConstructionRole.resident);
       expect(app.profile?.role.isReviewer, isTrue);
       expect(remote.fieldLoginAttempts, 1);
@@ -617,25 +617,25 @@ void main() {
         'María Residente',
         'resident@example.com',
         '1234567890',
-        'CUADRILLA NORTE',
+        '1',
       ));
     });
 
     test('profile crew becomes the persisted Field session crew', () async {
       app.session = null;
-      remote.profileCrew = 'CUADRILLA DEL SERVIDOR';
+      remote.profileCrew = '1';
 
       final error = await app.login(
         name: 'Usuario',
         email: 'usuario@example.com',
         phone: '1234567890',
-        crew: 'cuadrilla capturada',
+        crew: '1',
       );
 
       expect(error, isNull);
-      expect(app.profile?.crew, 'CUADRILLA DEL SERVIDOR');
-      expect(app.session?.crew, 'CUADRILLA DEL SERVIDOR');
-      expect(sessions.value?.crew, 'CUADRILLA DEL SERVIDOR');
+      expect(app.profile?.crew, '1');
+      expect(app.session?.crew, '1');
+      expect(sessions.value?.crew, '1');
     });
 
     test('another identity conflict never offers device takeover', () async {
@@ -654,7 +654,7 @@ void main() {
         name: 'Usuario',
         email: 'usuario@example.com',
         phone: '1234567890',
-        crew: 'CUADRILLA A',
+        crew: '1',
       );
 
       expect(error, contains('conflicto'));
@@ -684,7 +684,7 @@ void main() {
           name: 'Usuario',
           email: 'usuario@example.com',
           phone: '1234567890',
-          crew: 'CUADRILLA A',
+          crew: '1',
         );
 
         expect(error, contains('Esta instalación'));
@@ -724,6 +724,30 @@ void main() {
         expect(app.session, same(current));
       },
     );
+
+    test('expired remote session can still be closed locally', () async {
+      remote.logoutFailure = DioException(
+        requestOptions: RequestOptions(path: '/field-sessions/session/end'),
+        response: Response<void>(
+          requestOptions: RequestOptions(path: '/field-sessions/session/end'),
+          statusCode: 401,
+        ),
+        type: DioExceptionType.badResponse,
+      );
+      final current = app.session!;
+      await sessions.save(current);
+      final surveysBefore = app.surveys.map((item) => item.toJson()).toList();
+      final queueBefore = app.queue.map((item) => item.toJson()).toList();
+      final photosBefore = app.photos.map((item) => item.toJson()).toList();
+
+      expect(await app.logout(), isNull);
+
+      expect(app.session, isNull);
+      expect(await sessions.read(), isNull);
+      expect(app.surveys.map((item) => item.toJson()).toList(), surveysBefore);
+      expect(app.queue.map((item) => item.toJson()).toList(), queueBefore);
+      expect(app.photos.map((item) => item.toJson()).toList(), photosBefore);
+    });
 
     test(
       'refresh reconciles without clearing pending survey, queue or photos',
@@ -1459,6 +1483,41 @@ void main() {
       expect(app.surveys, hasLength(2), reason: 'storage is never erased');
     });
 
+    test('contractor sees every synchronized survey in the same company', () {
+      app.surveys = [
+        baseSurvey(surveyA).copyWith(
+          contractorUserId: 'user-roberto',
+          crew: '1',
+          syncState: SyncState.synchronized,
+        ),
+        baseSurvey(surveyB).copyWith(
+          contractorUserId: 'user-juan',
+          crew: '1',
+          syncState: SyncState.synchronized,
+        ),
+        baseSurvey('cccccccc-cccc-4ccc-8ccc-cccccccccccc').copyWith(
+          contractorUserId: 'user-pedro',
+          crew: '2',
+          syncState: SyncState.synchronized,
+        ),
+      ];
+      app.profile = const ConstructionProfile(
+        userId: 'user-juan',
+        displayName: 'Juan',
+        email: 'juan@example.com',
+        phone: '',
+        crew: '1',
+        role: ConstructionRole.contractor,
+      );
+      app.session = fieldSession('user-juan');
+
+      expect(app.visibleSurveys.map((item) => item.contractorUserId), [
+        'user-roberto',
+        'user-juan',
+      ]);
+      expect(app.surveys, hasLength(3), reason: 'other company cache is kept');
+    });
+
     test(
       'legacy unknown remains hidden and cannot create a false duplicate',
       () {
@@ -1531,6 +1590,7 @@ void main() {
             'survey_id': surveyA,
             'display_identifier': 'A',
             'contractor_name': 'A',
+            'contractor_user_id': 'user-a',
             'status': 'in_progress',
             'current_step': 1,
           },

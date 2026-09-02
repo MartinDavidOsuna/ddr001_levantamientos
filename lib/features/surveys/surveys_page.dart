@@ -51,7 +51,10 @@ class _SurveysPageState extends State<SurveysPage> {
     return Scaffold(
       appBar: AppBar(
         title: BrandedAppBarTitle(
-          (app.profile?.role ?? ConstructionRole.contractor).surveyListTitle,
+          app.profile?.role.isReviewer == true
+              ? (app.profile?.role ?? ConstructionRole.contractor)
+                    .surveyListTitle
+              : 'Levantamientos de Empresa #${app.currentCrew}',
         ),
         actions: [
           TextButton.icon(
@@ -112,7 +115,8 @@ class _SurveysPageState extends State<SurveysPage> {
                       ),
                       subtitle: Text(
                         '${s.accountNumber ?? 'Sin cuenta'} · ${surveyStatusLabel(s.status)} · Etapa ${s.currentStep}/6'
-                        '${app.profile?.role.isReviewer == true ? '\nContratista: ${s.contractorName}' : ''}',
+                        '\nCreado por: ${s.contractorName.isEmpty ? 'No disponible' : s.contractorName}'
+                        '\nEmpresa: ${s.crew ?? app.currentCrew}',
                       ),
                       trailing: Column(
                         mainAxisAlignment: MainAxisAlignment.center,

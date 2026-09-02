@@ -152,10 +152,13 @@ class _LoginPageState extends State<LoginPage> {
                                   controller: crew,
                                   style: inputStyle,
                                   cursorColor: Colors.white,
-                                  textCapitalization:
-                                      TextCapitalization.characters,
+                                  keyboardType: TextInputType.number,
                                   textInputAction: TextInputAction.done,
-                                  maxLength: 180,
+                                  maxLength: 1,
+                                  inputFormatters: [
+                                    FilteringTextInputFormatter.digitsOnly,
+                                    LengthLimitingTextInputFormatter(1),
+                                  ],
                                   decoration: _decoration(
                                     'Empresa',
                                     Icons.groups_outlined,
