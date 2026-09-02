@@ -725,6 +725,30 @@ void main() {
       },
     );
 
+    test('expired remote session can still be closed locally', () async {
+      remote.logoutFailure = DioException(
+        requestOptions: RequestOptions(path: '/field-sessions/session/end'),
+        response: Response<void>(
+          requestOptions: RequestOptions(path: '/field-sessions/session/end'),
+          statusCode: 401,
+        ),
+        type: DioExceptionType.badResponse,
+      );
+      final current = app.session!;
+      await sessions.save(current);
+      final surveysBefore = app.surveys.map((item) => item.toJson()).toList();
+      final queueBefore = app.queue.map((item) => item.toJson()).toList();
+      final photosBefore = app.photos.map((item) => item.toJson()).toList();
+
+      expect(await app.logout(), isNull);
+
+      expect(app.session, isNull);
+      expect(await sessions.read(), isNull);
+      expect(app.surveys.map((item) => item.toJson()).toList(), surveysBefore);
+      expect(app.queue.map((item) => item.toJson()).toList(), queueBefore);
+      expect(app.photos.map((item) => item.toJson()).toList(), photosBefore);
+    });
+
     test(
       'refresh reconciles without clearing pending survey, queue or photos',
       () async {

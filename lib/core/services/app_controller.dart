@@ -554,6 +554,11 @@ class AppController extends ChangeNotifier {
     if (current != null) {
       try {
         await remote.logout(current);
+      } on DioException catch (error) {
+        if (error.response?.statusCode != 401) {
+          return 'No fue posible cerrar la sesión. Intenta de nuevo.';
+        }
+        await sessions.clear();
       } catch (_) {
         return 'No fue posible cerrar la sesión. Intenta de nuevo.';
       }
