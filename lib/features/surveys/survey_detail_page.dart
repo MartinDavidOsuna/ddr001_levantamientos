@@ -127,6 +127,15 @@ class _SurveyDetailPageState extends State<SurveyDetailPage>
               trailing: Icon(syncIcon(survey.syncState)),
             ),
           ),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.business_outlined),
+              title: Text(
+                'Creado por: ${survey.contractorName.isEmpty ? 'No disponible' : survey.contractorName}',
+              ),
+              subtitle: Text('Empresa: ${survey.crew ?? app.currentCrew}'),
+            ),
+          ),
           if (survey.status == SurveyStatus.rejected)
             Card(
               color: Theme.of(context).colorScheme.errorContainer,

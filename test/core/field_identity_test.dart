@@ -14,17 +14,17 @@ DioException responseFailure(int status) => DioException(
 );
 
 void main() {
-  test('normalizes Field identity including crew without losing Unicode', () {
+  test('normalizes Field identity and accepts a one-digit company', () {
     const identity = FieldIdentity(
       name: '  María   José  Ñúñez  ',
       email: '  USER@Example.COM ',
       phone: '6621234567',
-      crew: '  cuadrilla   norte  ',
+      crew: ' 1 ',
     );
     expect(identity.normalizedName, 'María José Ñúñez');
     expect(identity.normalizedEmail, 'user@example.com');
     expect(identity.normalizedPhone, '6621234567');
-    expect(identity.normalizedCrew, 'CUADRILLA NORTE');
+    expect(identity.normalizedCrew, '1');
     expect(identity.validate(), isNull);
   });
 
@@ -34,7 +34,7 @@ void main() {
         name: '   ',
         email: 'user@example.com',
         phone: '6621234567',
-        crew: 'CUADRILLA A',
+        crew: '1',
       ).validate(),
       'Ingresa un nombre válido.',
     );
@@ -46,7 +46,7 @@ void main() {
         name: 'Usuario Test',
         email: 'correo-invalido',
         phone: '6621234567',
-        crew: 'CUADRILLA A',
+        crew: '1',
       ).validate(),
       'Ingresa un correo electrónico válido.',
     );
@@ -59,23 +59,36 @@ void main() {
           name: 'Usuario Test',
           email: 'user@example.com',
           phone: phone,
-          crew: 'CUADRILLA A',
+          crew: '1',
         ).validate(),
         'El teléfono debe contener exactamente 10 dígitos.',
       );
     }
   });
 
-  test('requires a non-empty crew', () {
-    expect(
-      const FieldIdentity(
-        name: 'Usuario Test',
-        email: 'user@example.com',
-        phone: '6621234567',
-        crew: '   ',
-      ).validate(),
-      'Ingresa una empresa válida.',
-    );
+  test('company domain is exactly one digit', () {
+    for (final company in ['', ' ', '10', '01', 'A', '-']) {
+      expect(
+        FieldIdentity(
+          name: 'Usuario Test',
+          email: 'user@example.com',
+          phone: '6621234567',
+          crew: company,
+        ).validate(),
+        'Ingresa una Empresa válida del 0 al 9.',
+      );
+    }
+    for (final company in ['0', '9']) {
+      expect(
+        FieldIdentity(
+          name: 'Usuario Test',
+          email: 'user@example.com',
+          phone: '6621234567',
+          crew: company,
+        ).validate(),
+        isNull,
+      );
+    }
   });
 
   test('persisted sessions preserve crew and legacy JSON remains readable', () {
@@ -88,9 +101,9 @@ void main() {
       name: 'Field User',
       email: 'field@example.com',
       phone: '6621234567',
-      crew: 'CUADRILLA A',
+      crew: '1',
     );
-    expect(FieldSession.fromJson(field.toJson()).crew, 'CUADRILLA A');
+    expect(FieldSession.fromJson(field.toJson()).crew, '1');
 
     final legacyFieldJson = Map<String, dynamic>.from(field.toJson())
       ..remove('crew');
@@ -119,12 +132,33 @@ void main() {
     );
   });
 
+  test('company mismatch exposes the exact server detail', () {
+    final request = RequestOptions(path: '/field-sessions/start');
+    final error = DioException(
+      requestOptions: request,
+      response: Response<Map<String, dynamic>>(
+        requestOptions: request,
+        statusCode: 409,
+        data: const {
+          'code': 'COMPANY_MISMATCH',
+          'detail': 'El usuario pertenece a la empresa #1',
+          'company': '1',
+        },
+      ),
+      type: DioExceptionType.badResponse,
+    );
+    expect(
+      fieldLoginErrorMessage(error),
+      'El usuario pertenece a la empresa #1',
+    );
+  });
+
   test('Field login payload identifies app, installation and crew', () {
     final payload = fieldSessionStartPayload(
       name: ' Usuario  Test ',
       email: ' USER@EXAMPLE.COM ',
       phone: '6621234567',
-      crew: ' cuadrilla   norte ',
+      crew: ' 1 ',
       installationId: 'installation-a',
       platform: 'android',
       manufacturer: 'Motorola',
@@ -136,7 +170,7 @@ void main() {
     expect(fieldClientApp, 'ddr001_levantamientos');
     expect(payload['name'], 'Usuario Test');
     expect(payload['email'], 'user@example.com');
-    expect(payload['crew'], 'CUADRILLA NORTE');
+    expect(payload['crew'], '1');
     expect(
       (payload['device'] as Map<String, dynamic>)['installationId'],
       'installation-a',

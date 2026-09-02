@@ -71,7 +71,7 @@ Future<(AppController, Directory)> controller(
     name: 'Usuario',
     email: 'u@example.com',
     phone: '1234567890',
-    crew: 'CUADRILLA NORTE',
+    crew: '1',
   );
   app.profile = ConstructionProfile(
     userId: 'u',
@@ -79,6 +79,7 @@ Future<(AppController, Directory)> controller(
     email: 'u@example.com',
     phone: '1234567890',
     role: role,
+    crew: role == ConstructionRole.contractor ? '1' : '',
   );
   return (app, root);
 }
@@ -94,6 +95,7 @@ BaseSurvey reviewSurvey({
   String id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
   String displayIdentifier = 'Base Norte',
   String? contractorUserId,
+  String crew = '1',
   SurveyStatus status = SurveyStatus.executed,
   GeoPoint? canonicalLocation,
 }) => BaseSurvey(
@@ -102,6 +104,7 @@ BaseSurvey reviewSurvey({
   accountNumber: '890',
   contractorName: 'Juan Pérez',
   contractorUserId: contractorUserId,
+  crew: crew,
   createdAt: DateTime.utc(2026, 8, 1),
   updatedAt: DateTime.utc(2026, 8, 2),
   status: status,
@@ -151,6 +154,12 @@ void main() {
     expect(fields[2].key, const Key('login_phone'));
     expect(fields[3].key, const Key('login_crew'));
     expect(fields[2].keyboardType, TextInputType.phone);
+    expect(fields[3].keyboardType, TextInputType.number);
+    expect(fields[3].maxLength, 1);
+    await tester.enterText(find.byKey(const Key('login_crew')), '12');
+    expect(fields[3].controller?.text, '1');
+    await tester.enterText(find.byKey(const Key('login_crew')), 'A');
+    expect(fields[3].controller?.text, isEmpty);
     expect(find.text('Contraseña'), findsNothing);
     expect(find.text('Acceso seguro'), findsNothing);
     expect(find.text('Campo'), findsNothing);
@@ -187,7 +196,7 @@ void main() {
     });
     await tester.pumpWidget(page(app, const HomePage()));
     expect(find.text('INICIAR NUEVO LEVANTAMIENTO'), findsOneWidget);
-    expect(find.text('MIS LEVANTAMIENTOS'), findsOneWidget);
+    expect(find.text('LEVANTAMIENTOS DE EMPRESA #1'), findsOneWidget);
   });
   testWidgets('home Mis levantamientos selects shared surveys tab', (
     tester,
@@ -202,7 +211,7 @@ void main() {
     await tester.pumpWidget(page(app, const MainShell()));
     await tester.tap(find.byKey(const Key('my_surveys_action')));
     await tester.pumpAndSettle();
-    expect(find.text('Mis levantamientos'), findsOneWidget);
+    expect(find.text('Levantamientos de Empresa #1'), findsOneWidget);
   });
   testWidgets('bottom navigation labels stay on one line responsively', (
     tester,
@@ -625,7 +634,7 @@ void main() {
     expect(find.text('Teléfono'), findsOneWidget);
     expect(find.text('Empresa'), findsOneWidget);
     expect(find.text('Cuadrilla'), findsNothing);
-    expect(find.text('CUADRILLA NORTE'), findsOneWidget);
+    expect(find.text('1'), findsOneWidget);
     expect(find.text('Rol'), findsOneWidget);
     expect(find.text('Dispositivo'), findsOneWidget);
     expect(find.text('Google Pixel 7 Pro · Android 17'), findsOneWidget);
@@ -665,6 +674,7 @@ void main() {
         id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
         displayIdentifier: 'Base Ajena',
         contractorUserId: 'another-user',
+        crew: '2',
         canonicalLocation: location(29.002),
       ),
     ];
@@ -835,7 +845,7 @@ void main() {
       reviewer.surveys = [reviewSurvey()];
       await tester.pumpWidget(page(reviewer, const SurveysPage()));
       expect(find.text('Levantamientos'), findsOneWidget);
-      expect(find.textContaining('Contratista: Juan Pérez'), findsOneWidget);
+      expect(find.textContaining('Creado por: Juan Pérez'), findsOneWidget);
       expect(find.byKey(const Key('survey_refresh')), findsOneWidget);
     },
   );

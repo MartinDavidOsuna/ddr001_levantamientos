@@ -13,7 +13,7 @@ extension ConstructionCapabilities on ConstructionRole {
   bool get canCorrectCanonicalLocation => isReviewer;
   bool get canMutateEvidence => this == ConstructionRole.contractor;
   String get surveyListTitle =>
-      isReviewer ? 'Levantamientos' : 'Mis levantamientos';
+      isReviewer ? 'Levantamientos' : 'Levantamientos de la Empresa';
   String get displayLabel => switch (this) {
     ConstructionRole.contractor => 'Contratista',
     ConstructionRole.resident => 'Residente',
@@ -393,6 +393,8 @@ class BaseSurvey {
     required this.currentStep,
     required this.steps,
     this.contractorUserId,
+    this.crewId,
+    this.crew,
     this.accountNumber,
     this.canonicalLocation,
     this.rejectionReason,
@@ -400,7 +402,7 @@ class BaseSurvey {
     this.remotePhotos = const [],
   });
   final String id, displayIdentifier, contractorName;
-  final String? contractorUserId, accountNumber, rejectionReason;
+  final String? contractorUserId, crewId, crew, accountNumber, rejectionReason;
   final DateTime createdAt, updatedAt;
   final SurveyStatus status;
   final LocalSurveyState localState;
@@ -414,6 +416,8 @@ class BaseSurvey {
     String? displayIdentifier,
     String? contractorName,
     String? contractorUserId,
+    String? crewId,
+    String? crew,
     SurveyStatus? status,
     LocalSurveyState? localState,
     SyncState? syncState,
@@ -434,6 +438,8 @@ class BaseSurvey {
         : accountNumber ?? this.accountNumber,
     contractorName: contractorName ?? this.contractorName,
     contractorUserId: contractorUserId ?? this.contractorUserId,
+    crewId: crewId ?? this.crewId,
+    crew: crew ?? this.crew,
     createdAt: createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     status: status ?? this.status,
@@ -452,6 +458,8 @@ class BaseSurvey {
     'accountNumber': accountNumber,
     'contractorName': contractorName,
     'contractorUserId': contractorUserId,
+    'crewId': crewId,
+    'crew': crew,
     'createdAt': createdAt.toIso8601String(),
     'updatedAt': updatedAt.toIso8601String(),
     'status': status.name,
@@ -470,6 +478,8 @@ class BaseSurvey {
     accountNumber: j['accountNumber'] as String?,
     contractorName: j['contractorName'] as String? ?? '',
     contractorUserId: canonicalUuidOrNull(j['contractorUserId']?.toString()),
+    crewId: canonicalUuidOrNull(j['crewId']?.toString()),
+    crew: j['crew']?.toString(),
     createdAt: DateTime.parse(j['createdAt'] as String),
     updatedAt: DateTime.parse(j['updatedAt'] as String),
     status: SurveyStatus.values.byName(j['status'] as String),
@@ -605,8 +615,10 @@ class ConstructionProfile {
     required this.phone,
     required this.role,
     this.crew = '',
+    this.crewId,
   });
   final String userId, displayName, email, phone, crew;
+  final String? crewId;
   final ConstructionRole role;
   Map<String, dynamic> toJson() => {
     'userId': userId,
@@ -614,6 +626,7 @@ class ConstructionProfile {
     'email': email,
     'phone': phone,
     'crew': crew,
+    'crewId': crewId,
     'constructionRole': role.name,
   };
   factory ConstructionProfile.fromJson(Map<String, dynamic> j) =>
@@ -623,6 +636,7 @@ class ConstructionProfile {
         email: '${j['email'] ?? ''}',
         phone: '${j['phone'] ?? ''}',
         crew: '${j['crew'] ?? ''}',
+        crewId: canonicalUuidOrNull(j['crewId']?.toString()),
         role: ConstructionRole.values.byName('${j['constructionRole']}'),
       );
 }
@@ -640,9 +654,11 @@ class SyncQueueItem {
     this.nextAttemptAt,
     this.requiresReview = false,
     this.lastErrorCode,
+    this.actorUserId,
+    this.crew,
   });
   final String id, surveyId;
-  final String? photoId, correctionId;
+  final String? photoId, correctionId, actorUserId, crew;
   final int? step;
   final QueueOperation operation;
   final int attempts;
@@ -670,6 +686,8 @@ class SyncQueueItem {
         : nextAttemptAt ?? this.nextAttemptAt,
     requiresReview: requiresReview ?? this.requiresReview,
     lastErrorCode: lastErrorCode ?? this.lastErrorCode,
+    actorUserId: actorUserId,
+    crew: crew,
   );
   SyncQueueItem retry(DateTime now) {
     final seconds = (1 << attempts.clamp(0, 8)) * 2;
@@ -687,6 +705,8 @@ class SyncQueueItem {
       ),
       requiresReview: requiresReview,
       lastErrorCode: lastErrorCode,
+      actorUserId: actorUserId,
+      crew: crew,
     );
   }
 
@@ -702,6 +722,8 @@ class SyncQueueItem {
     'nextAttemptAt': nextAttemptAt?.toIso8601String(),
     'requiresReview': requiresReview,
     'lastErrorCode': lastErrorCode,
+    'actorUserId': actorUserId,
+    'crew': crew,
   };
   factory SyncQueueItem.fromJson(Map<String, dynamic> j) => SyncQueueItem(
     id: j['id'] as String,
@@ -717,6 +739,8 @@ class SyncQueueItem {
         : DateTime.parse(j['nextAttemptAt'] as String),
     requiresReview: j['requiresReview'] as bool? ?? false,
     lastErrorCode: j['lastErrorCode'] as String?,
+    actorUserId: canonicalUuidOrNull(j['actorUserId']?.toString()),
+    crew: j['crew']?.toString(),
   );
 }
 

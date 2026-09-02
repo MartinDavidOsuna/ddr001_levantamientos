@@ -34,7 +34,10 @@ void main() {
       }
       expect(ConstructionRole.contractor.isReviewer, isFalse);
       expect(ConstructionRole.contractor.canMutateEvidence, isTrue);
-      expect(ConstructionRole.contractor.surveyListTitle, 'Mis levantamientos');
+      expect(
+        ConstructionRole.contractor.surveyListTitle,
+        'Levantamientos de la Empresa',
+      );
     },
   );
   test('duplicate normalization trims collapses and ignores case', () {
@@ -141,10 +144,15 @@ void main() {
             surveyId: 's',
             operation: QueueOperation.uploadPhoto,
             createdAt: now,
+            actorUserId: 'AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA',
+            crew: '1',
           ).retry(now).retry(now);
       expect(item.attempts, 2);
       expect(item.nextAttemptAt!.isAfter(now), isTrue);
-      expect(SyncQueueItem.fromJson(item.toJson()).attempts, 2);
+      final restored = SyncQueueItem.fromJson(item.toJson());
+      expect(restored.attempts, 2);
+      expect(restored.actorUserId, 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
+      expect(restored.crew, '1');
     },
   );
   test('hardened verify states do not collapse into a synced boolean', () {
