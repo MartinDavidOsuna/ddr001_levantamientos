@@ -43,10 +43,12 @@ class PhotoCaptureService {
     Future<Directory> Function()? supportDirectory,
     Future<Directory> Function()? temporaryDirectory,
     this.representationBuilder,
+    this.directoryName = 'construction',
   }) : picker = picker ?? ImagePickerAdapter(),
        supportDirectory = supportDirectory ?? getApplicationSupportDirectory,
        temporaryDirectory = temporaryDirectory ?? getTemporaryDirectory;
 
+  final String directoryName;
   final LocalStore local;
   final ConstructionImagePicker picker;
   final Future<Directory> Function() supportDirectory;
@@ -214,7 +216,7 @@ class PhotoCaptureService {
 
   Future<void> _recordOrphanFiles() async {
     final construction = Directory(
-      p.join((await supportDirectory()).path, 'construction'),
+      p.join((await supportDirectory()).path, directoryName),
     );
     if (!construction.existsSync()) return;
     await for (final entity in construction.list(recursive: true)) {
@@ -267,7 +269,7 @@ class PhotoCaptureService {
     final directory = Directory(
       p.join(
         (await supportDirectory()).path,
-        'construction',
+        directoryName,
         canonicalSurvey,
         'evidence',
       ),

@@ -3,6 +3,9 @@ import 'package:hive_ce_flutter/hive_ce_flutter.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 import 'app/app.dart';
+import 'data/cabinets/cabinet_api.dart';
+import 'data/cabinets/cabinet_store.dart';
+import 'data/cabinets/cabinet_controller.dart';
 import 'core/config/app_config.dart';
 import 'core/network/api_client.dart';
 import 'core/persistence/local_store.dart';
@@ -26,9 +29,18 @@ Future<void> main() async {
     packageInfo: await PackageInfo.fromPlatform(),
   );
   await controller.bootstrap();
+  final cabinets = CabinetController(
+    app: controller,
+    store: await CabinetStore.open(),
+    remote: CabinetApi(api),
+  );
+  await cabinets.start();
   runApp(
-    ChangeNotifierProvider.value(
-      value: controller,
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider.value(value: controller),
+        ChangeNotifierProvider.value(value: cabinets),
+      ],
       child: const LevantamientosApp(),
     ),
   );

@@ -4,6 +4,8 @@ import '../../core/services/app_controller.dart';
 import '../../core/widgets/branded_app_bar_title.dart';
 import '../../domain/construction/construction_models.dart';
 import '../surveys/new_survey_page.dart';
+import '../../data/cabinets/cabinet_controller.dart';
+import '../cabinets/cabinet_pages.dart';
 import '../resident/resident_review_page.dart';
 
 class HomePage extends StatelessWidget {
@@ -13,6 +15,7 @@ class HomePage extends StatelessWidget {
   Widget build(BuildContext context) {
     final app = context.watch<AppController>(),
         reviewer = app.profile?.role.isReviewer ?? false;
+    final cabinets = context.watch<CabinetController?>();
     return Scaffold(
       appBar: AppBar(title: const BrandedAppBarTitle('DDR001 Levantamientos')),
       body: ListView(
@@ -48,15 +51,19 @@ class HomePage extends StatelessWidget {
               onTap: onSurveysTap ?? () {},
             ),
           ] else ...[
-            _ActionCard(
-              icon: Icons.add_business,
-              title: 'REGISTRAR INSTALACIÓN',
-              subtitle: 'Próximamente',
-              onTap: () => ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(const SnackBar(content: Text('Próximamente'))),
-            ),
-            const SizedBox(height: 12),
+            if (cabinets?.eligible == true) ...[
+              _ActionCard(
+                key: const Key('register_cabinet_action'),
+                icon: Icons.add_business,
+                title: 'REGISTRAR GABINETE',
+                subtitle: 'Registro, piezas e instalación',
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const CabinetsPage()),
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
             _ActionCard(
               key: const Key('resident_review_action'),
               icon: Icons.fact_check,
@@ -67,6 +74,21 @@ class HomePage extends StatelessWidget {
                 MaterialPageRoute(builder: (_) => const ResidentReviewPage()),
               ),
             ),
+            if (cabinets?.eligible == true) ...[
+              const SizedBox(height: 12),
+              _ActionCard(
+                key: const Key('review_cabinet_action'),
+                icon: Icons.verified,
+                title: 'REVISIÓN DE HIDRANTE',
+                subtitle: 'Expediente, pruebas y dictamen final',
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const CabinetsPage(finalReview: true),
+                  ),
+                ),
+              ),
+            ],
           ],
           const SizedBox(height: 20),
           if (app.unownedPendingCount > 0 && !reviewer)

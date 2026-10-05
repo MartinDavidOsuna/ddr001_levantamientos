@@ -1216,6 +1216,12 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> finalizeCorrection(String surveyId, String correctionId) async {
+    if (survey(
+          surveyId,
+        ).corrections.firstWhere((c) => uuidEquals(c.id, correctionId)).state !=
+        StepState.open) {
+      throw StateError('La corrección está cerrada o dispensada.');
+    }
     final related = photos
         .where((p) => uuidEquals(p.correctionId, correctionId))
         .toList();
@@ -1256,6 +1262,12 @@ class AppController extends ChangeNotifier {
     String comment,
   ) async {
     final current = survey(surveyId);
+    if (current.corrections
+            .firstWhere((c) => uuidEquals(c.id, correctionId))
+            .state !=
+        StepState.open) {
+      throw StateError('La corrección está cerrada o dispensada.');
+    }
     await _replaceSurvey(
       current.copyWith(
         corrections: current.corrections
@@ -1734,6 +1746,14 @@ class AppController extends ChangeNotifier {
         );
       case QueueOperation.uploadPhoto:
         final p = photos.firstWhere((x) => uuidEquals(x.id, item.photoId));
+        if (p.correctionId != null &&
+            s.corrections.any(
+              (c) =>
+                  uuidEquals(c.id, p.correctionId) &&
+                  c.state == StepState.waived,
+            )) {
+          throw StateError('CORRECTION_WAIVED');
+        }
         final uploadFile = File(p.localPath);
         if (!uploadFile.existsSync()) {
           await _replacePhoto(
@@ -1793,6 +1813,9 @@ class AppController extends ChangeNotifier {
         final correction = s.corrections.firstWhere(
           (c) => uuidEquals(c.id, item.correctionId),
         );
+        if (correction.state == StepState.waived) {
+          throw StateError('CORRECTION_WAIVED');
+        }
         await remote.correctionComment(s.id, correction.id, correction.comment);
         await remote.completeCorrection(s.id, item.correctionId!);
     }
@@ -2031,7 +2054,9 @@ class AppController extends ChangeNotifier {
           return CorrectionRound(
             id: canonicalUuid('${row['correction_id']}'),
             round: round,
-            state: '${row['status']}' == 'completed'
+            state: '${row['status']}' == 'waived'
+                ? StepState.waived
+                : '${row['status']}' == 'completed'
                 ? StepState.completedServer
                 : StepState.open,
             comment: row['comment']?.toString(),

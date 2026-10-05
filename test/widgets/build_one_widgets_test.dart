@@ -725,21 +725,22 @@ void main() {
       findsOneWidget,
     );
   });
-  testWidgets('resident home includes review and future installation', (
-    tester,
-  ) async {
-    final (app, root) = (await tester.runAsync(
-      () => controller(ConstructionRole.resident),
-    ))!;
-    addTearDown(() async {
-      await Hive.close();
-      await root.delete(recursive: true);
-    });
-    await tester.pumpWidget(page(app, const HomePage()));
-    expect(find.text('REVISIÓN DE BASE'), findsOneWidget);
-    expect(find.text('REGISTRAR INSTALACIÓN'), findsOneWidget);
-    expect(find.text('Próximamente'), findsOneWidget);
-  });
+  testWidgets(
+    'resident home preserves base review without the provisional installation action',
+    (tester) async {
+      final (app, root) = (await tester.runAsync(
+        () => controller(ConstructionRole.resident),
+      ))!;
+      addTearDown(() async {
+        await Hive.close();
+        await root.delete(recursive: true);
+      });
+      await tester.pumpWidget(page(app, const HomePage()));
+      expect(find.text('REVISIÓN DE BASE'), findsOneWidget);
+      expect(find.text('REGISTRAR INSTALACIÓN'), findsNothing);
+      expect(find.text('Próximamente'), findsNothing);
+    },
+  );
 
   testWidgets(
     'reviewer list and detail identify contractor and survey fields',

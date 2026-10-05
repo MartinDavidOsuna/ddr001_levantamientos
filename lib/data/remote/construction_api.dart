@@ -279,19 +279,30 @@ class ConstructionApi implements ConstructionRemote {
     final path = resident
         ? '/construction/resident/base-surveys'
         : '/construction/base-surveys';
-    final data =
-        (await client.dio.get<Map<String, dynamic>>(
-          path,
-          queryParameters: {
-            if (search?.isNotEmpty == true) 'search': search,
-            'status': ?status,
-            'pageSize': 100,
-          },
-        )).data ??
-        const {};
-    return (data['items'] as List? ?? const [])
-        .map((e) => Map<String, dynamic>.from(e as Map))
-        .toList();
+    final items = <Map<String, dynamic>>[];
+    for (var page = 1; ; page++) {
+      final data =
+          (await client.dio.get<Map<String, dynamic>>(
+            path,
+            queryParameters: {
+              if (search?.isNotEmpty == true) 'search': search,
+              'status': ?status,
+              'page': page,
+              'pageSize': 100,
+            },
+          )).data ??
+          const {};
+      final rows = (data['items'] as List? ?? const [])
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
+      items.addAll(rows);
+      final total = data['total'] as num?;
+      if (rows.isEmpty ||
+          (total != null ? items.length >= total : rows.length < 100)) {
+        break;
+      }
+    }
+    return items;
   }
 
   Future<List<Map<String, dynamic>>> mapPoints({required bool resident}) async {

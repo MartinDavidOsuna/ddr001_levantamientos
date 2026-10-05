@@ -44,7 +44,7 @@ enum LocalSurveyState { createdLocal, active, executedLocal }
 
 enum SyncState { pending, syncing, synchronized, offline, requiresReview }
 
-enum StepState { locked, open, completedLocal, completedServer }
+enum StepState { locked, open, completedLocal, completedServer, waived }
 
 enum PhotoSyncState {
   localOnly,

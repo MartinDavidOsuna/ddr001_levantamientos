@@ -50,3 +50,6 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 /android/build/
+
+# Isolated cabinet TEST credentials and evidence
+.test-cabinets/

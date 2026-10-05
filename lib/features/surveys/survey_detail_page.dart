@@ -256,7 +256,11 @@ class _CorrectionCardState extends State<_CorrectionCard> {
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
             Text(
-              '${app.photoCountForCorrection(surveyId, correction)} fotos · ${open ? 'Abierta' : 'Finalizada'}',
+              '${app.photoCountForCorrection(surveyId, correction)} fotos · ${correction.state == StepState.waived
+                  ? 'Dispensada'
+                  : open
+                  ? 'Abierta'
+                  : 'Finalizada'}',
             ),
             if (remoteEvidence.isNotEmpty)
               Align(
@@ -851,6 +855,7 @@ class _RemoteOriginalDialogState extends State<_RemoteOriginalDialog> {
 }
 
 String stepStateLabel(StepState state) => switch (state) {
+  StepState.waived => 'Dispensada',
   StepState.locked => 'Bloqueada',
   StepState.open => 'Abierta',
   StepState.completedLocal => 'Finalizada localmente',
