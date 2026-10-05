@@ -24,3 +24,13 @@ Upload sólo se encola después de `locationConfirmed`. En modo avión GNSS pued
 confirmar la foto y el job media espera Internet. Pending/provisional se persiste,
 se recupera al reabrir sólo dentro de la ventana justificable y expira a unresolved.
 No existe fallback de “usar ubicación actual” fuera de ventana.
+
+## Journal de gabinetes
+
+Gabinetes añade almacenamiento y journal propios, sin reemplazar la cola de bases.
+Cada comando conserva actor, UUID, expectedVersion y cuerpo íntegro antes de red.
+Una respuesta perdida se recupera por operations/{operationId}; un conflicto
+requiere resolución explícita. Las fotos referenciadas se verifican antes del
+comando. El ACK de carga no implica sincronizado. Se sincroniza al encolar,
+conectividad, inicio/reanudación y reintento; no hay envío permanente garantizado
+con el proceso terminado. [Persistencia y límites](../cabinets/README.md).

@@ -38,3 +38,12 @@ Finalizar exige ubicación confirmada en toda evidencia conservada, incluidas la
 cardinales y adicionales del paso 6. Una foto expirada sin fix queda `unresolved`,
 se conserva y debe reemplazarse; nunca se le asigna la ubicación actual tardía.
 Un outlier respecto del canonical tampoco permite finalizar.
+
+## Gabinetes de hidrante
+
+Los accesos provisionales se sustituyen por el flujo descrito en
+[macroetapa móvil 2](../cabinets/README.md): listado, QR, catálogo versionado,
+piezas, instalación agrupada en diez bloques y revisión final. No se agrega
+entrega formal. El backend decide los cierres y la exclusividad de base.
+Para bases, `waived` se muestra como **Dispensada** y permanece no editable;
+la búsqueda recorre todas las páginas autorizadas.

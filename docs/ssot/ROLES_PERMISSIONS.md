@@ -26,3 +26,13 @@ Ownership siempre deriva del JWT server, nunca de un `userId` enviado por client
 La proyección administrativa de API permanece intacta, pero esta UI móvil no inicia
 sesiones Admin. Un reviewer móvil para esta release debe ser usuario Field con rol
 Construction `resident`.
+
+## Gabinetes — excepción explícita al reviewer de bases
+
+Sólo una sesión Field cuyo perfil Construction sea `resident` accede a gabinetes,
+con autorización del endpoint de catálogo conservada por usuario. `admin`,
+`superadmin` y `contractor` no tienen acceso, tampoco por navegación directa,
+foto, expediente o caché local. No se deriva este permiso de `isReviewer`.
+Una revocación 401/403 oculta inmediatamente el módulo sin borrar pendientes.
+Offline sólo puede conocerse la última autorización descargada; revocaciones
+nuevas se detectan al reconectar. Véase [contrato](../cabinets/contract-matrix.md).
