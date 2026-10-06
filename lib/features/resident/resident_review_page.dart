@@ -4,6 +4,7 @@ import '../../core/services/app_controller.dart';
 import '../../core/widgets/branded_app_bar_title.dart';
 import '../../domain/construction/construction_models.dart';
 import '../surveys/survey_detail_page.dart';
+import '../surveys/survey_coordinates_card.dart';
 import '../surveys/survey_filters.dart';
 
 class ResidentReviewPage extends StatefulWidget {
@@ -176,6 +177,9 @@ class _ResidentDetailState extends State<_ResidentDetail> {
             value: survey.accountNumber ?? 'Sin cuenta asignada',
           ),
           _ReviewValue(label: 'CONTRATISTA', value: survey.contractorName),
+          if (app.profile?.role == ConstructionRole.resident ||
+              app.profile?.role == ConstructionRole.admin)
+            SurveyCoordinatesCard(location: survey.canonicalLocation),
           _ReviewValue(
             label: 'ESTADO',
             value: surveyStatusLabel(survey.status),

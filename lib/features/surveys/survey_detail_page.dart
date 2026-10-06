@@ -7,6 +7,8 @@ import '../../core/identity/uuid_identity.dart';
 import '../../core/widgets/branded_app_bar_title.dart';
 import '../../domain/construction/construction_models.dart';
 import 'surveys_page.dart';
+import 'survey_coordinates_card.dart';
+import 'survey_photo_gallery.dart';
 import '../../shared/widgets/optional_comment_field.dart';
 import '../shell/main_shell.dart';
 
@@ -95,6 +97,10 @@ class _SurveyDetailPageState extends State<SurveyDetailPage>
       return const _SurveyAccessDenied();
     }
     final survey = app.survey(widget.surveyId);
+    final role = app.profile?.role;
+    final canViewCoordinates =
+        role == ConstructionRole.resident || role == ConstructionRole.admin;
+    final location = survey.canonicalLocation;
     return Scaffold(
       appBar: AppBar(title: BrandedAppBarTitle(survey.displayIdentifier)),
       body: ListView(
@@ -136,6 +142,7 @@ class _SurveyDetailPageState extends State<SurveyDetailPage>
               subtitle: Text('Empresa: ${survey.crew ?? app.currentCrew}'),
             ),
           ),
+          if (canViewCoordinates) SurveyCoordinatesCard(location: location),
           if (survey.status == SurveyStatus.rejected)
             Card(
               color: Theme.of(context).colorScheme.errorContainer,
@@ -241,6 +248,13 @@ class _CorrectionCardState extends State<_CorrectionCard> {
         .remotePhotosForCorrection(surveyId, correction.round)
         .where((photo) => !localIds.any((id) => uuidEquals(id, photo.id)))
         .toList(growable: false);
+    void openPhoto(String id) => _openPhotoGallery(
+      context,
+      title: 'Corrección ${correction.round}',
+      local: evidence,
+      remote: remoteEvidence,
+      initialId: id,
+    );
     final open = correction.state == StepState.open;
     final editable =
         open &&
@@ -280,12 +294,38 @@ class _CorrectionCardState extends State<_CorrectionCard> {
                   ),
                 ),
               ),
+            if (evidence.isNotEmpty)
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: evidence
+                    .map(
+                      (photo) => GestureDetector(
+                        key: Key('photo_${photo.id}'),
+                        onTap: () => openPhoto(photo.id),
+                        child: Image.file(
+                          File(photo.thumbnailPath),
+                          width: 88,
+                          height: 88,
+                          cacheWidth: 264,
+                          cacheHeight: 264,
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                    )
+                    .toList(growable: false),
+              ),
             if (_showRemoteEvidence && remoteEvidence.isNotEmpty)
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
                 children: remoteEvidence
-                    .map((photo) => _RemotePhotoTile(photo: photo))
+                    .map(
+                      (photo) => _RemotePhotoTile(
+                        photo: photo,
+                        onTap: () => openPhoto(photo.id),
+                      ),
+                    )
                     .toList(growable: false),
               ),
             if (editable) ...[
@@ -363,6 +403,16 @@ class _StepCardState extends State<_StepCard> {
     final editable =
         open &&
         (app.profile?.role ?? ConstructionRole.contractor).canMutateEvidence;
+    void openPhoto(String id) => _openPhotoGallery(
+      context,
+      title: constructionStepNames[step.number],
+      local: evidence,
+      remote: remoteEvidence,
+      initialId: id,
+      onDeleteLocal: editable
+          ? (photo) => app.deletePhoto(surveyId, step.number, photo.id)
+          : null,
+    );
     final nextPurpose = step.number == 6
         ? cardinalPhotoPurposes.cast<PhotoPurpose?>().firstWhere(
             (purpose) => !evidence.any((photo) => photo.purpose == purpose),
@@ -403,7 +453,12 @@ class _StepCardState extends State<_StepCard> {
                       spacing: 8,
                       runSpacing: 8,
                       children: remoteEvidence
-                          .map((photo) => _RemotePhotoTile(photo: photo))
+                          .map(
+                            (photo) => _RemotePhotoTile(
+                              photo: photo,
+                              onTap: () => openPhoto(photo.id),
+                            ),
+                          )
                           .toList(growable: false),
                     ),
                   ),
@@ -417,30 +472,7 @@ class _StepCardState extends State<_StepCard> {
                         .map(
                           (photo) => GestureDetector(
                             key: Key('photo_${photo.id}'),
-                            onTap: () => showDialog<void>(
-                              context: context,
-                              builder: (_) => Dialog(
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Image.file(File(photo.localPath)),
-                                    if (editable)
-                                      TextButton.icon(
-                                        onPressed: () {
-                                          Navigator.pop(context);
-                                          app.deletePhoto(
-                                            surveyId,
-                                            step.number,
-                                            photo.id,
-                                          );
-                                        },
-                                        icon: const Icon(Icons.delete),
-                                        label: const Text('Eliminar'),
-                                      ),
-                                  ],
-                                ),
-                              ),
-                            ),
+                            onTap: () => openPhoto(photo.id),
                             child: Stack(
                               children: [
                                 ClipRRect(
@@ -717,7 +749,8 @@ class _StepCardState extends State<_StepCard> {
 }
 
 class _RemotePhotoTile extends StatefulWidget {
-  const _RemotePhotoTile({required this.photo});
+  const _RemotePhotoTile({required this.photo, required this.onTap});
+  final VoidCallback onTap;
   final RemoteConstructionPhoto photo;
 
   @override
@@ -746,10 +779,7 @@ class _RemotePhotoTileState extends State<_RemotePhotoTile> {
   @override
   Widget build(BuildContext context) => GestureDetector(
     key: Key('remote_photo_${widget.photo.id}'),
-    onTap: () => showDialog<void>(
-      context: context,
-      builder: (_) => _RemoteOriginalDialog(photo: widget.photo),
-    ),
+    onTap: widget.onTap,
     child: Stack(
       children: [
         SizedBox.square(
@@ -797,60 +827,34 @@ class _RemotePhotoTileState extends State<_RemotePhotoTile> {
   );
 }
 
-class _RemoteOriginalDialog extends StatefulWidget {
-  const _RemoteOriginalDialog({required this.photo});
-  final RemoteConstructionPhoto photo;
-
-  @override
-  State<_RemoteOriginalDialog> createState() => _RemoteOriginalDialogState();
-}
-
-class _RemoteOriginalDialogState extends State<_RemoteOriginalDialog> {
-  Future<Uint8List>? _original;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _original ??= context.read<AppController>().remotePhotoBytes(
-      widget.photo,
-      original: true,
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) => Dialog(
-    child: FutureBuilder<Uint8List>(
-      future: _original,
-      builder: (context, snapshot) {
-        if (snapshot.hasData) {
-          return InteractiveViewer(child: Image.memory(snapshot.data!));
-        }
-        if (snapshot.hasError) {
-          return Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text('Imagen no disponible temporalmente'),
-                TextButton(
-                  onPressed: () => setState(() {
-                    _original = context.read<AppController>().remotePhotoBytes(
-                      widget.photo,
-                      original: true,
-                    );
-                  }),
-                  child: const Text('Reintentar'),
-                ),
-              ],
-            ),
-          );
-        }
-        return const Padding(
-          padding: EdgeInsets.all(48),
-          child: CircularProgressIndicator(),
-        );
-      },
-    ),
+void _openPhotoGallery(
+  BuildContext context, {
+  required String title,
+  required List<ConstructionPhoto> local,
+  required List<RemoteConstructionPhoto> remote,
+  required String initialId,
+  void Function(ConstructionPhoto)? onDeleteLocal,
+}) {
+  final app = context.read<AppController>();
+  final photos = [
+    for (final photo in remote)
+      SurveyGalleryPhoto(
+        id: photo.id,
+        loadOriginal: () => app.remotePhotoBytes(photo, original: true),
+      ),
+    for (final photo in local)
+      SurveyGalleryPhoto(
+        id: photo.id,
+        localPath: photo.localPath,
+        onDelete: onDeleteLocal == null ? null : () => onDeleteLocal(photo),
+      ),
+  ];
+  final index = photos.indexWhere((photo) => uuidEquals(photo.id, initialId));
+  if (index < 0) return;
+  showDialog<void>(
+    context: context,
+    builder: (_) =>
+        SurveyPhotoGallery(title: title, photos: photos, initialIndex: index),
   );
 }
 

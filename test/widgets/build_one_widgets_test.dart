@@ -119,6 +119,91 @@ BaseSurvey reviewSurvey({
 );
 
 void main() {
+  for (final role in ConstructionRole.values) {
+    testWidgets('survey coordinates visibility for ${role.name}', (
+      tester,
+    ) async {
+      final (app, root) = (await tester.runAsync(() => controller(role)))!;
+      addTearDown(() async {
+        app.dispose();
+        await Hive.close();
+        await root.delete(recursive: true);
+      });
+      final survey = reviewSurvey().copyWith(
+        canonicalLocation: GeoPoint(
+          latitude: 29.1234567,
+          longitude: -110.9876543,
+          accuracy: 5,
+          capturedAt: DateTime.utc(2026, 9, 11),
+        ),
+      );
+      app.online = false;
+      app.surveys = [survey];
+      await tester.pumpWidget(page(app, SurveyDetailPage(surveyId: survey.id)));
+      final visible =
+          role == ConstructionRole.resident || role == ConstructionRole.admin;
+      expect(
+        find.text('Coordenadas del levantamiento'),
+        visible ? findsOneWidget : findsNothing,
+      );
+      expect(
+        find.text('Latitud: 29.123457\nLongitud: -110.987654'),
+        visible ? findsOneWidget : findsNothing,
+      );
+      expect(
+        find.text('Abrir en Google Maps'),
+        visible ? findsOneWidget : findsNothing,
+      );
+      if (visible) {
+        expect(
+          tester
+              .widget<ListTile>(find.byKey(const Key('survey_coordinates')))
+              .onTap,
+          isNotNull,
+        );
+      }
+      await tester.pumpWidget(page(app, const ResidentReviewPage()));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(survey.displayIdentifier));
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Latitud: 29.123457\nLongitud: -110.987654'),
+        visible ? findsOneWidget : findsNothing,
+      );
+      expect(
+        find.text('Abrir en Google Maps'),
+        visible ? findsOneWidget : findsNothing,
+      );
+      if (visible) {
+        expect(
+          tester
+              .widget<ListTile>(find.byKey(const Key('survey_coordinates')))
+              .onTap,
+          isNotNull,
+        );
+      }
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  }
+
+  testWidgets('resident detail handles missing coordinates', (tester) async {
+    final (app, root) = (await tester.runAsync(
+      () => controller(ConstructionRole.resident),
+    ))!;
+    addTearDown(() async {
+      app.dispose();
+      await Hive.close();
+      await root.delete(recursive: true);
+    });
+    final survey = reviewSurvey();
+    app.online = false;
+    app.surveys = [survey];
+    await tester.pumpWidget(page(app, SurveyDetailPage(surveyId: survey.id)));
+    expect(find.text('Sin coordenadas registradas'), findsOneWidget);
+    expect(find.textContaining('Latitud:'), findsNothing);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('login is Field-only, ordered and shows Empresa', (tester) async {
     final (app, root) = (await tester.runAsync(
       () => controller(ConstructionRole.contractor),
@@ -425,15 +510,20 @@ void main() {
           ...survey.steps.skip(2),
         ],
         remotePhotos: [
-          RemoteConstructionPhoto(
-            id: photoId,
-            surveyId: survey.id,
-            context: 'step',
-            stepNumber: 2,
-            capturedAt: DateTime.utc(2026, 8, 30),
-            uploadStatus: 'verified',
-            integrityStatus: 'confirmed',
-          ),
+          for (final entry in [
+            (photoId, 2),
+            ('dddddddd-dddd-4ddd-8ddd-dddddddddddd', 2),
+            ('eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', 3),
+          ])
+            RemoteConstructionPhoto(
+              id: entry.$1,
+              surveyId: survey.id,
+              context: 'step',
+              stepNumber: entry.$2,
+              capturedAt: DateTime.utc(2026, 8, 30),
+              uploadStatus: 'verified',
+              integrityStatus: 'confirmed',
+            ),
         ],
       ),
     ];
@@ -449,15 +539,41 @@ void main() {
     await tester.tap(find.byKey(const Key('step_2')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
-    expect(requests, hasLength(1));
-    expect(requests.single.queryParameters['size'], 'thumb');
+    expect(requests, hasLength(2));
+    expect(requests.every((r) => r.queryParameters['size'] == 'thumb'), isTrue);
 
     final remotePhoto = find.byKey(const Key('remote_photo_$photoId'));
     tester.widget<GestureDetector>(remotePhoto).onTap!();
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
-    expect(requests, hasLength(2));
+    expect(requests, hasLength(3));
     expect(requests.last.queryParameters['size'], 'original');
+    expect(find.text('1 de 2'), findsOneWidget);
+    await tester.drag(
+      find.byKey(const Key('survey_photo_pager')),
+      const Offset(-650, 0),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.text('2 de 2'), findsOneWidget);
+    expect(requests, hasLength(4));
+    expect(
+      requests.last.path,
+      contains('dddddddd-dddd-4ddd-8ddd-dddddddddddd'),
+    );
+    await tester.drag(
+      find.byKey(const Key('survey_photo_pager')),
+      const Offset(-650, 0),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.text('2 de 2'), findsOneWidget);
+    expect(
+      requests.any(
+        (r) => r.path.contains('eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'),
+      ),
+      isFalse,
+    );
   });
   testWidgets('step 6 requests cardinal directions before additional photos', (
     tester,
@@ -780,6 +896,7 @@ void main() {
       expect(find.text('Ejecutado'), findsOneWidget);
       expect(find.text('6/6'), findsOneWidget);
 
+      await tester.scrollUntilVisible(find.text('Rechazar'), 200);
       await tester.tap(find.text('Rechazar'));
       await tester.pumpAndSettle();
       final field = tester.widget<TextField>(find.byType(TextField).last);
