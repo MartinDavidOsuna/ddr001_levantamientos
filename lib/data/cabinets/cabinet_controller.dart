@@ -56,7 +56,6 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
   Future<void> _writes = Future.value();
   String? get actor => app.session?.userId.toLowerCase();
   bool get eligible =>
-      !app.config.isProduction &&
       app.session?.kind == SessionKind.field &&
       app.profile?.role == ConstructionRole.resident &&
       app.profile?.userId.toLowerCase() == actor;
@@ -157,9 +156,23 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
     if (!eligible || refreshing) return;
     final user = actor!;
     refreshing = true;
+    var catalogAvailable = false;
     _notify();
     try {
-      final catalog = CabinetCatalog(await remote.get('/catalog'));
+      Json catalogJson;
+      try {
+        catalogJson = await remote.get('/catalog');
+      } on DioException catch (e) {
+        if ([404, 503].contains(e.response?.statusCode)) {
+          throw StateError(
+            'El servicio de gabinetes no está disponible en el servidor. '
+            'Reintenta cuando esté habilitado. Tus datos locales se conservan.',
+          );
+        }
+        rethrow;
+      }
+      final catalog = CabinetCatalog(catalogJson);
+      catalogAvailable = true;
       if (!eligible || actor != user) return;
       await store.saveCatalog(catalog);
       await store.authorize(user, true);
@@ -184,7 +197,9 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
       refreshing = false;
       _notify();
     }
-    if (allowed && actor == user) unawaited(synchronize());
+    if (catalogAvailable && allowed && actor == user) {
+      unawaited(synchronize());
+    }
   }
 
   Future<void> pull(String id) async {

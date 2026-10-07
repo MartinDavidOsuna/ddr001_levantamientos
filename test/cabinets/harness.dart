@@ -68,6 +68,7 @@ class Harness {
   late ApiClient client;
   final sessions = Sessions();
   Future<void> open({
+    String environment = 'test',
     CabinetRemote? remote,
     FieldSession? session,
     LocationService? locations,
@@ -79,8 +80,12 @@ class Harness {
     store = await CabinetStore.open();
     sessions.value = session ?? testSession();
     final config = AppConfig(
-      environment: 'test',
-      apiBaseUrl: Uri.parse('http://127.0.0.1:3003/api/v1'),
+      environment: environment,
+      apiBaseUrl: Uri.parse(
+        environment == 'production'
+            ? AppConfig.productionHttpApiBaseUrl
+            : 'http://127.0.0.1:3003/api/v1',
+      ),
     );
     client = ApiClient(config: config, sessions: sessions);
     app = AppController(

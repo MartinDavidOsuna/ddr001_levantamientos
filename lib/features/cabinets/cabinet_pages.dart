@@ -41,7 +41,7 @@ Widget cabinetDenied(CabinetController controller) => Scaffold(
           Text(
             controller.eligible
                 ? 'El primer acceso requiere conexión para comprobar permisos y descargar el catálogo.'
-                : 'Acceso exclusivo para residentes Construction habilitados en TEST.',
+                : 'Acceso exclusivo para residentes Construction autorizados.',
           ),
           if (controller.message != null) Text(controller.message!),
           if (controller.eligible)

@@ -36,9 +36,11 @@ catálogo alternativo, Excel, ni valores de cumplimiento prellenados.
   Revisión de base, Revisión de hidrante. Admin/superadmin no reciben permisos
   de gabinete por equivalencia reviewer. Listados, expedientes, cámara, fotos
   y acciones vuelven a comprobar acceso; revocación 401/403 oculta el caché.
-- Primera descarga y autorización requieren conexión. Producción mantiene
-  deshabilitado este módulo en esta macroetapa (`APP_ENV=production`); su
-  activación coordinada queda para macroetapa 4. No se cambia la URL productiva.
+- Primera descarga y autorización requieren conexión. Desde 1.5.2+13 el módulo
+  está habilitado también en producción para residentes Field Construction.
+  Requiere el backend de gabinetes desplegado; 404/503 al descargar catálogo
+  muestra indisponibilidad y permite reintentar conservando datos locales.
+  No se cambia la URL productiva.
 - Listado con búsqueda UID/base/cuenta, filtros estado/modelo y páginas de 25.
   Se descargan **todas** las páginas autorizadas del backend (100 por request).
   El endpoint sólo admite búsqueda por UID y estado: búsqueda por base/cuenta

@@ -6,9 +6,10 @@ sincronización con el dominio Construction de DDR001.
 
 ## Artefacto actual
 
-Versión `1.5.1+12`: APK Android release firmado para producción.
-Ver [evidencia y alcance](docs/releases/1.5.1-production-20261006.md).
-Gabinetes permanece deshabilitado en producción y disponible únicamente en TEST.
+Versión `1.5.2+13`: APK Android release firmado para producción.
+Ver [evidencia y alcance](docs/releases/1.5.2-production-20261007.md).
+Gabinetes está habilitado para residentes Field Construction autorizados también en producción.
+El primer acceso requiere el backend de gabinetes desplegado y la descarga del catálogo.
 
 ## Estado certificado histórico
 

@@ -62,9 +62,11 @@ pre-captura 60 s, post-captura 120 s, early acceptance ≤10 m y ±30 s.
 La rama de integración `feat/ddr001-cabinets-mobile`, versión `1.5.0+11`, añade
 registro, piezas, instalación y revisión final offline-first. Sustituye el acceso
 provisional Registrar instalación; revisión de hidrante ya tiene implementación.
-Depende de API PR #15, commit `46b0265b9c8698363f3eca73257bc47382c4d8f2`, aún
-abierto. El módulo permanece deshabilitado en APP_ENV=production hasta integración
-coordinada. No se ha publicado release ni cambiado la URL productiva.
+Desde 1.5.2+13, el módulo está habilitado en producción para residentes Field
+Construction autorizados. Requiere el backend de gabinetes, incluida la corrección
+de conservación de piezas compatibles (API ace958c). El despliegue del backend
+es manual; el usuario confirmó las migraciones productivas realizadas.
+No se cambia la URL productiva.
 
 El detalle vigente de alcance, contratos, migración y garantías está en
 [Gabinetes](../cabinets/README.md), con [validación](../cabinets/validation.md) y
