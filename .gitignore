@@ -56,3 +56,6 @@ app.*.map.json
 
 # Versioned APK distribution artifacts
 /dist/
+
+# Kotlin compiler session cache
+/android/.kotlin/
