@@ -53,3 +53,6 @@ app.*.map.json
 
 # Isolated cabinet TEST credentials and evidence
 .test-cabinets/
+
+# Versioned APK distribution artifacts
+/dist/

@@ -24,6 +24,25 @@ class MemorySessions implements SessionStore {
   Future<void> save(FieldSession value) async => this.value = value;
 }
 
+class ReviewerRefreshRemote implements ConstructionRemote {
+  bool fail = false;
+  int calls = 0;
+  @override
+  Future<List<Map<String, dynamic>>> list({
+    bool resident = false,
+    String? search,
+    String? status,
+  }) async {
+    expect(resident, isTrue);
+    calls++;
+    if (fail) throw StateError('offline');
+    return [];
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
 void main() {
   late Directory root;
   late AppController app;
@@ -78,6 +97,45 @@ void main() {
     await Hive.close();
     await root.delete(recursive: true);
   });
+  test(
+    'reviewer retries connectivity without sending contractor operations',
+    () async {
+      final remote = ReviewerRefreshRemote();
+      final reviewer = AppController(
+        config: app.config,
+        local: local,
+        sessions: app.sessions,
+        api: ApiClient(config: app.config, sessions: app.sessions),
+        packageInfo: app.packageInfo,
+        remote: remote,
+      );
+      addTearDown(reviewer.dispose);
+      reviewer.session = app.session;
+      reviewer.profile = const ConstructionProfile(
+        userId: 'u',
+        displayName: 'Residente',
+        email: 'a@b.mx',
+        phone: '1234567890',
+        role: ConstructionRole.resident,
+      );
+      reviewer.online = false;
+      reviewer.apiReachable = false;
+      await reviewer.synchronize(force: true);
+      expect(remote.calls, 1);
+      expect(reviewer.online, isTrue);
+      expect(reviewer.apiReachable, isTrue);
+      expect(reviewer.syncing, isFalse);
+      remote.fail = true;
+      await reviewer.synchronize(force: true);
+      expect(reviewer.online, isFalse);
+      expect(reviewer.apiReachable, isFalse);
+      expect(reviewer.syncing, isFalse);
+      remote.fail = false;
+      await reviewer.synchronize(force: true);
+      expect(remote.calls, 3);
+      expect(reviewer.online, isTrue);
+    },
+  );
   test('C01 new offline survey persists create then initial open', () async {
     final survey = await app.createSurvey('Losa E2E');
     expect(survey.localState, LocalSurveyState.createdLocal);

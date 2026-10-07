@@ -1288,7 +1288,17 @@ class AppController extends ChangeNotifier {
 
   Future<void> synchronize({bool force = false}) async {
     if (syncing || session == null || (!online && !force)) return;
-    if (profile?.role.isReviewer ?? false) return;
+    if (profile?.role.isReviewer ?? false) {
+      syncing = true;
+      notifyListeners();
+      try {
+        await refreshServer();
+      } finally {
+        syncing = false;
+        notifyListeners();
+      }
+      return;
+    }
     if (force && !online) {
       online = true;
       notifyListeners();

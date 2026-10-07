@@ -20,6 +20,21 @@ void main() {
     await h.close();
   });
   test(
+    'manual retry sends preserved work despite stale offline status',
+    () async {
+      final id = await h.controller.scan('AQ26000017', 'A1', false);
+      expect(h.app.online, isFalse);
+      await h.controller.synchronize();
+      expect(remote.calls, isEmpty);
+      await h.controller.synchronize(force: true);
+      expect(remote.calls, hasLength(1));
+      expect(h.store.read(id)!.pending, isEmpty);
+      expect(h.store.read(id)!.server['version'], 1);
+      await h.controller.synchronize(force: true);
+      expect(remote.calls, hasLength(1));
+    },
+  );
+  test(
     'cabinet refresh retrieves all authorized pages and caches every dossier',
     () async {
       final paged = PagedCabinetRemote();

@@ -9,9 +9,11 @@ import 'harness.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   late Harness h;
+  late HistoryRemote historyRemote;
   setUp(() async {
     h = Harness();
-    await h.open(remote: FakeCabinetRemote());
+    historyRemote = HistoryRemote();
+    await h.open(remote: historyRemote);
   });
   tearDown(() async {
     await h.close();
@@ -23,6 +25,54 @@ void main() {
     ],
     child: MaterialApp(home: child),
   );
+  testWidgets('history loads on entry and explains empty results', (
+    tester,
+  ) async {
+    final id = (await tester.runAsync(
+      () => h.controller.scan('AQ26000017', 'A1', false),
+    ))!;
+    final cached = h.store.read(id)!.json;
+    cached['operations'] = [];
+    await tester.runAsync(() => h.store.save(cached));
+    await tester.runAsync(() async {
+      await tester.pumpWidget(host(CabinetHistoryPage(id: id)));
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    });
+    await tester.pumpAndSettle();
+    expect(historyRemote.callsToHistory, 1);
+    expect(find.text('Este gabinete aún no tiene historial.'), findsOneWidget);
+  });
+  testWidgets('failed history preserves cache and can retry', (tester) async {
+    final id = (await tester.runAsync(
+      () => h.controller.scan('AQ26000017', 'A1', false),
+    ))!;
+    final cached = h.store.read(id)!.json;
+    cached['operations'] = [];
+    cached['history'] = [
+      {'result_version': 7, 'command_type': 'create_draft'},
+    ];
+    await tester.runAsync(() => h.store.save(cached));
+    historyRemote.fail = true;
+    await tester.runAsync(() async {
+      await tester.pumpWidget(host(CabinetHistoryPage(id: id)));
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    });
+    await tester.pumpAndSettle();
+    expect(find.textContaining('v7'), findsOneWidget);
+    expect(find.text('No se pudo actualizar el historial.'), findsOneWidget);
+    historyRemote.fail = false;
+    historyRemote.items = [
+      {'result_version': 8, 'command_type': 'create_draft'},
+    ];
+    await tester.runAsync(() async {
+      await tester.tap(find.text('Reintentar'));
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    });
+    await tester.pumpAndSettle();
+    expect(find.textContaining('v8'), findsOneWidget);
+    expect(find.text('No se pudo actualizar el historial.'), findsNothing);
+    expect(historyRemote.callsToHistory, 2);
+  });
   testWidgets(
     'resident navigation order includes cabinet and final review replacing placeholder',
     (tester) async {
@@ -96,4 +146,22 @@ void main() {
       expect(find.textContaining('Confirmar puntos revisados'), findsNothing);
     },
   );
+}
+
+class HistoryRemote extends FakeCabinetRemote {
+  int callsToHistory = 0;
+  bool fail = false;
+  List<Map<String, dynamic>> items = [];
+  @override
+  Future<Map<String, dynamic>> get(
+    String path, [
+    Map<String, dynamic>? query,
+  ]) async {
+    if (path.endsWith('/history')) {
+      callsToHistory++;
+      if (fail) throw StateError('offline');
+      return {'items': items};
+    }
+    return super.get(path, query);
+  }
 }

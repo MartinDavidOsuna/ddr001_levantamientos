@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:dio/dio.dart';
@@ -10,8 +11,22 @@ import '../../core/security/session_store.dart';
 import '../../core/services/app_controller.dart';
 import '../../domain/construction/construction_models.dart';
 import '../../domain/cabinets/cabinet_models.dart';
+import '../../domain/cabinets/cabinet_safety.dart';
 import 'cabinet_api.dart';
 import 'cabinet_store.dart';
+
+String _stableCommand(Object? value) {
+  Object? canonical(Object? item) {
+    if (item is Map) {
+      final keys = item.keys.map((k) => '$k').toList()..sort();
+      return {for (final key in keys) key: canonical(item[key])};
+    }
+    if (item is List) return item.map(canonical).toList();
+    return item;
+  }
+
+  return jsonEncode(canonical(value));
+}
 
 class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
   CabinetController({
@@ -32,6 +47,10 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
   Timer? _retry;
   bool syncing = false, refreshing = false, capturing = false;
   String? message;
+  final Set<String> _submitting = {};
+  bool submitting(String id) =>
+      _submitting.any((key) => key.startsWith('$id:'));
+  Future<void> flushDrafts() => _writes;
   String? _identity;
   bool _disposed = false;
   Future<void> _writes = Future.value();
@@ -291,138 +310,266 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
       w[field] = value;
       if (field == 'parts') w['partsValidated'] = false;
       if (['parts', 'installation'].contains(field)) {
+        final review = object(r['finalReviewDraft']);
+        review['fieldChecked'] = false;
+        review['dossierConsulted'] = false;
+        r['finalReviewDraft'] = review;
         w['installationValid'] = false;
         if (w['status'] == 'deliverable') w['status'] = 'installed';
         w['approval'] = null;
       }
       r['working'] = w;
       r['dirty'] = true;
+      r['draftSavedAt'] = DateTime.now().toUtc().toIso8601String();
       r['draftActor'] = user;
     });
   }
 
-  Future<void> enqueue(String id, String type, Json extra) async {
+  Future<void> patchInstallation(
+    String id,
+    String field,
+    Object? value, {
+    String? answerCode,
+  }) async {
     final user = actor;
     _requireWritable(id);
     await _edit(id, (r) {
       if (!allowed || actor != user) throw StateError('La sesión cambió.');
-      final current = CabinetRecord(r);
-      if (current.pending.any((o) => o['actor'] != user)) {
-        throw StateError(
-          'Hay operaciones de otro residente pendientes. Debe enviarlas con su sesión antes de continuar.',
-        );
+      final w = object(r['working']);
+      final installation = object(w['installation']);
+      if (answerCode != null) {
+        final answers = objects(installation['answers']);
+        answers.removeWhere((a) => a['code'] == answerCode);
+        answers.add(object(value));
+        installation['answers'] = answers;
+      } else {
+        installation[field] = value;
       }
-      final version =
-          (current.server['version'] as num? ?? 0).toInt() +
-          current.pending.length;
-      final body = <String, dynamic>{
-        'operationId': const Uuid().v4(),
-        'expectedVersion': version,
-        'capturedAt': DateTime.now().toUtc().toIso8601String(),
-        'type': type,
-        ...clone(extra),
-      };
-      final w = current.working;
-      switch (type) {
-        case 'registration_close':
-          if (objects(extra['evidence']).isEmpty) {
-            throw StateError('Falta fotografía de identificación confirmada.');
-          }
-          w['registrationEvidence'] = extra['evidence'];
-          w['status'] = 'registered';
-        case 'parts_save':
-          w['parts'] = extra['parts'];
-          w['partsValidated'] = false;
-          if (!['installed', 'deliverable'].contains(w['status'])) {
-            w['status'] = 'incomplete';
-          }
-        case 'parts_validate':
-          final pending = partsPending(w);
-          w['partsValidated'] = pending.isEmpty;
-          w['pending'] = pending;
-          if (!['installed', 'deliverable'].contains(w['status'])) {
-            w['status'] = pending.isEmpty ? 'validated' : 'incomplete';
-          }
-        case 'identity_correct':
-          final catalog = store.catalog()!;
-          w['model'] = extra['model'];
-          w['automated'] = extra['automated'];
-          w['catalogVersion'] = catalog.version;
-          w['closurePolicyVersion'] = catalog.policyVersion;
-          w['partDefinitions'] = catalog.parts(
-            extra['model'],
-            extra['automated'],
-          );
-          w['parts'] = <Json>[];
-          w['partsValidated'] = false;
-          if (w['installation'] != null) {
-            final i = object(w['installation']);
-            i['answers'] = <Json>[];
-            i['evidence'] = <String, dynamic>{};
-            w['installation'] = i;
-          }
-        case 'installation_save':
-          if (w['partsValidated'] != true) {
-            throw StateError('Valida las piezas antes de instalar.');
-          }
-          w['installation'] = extra['installation'];
-        case 'installation_close':
-          if (w['partsValidated'] != true ||
-              partsPending(w).isNotEmpty ||
-              object(w['installation'])['gps'] == null ||
-              object(w['installation'])['baseId'] == null) {
-            throw StateError(
-              'Faltan piezas validadas, base o GPS propio de instalación.',
-            );
-          }
-          final pending = installationPending(w, catalogFor(current));
-          if (pending.any((p) => p['classification'] == 'blocking')) {
-            throw StateError(
-              'Resuelve los bloqueos antes de completar instalación.',
-            );
-          }
-          w['status'] = 'installed';
-          w['installationOperationId'] = body['operationId'];
-          w['pending'] = pending;
-          w['installationValid'] = true;
-        case 'final_review':
-          if (w['installationValid'] != true) {
-            throw StateError(
-              'Cierra nuevamente la instalación corregida antes del dictamen.',
-            );
-          }
-          if (!['installed', 'deliverable'].contains(w['status'])) {
-            throw StateError('Primero completa la instalación.');
-          }
-          if (extra['verdict'] == 'approve' &&
-              (partsPending(w).isNotEmpty ||
-                  installationPending(w, catalogFor(current)).isNotEmpty)) {
-            throw StateError('Quedan incumplimientos o pruebas pendientes.');
-          }
-        // Approval only comes from the server. Keep installed while pending.
-      }
-      if ([
-        'parts_save',
-        'installation_save',
-        'identity_correct',
-      ].contains(type)) {
-        if (['installed', 'deliverable'].contains(w['status'])) {
-          if ((extra['reason'] ?? '').toString().trim().length < 3) {
-            throw StateError('Explica la corrección de datos instalados.');
-          }
-          w['status'] = 'installed';
-          w['approval'] = null;
-          w['installationValid'] = false;
-        }
-      }
+      w['installation'] = installation;
+      w['installationValid'] = false;
+      w['approval'] = null;
+      if (w['status'] == 'deliverable') w['status'] = 'installed';
       r['working'] = w;
-      r['dirty'] = false;
-      r['operations'] = [
-        ...current.operations,
-        {'body': body, 'actor': user, 'state': 'queued', 'attempts': 0},
-      ];
+      r['dirty'] = true;
+      r['draftActor'] = user;
+      r['draftSavedAt'] = DateTime.now().toUtc().toIso8601String();
+      r['finalReviewDraft'] = {
+        ...object(r['finalReviewDraft']),
+        'fieldChecked': false,
+        'dossierConsulted': false,
+      };
     });
-    unawaited(synchronize());
+  }
+
+  Future<void> patchPart(String id, String code, Json patch) async {
+    final user = actor;
+    _requireWritable(id);
+    await _edit(id, (r) {
+      if (!allowed || actor != user) throw StateError('La sesión cambió.');
+      final w = object(r['working']);
+      final parts = objects(w['parts']);
+      final old =
+          parts.where((p) => p['code'] == code).firstOrNull ??
+          {'code': code, 'present': null, 'evidence': <Json>[]};
+      parts.removeWhere((p) => p['code'] == code);
+      parts.add({...old, ...clone(patch), 'code': code});
+      w['parts'] = parts;
+      w['partsValidated'] = false;
+      w['installationValid'] = false;
+      w['approval'] = null;
+      if (w['status'] == 'deliverable') w['status'] = 'installed';
+      r['working'] = w;
+      r['dirty'] = true;
+      r['draftActor'] = user;
+      r['draftSavedAt'] = DateTime.now().toUtc().toIso8601String();
+      r['finalReviewDraft'] = {
+        ...object(r['finalReviewDraft']),
+        'fieldChecked': false,
+        'dossierConsulted': false,
+      };
+    });
+  }
+
+  Future<void> enqueue(String id, String type, Json extra) async {
+    final submission = '$id:$type:${_stableCommand(extra)}';
+    if (!_submitting.add(submission)) return;
+    _notify();
+    try {
+      final user = actor;
+      _requireWritable(id);
+      await _edit(id, (r) {
+        if (!allowed || actor != user) throw StateError('La sesión cambió.');
+        final current = CabinetRecord(r);
+        final normalized = checkedCabinetPayload(type, extra);
+        extra = normalized;
+        if (normalized['reason'] != null) {
+          normalized['reason'] = '${normalized['reason']}'.trim();
+        }
+        if (['identity_correct', 'final_review'].contains(type) ||
+            (['parts_save', 'installation_save'].contains(type) &&
+                (current.server['status'] == 'deliverable' ||
+                    current.server['status'] == 'installed' ||
+                    current.working['status'] == 'installed' ||
+                    current.working['status'] == 'deliverable'))) {
+          final error = reasonError(normalized['reason']);
+          if (error != null) throw StateError(error);
+        }
+        if (type == 'registration_close' &&
+            current.working['status'] != 'draft') {
+          return;
+        }
+        if (type == 'installation_close' &&
+            current.working['installationValid'] == true) {
+          return;
+        }
+        final matching = current.pending
+            .where((op) => object(op['body'])['type'] == type)
+            .toList();
+        final duplicate =
+            matching.isNotEmpty &&
+            (() {
+              final op = matching.last;
+              final old = clone(object(op['body']))
+                ..remove('operationId')
+                ..remove('expectedVersion')
+                ..remove('capturedAt');
+              return _stableCommand(old) ==
+                  _stableCommand({'type': type, ...normalized});
+            })();
+        if (duplicate) return;
+        if (current.pending.any((o) => o['actor'] != user)) {
+          throw StateError(
+            'Hay operaciones de otro residente pendientes. Debe enviarlas con su sesión antes de continuar.',
+          );
+        }
+        final version =
+            (current.server['version'] as num? ?? 0).toInt() +
+            current.pending.length;
+        final body = <String, dynamic>{
+          'operationId': const Uuid().v4(),
+          'expectedVersion': version,
+          'capturedAt': DateTime.now().toUtc().toIso8601String(),
+          'type': type,
+          ...normalized,
+        };
+        final w = current.working;
+        switch (type) {
+          case 'registration_close':
+            if (objects(extra['evidence']).isEmpty) {
+              throw StateError(
+                'Falta fotografía de identificación confirmada.',
+              );
+            }
+            w['registrationEvidence'] = extra['evidence'];
+            w['status'] = 'registered';
+          case 'parts_save':
+            w['parts'] = extra['parts'];
+            w['partsValidated'] = false;
+            if (!['installed', 'deliverable'].contains(w['status'])) {
+              w['status'] = 'incomplete';
+            }
+          case 'parts_validate':
+            final pending = partsPending(w);
+            w['partsValidated'] = pending.isEmpty;
+            w['pending'] = pending;
+            if (!['installed', 'deliverable'].contains(w['status'])) {
+              w['status'] = pending.isEmpty ? 'validated' : 'incomplete';
+            }
+          case 'identity_correct':
+            final catalog = store.catalog()!;
+            final retained = compatibleParts(
+              w,
+              catalog.parts(extra['model'], extra['automated']),
+            );
+            w['model'] = extra['model'];
+            w['automated'] = extra['automated'];
+            w['catalogVersion'] = catalog.version;
+            w['closurePolicyVersion'] = catalog.policyVersion;
+            w['partDefinitions'] = catalog.parts(
+              extra['model'],
+              extra['automated'],
+            );
+            w['parts'] = retained;
+            w['partsValidated'] = false;
+            w['installationValid'] = false;
+            w['approval'] = null;
+            w['pending'] = partsPending(w);
+            if (!['installed', 'deliverable'].contains(w['status'])) {
+              w['status'] = 'incomplete';
+            }
+            if (w['installation'] != null) {
+              final i = object(w['installation']);
+              i['answers'] = <Json>[];
+              i['evidence'] = <String, dynamic>{};
+              w['installation'] = i;
+            }
+          case 'installation_save':
+            if (w['partsValidated'] != true) {
+              throw StateError('Valida las piezas antes de instalar.');
+            }
+            w['installation'] = extra['installation'];
+          case 'installation_close':
+            if (w['partsValidated'] != true ||
+                partsPending(w).isNotEmpty ||
+                object(w['installation'])['gps'] == null ||
+                object(w['installation'])['baseId'] == null) {
+              throw StateError(
+                'Faltan piezas validadas, base o GPS propio de instalación.',
+              );
+            }
+            final pending = installationPending(w, catalogFor(current));
+            if (pending.any((p) => p['classification'] == 'blocking')) {
+              throw StateError(
+                'Resuelve los bloqueos antes de completar instalación.',
+              );
+            }
+            w['status'] = 'installed';
+            w['installationOperationId'] = body['operationId'];
+            w['pending'] = pending;
+            w['installationValid'] = true;
+          case 'final_review':
+            if (w['installationValid'] != true) {
+              throw StateError(
+                'Cierra nuevamente la instalación corregida antes del dictamen.',
+              );
+            }
+            if (!['installed', 'deliverable'].contains(w['status'])) {
+              throw StateError('Primero completa la instalación.');
+            }
+            if (extra['verdict'] == 'approve' &&
+                (partsPending(w).isNotEmpty ||
+                    installationPending(w, catalogFor(current)).isNotEmpty)) {
+              throw StateError('Quedan incumplimientos o pruebas pendientes.');
+            }
+          // Approval only comes from the server. Keep installed while pending.
+        }
+        if ([
+          'parts_save',
+          'installation_save',
+          'identity_correct',
+        ].contains(type)) {
+          if (['installed', 'deliverable'].contains(w['status'])) {
+            if ((extra['reason'] ?? '').toString().trim().length < 3) {
+              throw StateError('Explica la corrección de datos instalados.');
+            }
+            w['status'] = 'installed';
+            w['approval'] = null;
+            w['installationValid'] = false;
+          }
+        }
+        r['working'] = w;
+        r['dirty'] = false;
+        if (type == 'final_review') r['finalReviewDraft'] = <String, dynamic>{};
+        r['operations'] = [
+          ...current.operations,
+          {'body': body, 'actor': user, 'state': 'queued', 'attempts': 0},
+        ];
+      });
+      unawaited(synchronize());
+    } finally {
+      _submitting.remove(submission);
+      _notify();
+    }
   }
 
   Future<void> capture(String id, String context) async {
@@ -505,7 +652,7 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
     if (gps.altitude != null) 'altitude': gps.altitude,
   };
   Future<void> synchronize({bool force = false}) async {
-    if (!allowed || !app.online || syncing) return;
+    if (!allowed || (!app.online && !force) || syncing) return;
     syncing = true;
     _retry?.cancel();
     final user = actor!;
@@ -869,14 +1016,33 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
     unawaited(synchronize());
   }
 
+  Future<void> saveAuxDraft(String id, String key, Json draft) async {
+    final user = actor;
+    _requireWritable(id);
+    await _edit(id, (r) {
+      if (!allowed || actor != user) throw StateError('La sesión cambió.');
+      final drafts = object(r['uiDrafts']);
+      drafts[user!] = {...object(drafts[user]), key: clone(draft)};
+      r['uiDrafts'] = drafts;
+    });
+  }
+
   Future<void> saveReviewDraft(String id, String field, Object? value) async {
     final user = actor;
     _requireWritable(id);
     await _edit(id, (r) {
       if (!allowed || actor != user) throw StateError('La sesión cambió.');
       r['draftActor'] = user;
-      r['finalReviewDraft'] = {...object(r['finalReviewDraft']), field: value};
+      r['finalReviewDraft'] = {
+        ...object(r['finalReviewDraft']),
+        field: value,
+        if (field == 'fieldChecked')
+          'fieldCheckedAt': value == true
+              ? DateTime.now().toUtc().toIso8601String()
+              : null,
+      };
       r['dirty'] = true;
+      r['draftSavedAt'] = DateTime.now().toUtc().toIso8601String();
     });
   }
 
@@ -977,13 +1143,23 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
     return result;
   }
 
-  Future<Uint8List> photoBytes(String id, Json photo) async {
+  Future<Uint8List> photoBytes(
+    String id,
+    Json photo, {
+    bool original = false,
+  }) async {
     record(id);
     final user = actor;
-    final path = photo['thumbnailPath'] ?? photo['localPath'];
+    final path = original
+        ? photo['localPath']
+        : photo['thumbnailPath'] ?? photo['localPath'];
     final bytes = path != null && await File('$path').exists()
         ? await File('$path').readAsBytes()
-        : await remote.content(id, '${photo['id'] ?? photo['photo_id']}');
+        : await remote.content(
+            id,
+            '${photo['id'] ?? photo['photo_id']}',
+            thumbnail: !original,
+          );
     if (!allowed || actor != user) {
       throw StateError('Sin permiso para ver fotografías.');
     }
@@ -1001,6 +1177,13 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
           .join('\n');
       return '${data['code'] ?? 'CONNECTION'}: ${data['detail'] ?? 'No se pudo comunicar con la API. Datos conservados.'}${details.isEmpty ? '' : '\n$details'}';
     }
+    if (error is FileSystemException) {
+      return error.osError?.errorCode == 28
+          ? 'No hay espacio suficiente. Libera almacenamiento y reintenta; las capturas previas se conservan.'
+          : 'No se pudo guardar o leer el archivo. Conserva el expediente y revisa el almacenamiento.';
+    }
+    if (error is StateError) return error.message;
+    if (error is FormatException) return error.message;
     return error.toString();
   }
 

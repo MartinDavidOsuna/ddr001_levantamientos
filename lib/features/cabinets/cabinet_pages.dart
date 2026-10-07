@@ -5,12 +5,18 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:provider/provider.dart';
 import '../../data/cabinets/cabinet_controller.dart';
 import '../../domain/cabinets/cabinet_models.dart';
+import '../../domain/cabinets/cabinet_safety.dart';
+import 'cabinet_safety_widgets.dart';
 import '../../domain/construction/construction_models.dart' as bases;
+
+final _cabinetActions = Expando<bool>();
 
 Future<void> cabinetAction(
   BuildContext context,
   Future<void> Function() action,
 ) async {
+  if (_cabinetActions[context] == true) return;
+  _cabinetActions[context] = true;
   try {
     await action();
   } catch (e) {
@@ -19,6 +25,8 @@ Future<void> cabinetAction(
         context,
       ).showSnackBar(SnackBar(content: Text(CabinetController.explain(e))));
     }
+  } finally {
+    _cabinetActions[context] = false;
   }
 }
 
@@ -37,7 +45,7 @@ Widget cabinetDenied(CabinetController controller) => Scaffold(
           ),
           if (controller.message != null) Text(controller.message!),
           if (controller.eligible)
-            FilledButton(
+            CabinetBusyButton(
               onPressed: controller.refreshing ? null : controller.refresh,
               child: const Text('Conectar y descargar'),
             ),
@@ -56,6 +64,13 @@ class CabinetsPage extends StatefulWidget {
 
 class _CabinetsPageState extends State<CabinetsPage> {
   String search = '', status = '', model = '';
+  final searchText = TextEditingController();
+  @override
+  void dispose() {
+    searchText.dispose();
+    super.dispose();
+  }
+
   int page = 1;
   @override
   Widget build(BuildContext context) {
@@ -106,7 +121,7 @@ class _CabinetsPageState extends State<CabinetsPage> {
           if (!widget.finalReview)
             Padding(
               padding: const EdgeInsets.all(12),
-              child: FilledButton.icon(
+              child: CabinetBusyButton.icon(
                 onPressed: () => Navigator.push(
                   context,
                   MaterialPageRoute(
@@ -120,6 +135,7 @@ class _CabinetsPageState extends State<CabinetsPage> {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
             child: TextField(
+              controller: searchText,
               decoration: const InputDecoration(
                 labelText: 'Buscar UID, base o cuenta',
                 prefixIcon: Icon(Icons.search),
@@ -136,6 +152,8 @@ class _CabinetsPageState extends State<CabinetsPage> {
               children: [
                 Expanded(
                   child: DropdownButtonFormField<String>(
+                    key: ValueKey('status-$status'),
+                    isExpanded: true,
                     initialValue: status,
                     decoration: const InputDecoration(labelText: 'Estado'),
                     items:
@@ -166,6 +184,8 @@ class _CabinetsPageState extends State<CabinetsPage> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: DropdownButtonFormField<String>(
+                    key: ValueKey('model-$model'),
+                    isExpanded: true,
                     initialValue: model,
                     decoration: const InputDecoration(labelText: 'Modelo'),
                     items:
@@ -196,6 +216,26 @@ class _CabinetsPageState extends State<CabinetsPage> {
               ],
             ),
           ),
+          if (search.isNotEmpty || status.isNotEmpty || model.isNotEmpty)
+            Wrap(
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                const Padding(
+                  padding: EdgeInsets.all(8),
+                  child: Text('Filtros activos'),
+                ),
+                TextButton(
+                  onPressed: () => setState(() {
+                    search = '';
+                    status = '';
+                    model = '';
+                    page = 1;
+                    searchText.clear();
+                  }),
+                  child: const Text('Limpiar filtros'),
+                ),
+              ],
+            ),
           Expanded(
             child: RefreshIndicator(
               onRefresh: c.refresh,
@@ -314,6 +354,9 @@ class _CabinetRegisterPageState extends State<CabinetRegisterPage> {
             decoration: const InputDecoration(
               labelText: 'UID / URL QR',
               hintText: 'AQ26-00001-7',
+              helperText:
+                  'Lee la placa del gabinete. Un UID válido no garantiza que sea el gabinete correcto.',
+              helperMaxLines: 3,
             ),
           ),
           const SizedBox(height: 12),
@@ -334,7 +377,7 @@ class _CabinetRegisterPageState extends State<CabinetRegisterPage> {
             value: automated,
             onChanged: (v) => setState(() => automated = v),
           ),
-          FilledButton.icon(
+          CabinetBusyButton.icon(
             onPressed: busy
                 ? null
                 : () async {
@@ -499,16 +542,30 @@ class CabinetDetailPage extends StatelessWidget {
             Material(
               color: Theme.of(context).colorScheme.primaryContainer,
               child: ListTile(
+                isThreeLine: false,
                 title: Text(
                   '${cabinetStatus(r.working['status'])} · ${r.working['model']}${r.working['automated'] == true ? '-A' : ''}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 subtitle: Text(
                   r.synchronized
                       ? 'Confirmado por servidor · versión ${r.server['version']}'
-                      : 'Guardado en este teléfono · pendiente de sincronización',
+                      : 'Guardado en este teléfono · ${r.pending.length} operaciones por enviar${r.json['dirty'] == true ? ' · borrador sin enviar' : ''}',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ),
+            if (r.json['draftSavedAt'] != null)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Text(
+                  'Última captura local: ${cabinetCaptureDate(r.json['draftSavedAt'])}. Los campos se guardan automáticamente; usa el botón de cada etapa para enviarlos.',
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
             if (c.message != null) Text(c.message!),
             if (r.pending.any((o) => o['error'] != null))
               Padding(
@@ -553,81 +610,42 @@ class CabinetRegistration extends StatelessWidget {
           onChanged: (v) => c.saveDraft(id, 'registrationEvidence', v),
         ),
         if (r.working['status'] == 'draft')
-          FilledButton(
-            onPressed: () => cabinetAction(
-              context,
-              () => c.enqueue(id, 'registration_close', {
-                'evidence': objects(
-                  c.record(id).working['registrationEvidence'],
-                ),
-              }),
-            ),
+          CabinetBusyButton(
+            onPressed: () => cabinetAction(context, () async {
+              await c.flushDrafts();
+              final evidence = objects(
+                c.record(id).working['registrationEvidence'],
+              );
+              if (evidence.isEmpty) {
+                throw StateError(
+                  'Falta fotografía de identificación confirmada.',
+                );
+              }
+              if (!context.mounted ||
+                  !await confirmCabinetAction(
+                    context,
+                    title: 'Confirmar identificación',
+                    message:
+                        '${cabinetIdentity(c, id)}\n\nComprueba la placa física y la foto de identificación. El dígito verificador no identifica por sí solo el gabinete correcto.',
+                    confirm: 'Corresponde a este gabinete',
+                  )) {
+                return;
+              }
+              await c.enqueue(id, 'registration_close', {'evidence': evidence});
+            }),
             child: const Text('Completar registro local'),
           ),
         if (r.working['status'] != 'draft')
-          OutlinedButton(
-            onPressed: () async {
-              var model = '${r.working['model']}';
-              var automated = r.working['automated'] == true;
-              var reason = '';
-              final ok = await showDialog<bool>(
+          CabinetBusyButton(
+            onPressed: () => cabinetAction(context, () async {
+              final value = await showDialog<Json>(
                 context: context,
-                builder: (ctx) => StatefulBuilder(
-                  builder: (ctx, update) => AlertDialog(
-                    title: const Text('Corregir modelo'),
-                    content: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Text(
-                          'Se revisarán de nuevo las piezas y el checklist afectados. El historial y las fotografías se conservan.',
-                        ),
-                        DropdownButton<String>(
-                          value: model,
-                          items: ['A1', 'A2', 'A3', 'A4']
-                              .map(
-                                (m) =>
-                                    DropdownMenuItem(value: m, child: Text(m)),
-                              )
-                              .toList(),
-                          onChanged: (v) => update(() => model = v!),
-                        ),
-                        SwitchListTile(
-                          title: const Text('Incluye automatización'),
-                          value: automated,
-                          onChanged: (v) => update(() => automated = v),
-                        ),
-                        TextField(
-                          decoration: const InputDecoration(
-                            labelText: 'Motivo obligatorio',
-                          ),
-                          onChanged: (v) => reason = v,
-                        ),
-                      ],
-                    ),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(ctx),
-                        child: const Text('Cancelar'),
-                      ),
-                      FilledButton(
-                        onPressed: () => Navigator.pop(ctx, true),
-                        child: const Text('Corregir'),
-                      ),
-                    ],
-                  ),
-                ),
+                builder: (_) => CabinetModelDialog(id: id),
               );
-              if (ok == true && context.mounted) {
-                await cabinetAction(
-                  context,
-                  () => c.enqueue(id, 'identity_correct', {
-                    'model': model,
-                    'automated': automated,
-                    'reason': reason,
-                  }),
-                );
+              if (value != null && context.mounted) {
+                await c.enqueue(id, 'identity_correct', value);
               }
-            },
+            }),
             child: const Text('Corregir modelo / automatización'),
           ),
       ],
@@ -669,10 +687,50 @@ class EvidenceEditor extends StatelessWidget {
             OutlinedButton.icon(
               onPressed: (c.capturing || readOnly)
                   ? null
-                  : () => cabinetAction(
-                      context,
-                      () => c.capture(id, contextName),
-                    ),
+                  : () => cabinetAction(context, () async {
+                      final before = c
+                          .record(id)
+                          .photos
+                          .map((p) => p['id'])
+                          .toSet();
+                      await c.capture(id, contextName);
+                      final captured = c
+                          .record(id)
+                          .photos
+                          .where((p) => !before.contains(p['id']))
+                          .firstOrNull;
+                      if (captured == null || !context.mounted) return;
+                      if (object(captured['metadata'])['accuracy'] == null) {
+                        await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                CabinetPhotoPage(id: id, photo: captured),
+                          ),
+                        );
+                        return;
+                      }
+                      final confirmed = await Navigator.push<bool>(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => CabinetEvidenceReview(
+                            id: id,
+                            photo: captured,
+                            serial: serial,
+                          ),
+                        ),
+                      );
+                      if (confirmed == true && context.mounted) {
+                        await onChanged([
+                          ...value,
+                          {
+                            'photoId': captured['id'],
+                            'confirmed': true,
+                            if (serial) 'legible': true,
+                          },
+                        ]);
+                      }
+                    }),
               icon: const Icon(Icons.camera_alt),
               label: const Text('Tomar fotografía'),
             ),
@@ -708,7 +766,7 @@ class EvidenceEditor extends StatelessWidget {
               ),
             ),
             title: Text(
-              '${p['verified'] == true ? 'Verificada' : 'Local'} · ${cabinetCaptureDate(object(p['metadata'])['capturedAt'])}',
+              '${p['verified'] == true ? 'Archivo verificado' : 'Guardada localmente'} · ${cabinetCaptureDate(object(p['metadata'])['capturedAt'])}',
             ),
             subtitle: Text(
               object(p['metadata'])['accuracy'] == null
@@ -720,9 +778,21 @@ class EvidenceEditor extends StatelessWidget {
             value: value.any((e) => e['photoId'] == p['id']),
             onChanged: readOnly || object(p['metadata'])['accuracy'] == null
                 ? null
-                : (checked) => cabinetAction(
-                    context,
-                    () => onChanged([
+                : (checked) => cabinetAction(context, () async {
+                    if (checked == true) {
+                      final ok = await Navigator.push<bool>(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => CabinetEvidenceReview(
+                            id: id,
+                            photo: p,
+                            serial: serial,
+                          ),
+                        ),
+                      );
+                      if (ok != true || !context.mounted) return;
+                    }
+                    await onChanged([
                       ...value.where((e) => e['photoId'] != p['id']),
                       if (checked == true)
                         {
@@ -730,24 +800,24 @@ class EvidenceEditor extends StatelessWidget {
                           'confirmed': true,
                           if (serial) 'legible': true,
                         },
-                    ]),
-                  ),
+                    ]);
+                  }),
           ),
       ],
     );
   }
 }
 
-class CabinetParts extends StatelessWidget {
+class CabinetParts extends StatefulWidget {
   const CabinetParts({super.key, required this.id});
   final String id;
-  Future<void> savePart(CabinetController c, Json part) {
-    final parts = objects(c.record(id).working['parts']);
-    parts.removeWhere((p) => p['code'] == part['code']);
-    parts.add(part);
-    return c.saveDraft(id, 'parts', parts);
-  }
+  @override
+  State<CabinetParts> createState() => _CabinetPartsState();
+}
 
+class _CabinetPartsState extends State<CabinetParts> {
+  String get id => widget.id;
+  String? selectedGroup;
   @override
   Widget build(BuildContext context) {
     final c = context.watch<CabinetController>(),
@@ -770,10 +840,38 @@ class CabinetParts extends StatelessWidget {
         Text(
           '${definitions.length} piezas · ${partsPending(w).length} pendientes',
         ),
-        for (final group in groups.entries)
+        for (final warning in duplicateSerialWarnings(w))
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Text(warning),
+          ),
+        Wrap(
+          children: [
+            for (final group in groups.entries)
+              if (partsPending(
+                w,
+              ).any((p) => group.value.any((d) => d['code'] == p['subject'])))
+                TextButton(
+                  onPressed: () => setState(() => selectedGroup = group.key),
+                  child: Text(
+                    'Revisar pendientes: ${partGroupLabel(group.key)}',
+                  ),
+                ),
+            if (selectedGroup != null)
+              TextButton(
+                onPressed: () => setState(() => selectedGroup = null),
+                child: const Text('Ver todas las piezas'),
+              ),
+          ],
+        ),
+        for (final group in groups.entries.where(
+          (g) => selectedGroup == null || selectedGroup == g.key,
+        ))
           Card(
             child: ExpansionTile(
-              title: Text(group.key.replaceAll('_', ' ')),
+              key: ValueKey('${group.key}-$selectedGroup'),
+              initiallyExpanded: selectedGroup == group.key,
+              title: Text(partGroupLabel(group.key)),
               subtitle: Text('${group.value.length} instancias'),
               children: [
                 for (final definition in group.value)
@@ -789,7 +887,7 @@ class CabinetParts extends StatelessWidget {
                             'evidence': <Json>[],
                           };
                       Future<void> update(String key, Object? value) =>
-                          savePart(c, {...p, key: value});
+                          c.patchPart(id, '${p['code']}', {key: value});
                       return Padding(
                         padding: const EdgeInsets.all(12),
                         child: Column(
@@ -801,6 +899,15 @@ class CabinetParts extends StatelessWidget {
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
+                            for (final pending in partsPending(
+                              w,
+                            ).where((p) => p['subject'] == definition['code']))
+                              Text(
+                                '${pending['reason']}',
+                                style: TextStyle(
+                                  color: Theme.of(context).colorScheme.error,
+                                ),
+                              ),
                             SegmentedButton<bool>(
                               emptySelectionAllowed: true,
                               segments: const [
@@ -824,18 +931,26 @@ class CabinetParts extends StatelessWidget {
                                 key: ValueKey(
                                   '${definition['code']}-serial-${p['serialException']}',
                                 ),
+                                maxLength: 180,
+                                autocorrect: false,
+                                enableSuggestions: false,
                                 enabled: p['serialException'] == null,
                                 initialValue: p['serial'],
                                 decoration: InputDecoration(
                                   labelText: definition['serial'] == 'required'
                                       ? 'Serie obligatoria'
                                       : 'Serie opcional',
+                                  helperText:
+                                      'Copia la placa; conserva ceros iniciales. Revisa 0/O y 1/I.',
+                                  helperMaxLines: 3,
                                 ),
-                                onChanged: (v) => savePart(c, {
-                                  ...p,
-                                  'serial': v.trim().isEmpty ? null : v.trim(),
-                                  'serialException': null,
-                                }),
+                                onChanged: (v) =>
+                                    c.patchPart(id, '${p['code']}', {
+                                      'serial': normalizeSerial(v).isEmpty
+                                          ? null
+                                          : normalizeSerial(v),
+                                      'serialException': null,
+                                    }),
                               ),
                               DropdownButtonFormField<String>(
                                 key: ValueKey(
@@ -859,14 +974,18 @@ class CabinetParts extends StatelessWidget {
                                     child: Text('No disponible'),
                                   ),
                                 ],
-                                onChanged: (v) => savePart(c, {
-                                  ...p,
-                                  'serialException': v == '' ? null : v,
-                                  if (v != '') 'serial': null,
-                                }),
+                                onChanged: (v) =>
+                                    c.patchPart(id, '${p['code']}', {
+                                      'serialException': v == '' ? null : v,
+                                      if (v != '') 'serial': null,
+                                    }),
                               ),
                               if (p['serialException'] != null)
                                 TextFormField(
+                                  maxLength: 2000,
+                                  validator: reasonError,
+                                  autovalidateMode:
+                                      AutovalidateMode.onUserInteraction,
                                   initialValue: p['reason'],
                                   decoration: const InputDecoration(
                                     labelText: 'Motivo de serie pendiente',
@@ -897,9 +1016,22 @@ class CabinetParts extends StatelessWidget {
             ),
           ),
         _CorrectionReason(id: id),
-        FilledButton(
+        CabinetBusyButton(
           onPressed: () => cabinetAction(context, () async {
+            await c.flushDrafts();
             final now = c.record(id).working;
+            final warnings = duplicateSerialWarnings(now);
+            if (warnings.isNotEmpty &&
+                (!context.mounted ||
+                    !await confirmCabinetAction(
+                      context,
+                      title: 'Revisar series repetidas',
+                      message:
+                          '${cabinetIdentity(c, id)}\n\n${warnings.join('\n')}',
+                      confirm: 'Comprobé las placas',
+                    ))) {
+              return;
+            }
             await c.enqueue(id, 'parts_save', {
               'parts': objects(now['parts']),
               if (now['correctionReason'] != null)
@@ -927,6 +1059,9 @@ class _CorrectionReason extends StatelessWidget {
       return const SizedBox.shrink();
     }
     return TextFormField(
+      maxLength: 2000,
+      validator: reasonError,
+      autovalidateMode: AutovalidateMode.onUserInteraction,
       initialValue: w['correctionReason'],
       decoration: const InputDecoration(
         labelText: 'Motivo de corrección (obligatorio)',
@@ -953,19 +1088,15 @@ class _CabinetInstallationState extends State<CabinetInstallation> {
     super.dispose();
   }
 
-  Future<void> update(CabinetController c, String key, Object? value) async {
-    final install = object(c.record(widget.id).working['installation']);
-    install[key] = value;
-    await c.saveDraft(widget.id, 'installation', install);
-  }
+  Future<void> update(CabinetController c, String key, Object? value) =>
+      c.patchInstallation(widget.id, key, value);
 
-  Future<void> answer(CabinetController c, Json value) async {
-    final i = object(c.record(widget.id).working['installation']);
-    final answers = objects(i['answers']);
-    answers.removeWhere((a) => a['code'] == value['code']);
-    answers.add(value);
-    await update(c, 'answers', answers);
-  }
+  Future<void> answer(CabinetController c, Json value) => c.patchInstallation(
+    widget.id,
+    'answers',
+    value,
+    answerCode: '${value['code']}',
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -997,7 +1128,15 @@ class _CabinetInstallationState extends State<CabinetInstallation> {
               context,
               MaterialPageRoute(builder: (_) => const CabinetBasePicker()),
             );
-            if (selected != null) {
+            if (selected != null && context.mounted) {
+              final ok = await confirmCabinetAction(
+                context,
+                title: 'Confirmar base',
+                message:
+                    '${cabinetIdentity(c, widget.id)}\n\nBase elegida: ${selected.displayIdentifier}\nCuenta: ${selected.accountNumber ?? 'sin cuenta'}\nCoordenadas: ${selected.canonicalLocation?.latitude ?? 'sin dato'}, ${selected.canonicalLocation?.longitude ?? 'sin dato'}',
+                confirm: 'Usar esta base',
+              );
+              if (!ok) return;
               await update(c, 'baseId', selected.id);
               await update(c, 'accountNumber', selected.accountNumber);
               await update(c, 'accountResolution', null);
@@ -1026,10 +1165,25 @@ class _CabinetInstallationState extends State<CabinetInstallation> {
           }),
           child: const Text('Capturar GPS propio de instalación'),
         ),
+        if (!freshInstallationGps(w['installationGpsAt'], DateTime.now()))
+          const Text(
+            'GPS pendiente o antiguo. Captura una ubicación actual antes de guardar.',
+          ),
+        for (final warning in installationWarnings(c, widget.id))
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Text(warning),
+          ),
         TextFormField(
+          maxLength: 50,
+          autocorrect: false,
+          enableSuggestions: false,
           controller: accountText,
           decoration: const InputDecoration(
-            labelText: 'Cuenta opcional (propuesta desde base)',
+            labelText: 'Cuenta de la base (opcional)',
+            helperText:
+                'No escribas aquí la serie del equipo. Conserva los ceros iniciales.',
+            helperMaxLines: 2,
           ),
           onChanged: (v) =>
               update(c, 'accountNumber', v.trim().isEmpty ? null : v.trim()),
@@ -1067,6 +1221,9 @@ class _CabinetInstallationState extends State<CabinetInstallation> {
             },
           ),
           TextFormField(
+            maxLength: 2000,
+            validator: reasonError,
+            autovalidateMode: AutovalidateMode.onUserInteraction,
             initialValue: object(install['accountResolution'])['reason'],
             decoration: const InputDecoration(
               labelText: 'Motivo de discrepancia',
@@ -1121,46 +1278,12 @@ class _CabinetInstallationState extends State<CabinetInstallation> {
                   title: Text(group.value),
                   subtitle: Text('$count / ${qs.length} sin pendientes'),
                   children: [
-                    if (qs.any(canConfirmBlock))
-                      TextButton(
-                        onPressed: () async {
-                          final ok = await showDialog<bool>(
-                            context: context,
-                            builder: (ctx) => AlertDialog(
-                              title: const Text('Confirmar bloque revisado'),
-                              content: const Text(
-                                'Confirmo en campo los puntos pendientes de este bloque. Los “No” y controles que exigen respuesta individual se conservan.',
-                              ),
-                              actions: [
-                                TextButton(
-                                  onPressed: () => Navigator.pop(ctx),
-                                  child: const Text('Cancelar'),
-                                ),
-                                FilledButton(
-                                  onPressed: () => Navigator.pop(ctx, true),
-                                  child: const Text('Confirmar revisados'),
-                                ),
-                              ],
-                            ),
-                          );
-                          if (ok == true) {
-                            for (final q in qs.where(canConfirmBlock)) {
-                              if (!objects(
-                                install['answers'],
-                              ).any((a) => a['code'] == q['code'])) {
-                                await answer(c, {
-                                  'code': q['code'],
-                                  'answer': 'yes',
-                                  'evidence': <Json>[],
-                                });
-                              }
-                            }
-                          }
-                        },
-                        child: const Text(
-                          'Confirmar puntos revisados del bloque',
-                        ),
+                    const Padding(
+                      padding: EdgeInsets.all(12),
+                      child: Text(
+                        'Comprueba y responde cada punto individualmente. Los puntos sin respuesta quedan pendientes.',
                       ),
+                    ),
                     for (final q in qs)
                       Padding(
                         padding: const EdgeInsets.all(12),
@@ -1217,8 +1340,9 @@ class _CabinetInstallationState extends State<CabinetInstallation> {
           onChanged: (v) => update(c, 'observations', v),
         ),
         _CorrectionReason(id: widget.id),
-        FilledButton(
+        CabinetBusyButton(
           onPressed: () => cabinetAction(context, () async {
+            if (!await confirmInstallation(context, c, widget.id)) return;
             final now = c.record(widget.id).working;
             final payload = object(now['installation']);
             payload.removeWhere((k, v) => v == null && k != 'accountNumber');
@@ -1232,6 +1356,7 @@ class _CabinetInstallationState extends State<CabinetInstallation> {
         ),
         OutlinedButton(
           onPressed: () => cabinetAction(context, () async {
+            if (!await confirmInstallation(context, c, widget.id)) return;
             final now = c.record(widget.id).working;
             final payload = object(now['installation']);
             payload.removeWhere((k, v) => v == null && k != 'accountNumber');
@@ -1303,6 +1428,9 @@ class CabinetAnswerEditor extends StatelessWidget {
         ),
         if (value['answer'] != null && value['answer'] != 'yes') ...[
           TextFormField(
+            maxLength: 2000,
+            validator: reasonError,
+            autovalidateMode: AutovalidateMode.onUserInteraction,
             initialValue: value['reason'],
             decoration: const InputDecoration(
               labelText: 'Motivo / observación obligatoria',
@@ -1461,7 +1589,7 @@ class _CabinetBasePickerState extends State<CabinetBasePicker> {
                   ListTile(
                     title: Text(b.displayIdentifier),
                     subtitle: Text(
-                      'Cuenta ${b.accountNumber ?? 'sin cuenta'} · ${b.status.name}',
+                      'Cuenta ${b.accountNumber ?? 'sin cuenta'} · ${b.status.name}\n${b.canonicalLocation == null ? 'Sin coordenadas descargadas' : '${b.canonicalLocation!.latitude}, ${b.canonicalLocation!.longitude}'}',
                     ),
                     onTap: () => Navigator.pop(context, b),
                   ),
@@ -1526,9 +1654,14 @@ class CabinetFinalReview extends StatelessWidget {
           title: const Text('He consultado el expediente y su evidencia'),
         ),
         CheckboxListTile(
-          value: review['fieldChecked'] == true,
+          value:
+              review['fieldChecked'] == true &&
+              freshInstallationGps(review['fieldCheckedAt'], DateTime.now()),
           onChanged: (v) => update('fieldChecked', v),
           title: const Text('He realizado la comprobación en campo'),
+          subtitle: const Text(
+            'Confirma de nuevo si retomas el expediente después de 15 minutos.',
+          ),
         ),
         const Text(
           'Fotografía general actualizada, posterior al cierre de instalación y al intento de revisión anterior.',
@@ -1540,12 +1673,18 @@ class CabinetFinalReview extends StatelessWidget {
           onChanged: (v) => update('evidence', v),
         ),
         TextFormField(
+          maxLength: 2000,
+          validator: reasonError,
+          autovalidateMode: AutovalidateMode.onUserInteraction,
           initialValue: review['reason'],
           decoration: const InputDecoration(labelText: 'Dictamen y motivo'),
           onChanged: (v) => update('reason', v),
         ),
         if (w['reviewCorrection'] != null)
           TextFormField(
+            maxLength: 2000,
+            validator: reasonError,
+            autovalidateMode: AutovalidateMode.onUserInteraction,
             initialValue: review['resolutionReason'],
             decoration: const InputDecoration(
               labelText: 'Cómo se resolvió el dictamen negativo anterior',
@@ -1555,18 +1694,51 @@ class CabinetFinalReview extends StatelessWidget {
         for (final verdict in ['approve', 'correction_required'])
           Padding(
             padding: const EdgeInsets.only(top: 12),
-            child: FilledButton(
+            child: CabinetBusyButton(
               onPressed:
                   review['fieldChecked'] == true &&
+                      freshInstallationGps(
+                        review['fieldCheckedAt'],
+                        DateTime.now(),
+                      ) &&
                       review['dossierConsulted'] == true
                   ? () => cabinetAction(context, () async {
+                      await c.flushDrafts();
                       final latest = c.record(id),
                           draft = object(latest.json['finalReviewDraft']);
-                      if ((draft['reason'] ?? '').toString().trim().length <
-                              3 ||
+                      if (reasonError(draft['reason']) != null ||
                           objects(draft['evidence']).isEmpty) {
                         throw StateError(
                           'Falta motivo o fotografía general confirmada.',
+                        );
+                      }
+                      if (verdict == 'approve' &&
+                          latest.working['reviewCorrection'] != null &&
+                          reasonError(draft['resolutionReason']) != null) {
+                        throw StateError(
+                          'Explica cómo se resolvió el dictamen anterior (3 a 2000 caracteres).',
+                        );
+                      }
+                      if (!context.mounted ||
+                          !await confirmCabinetAction(
+                            context,
+                            title: verdict == 'approve'
+                                ? 'Confirmar aprobación'
+                                : 'Confirmar solicitud de corrección',
+                            message:
+                                '${cabinetIdentity(c, id)}\n\nMotivo: ${draft['reason']}\n\nEsta decisión quedará registrada con tu usuario y fecha. Comprueba el expediente antes de enviar.',
+                            confirm: verdict == 'approve'
+                                ? 'Aprobar este gabinete'
+                                : 'Solicitar corrección',
+                          )) {
+                        return;
+                      }
+                      if (!freshInstallationGps(
+                        draft['fieldCheckedAt'],
+                        DateTime.now(),
+                      )) {
+                        throw StateError(
+                          'Confirma nuevamente la revisión en campo.',
                         );
                       }
                       await c.enqueue(id, 'final_review', {
@@ -1616,7 +1788,7 @@ class CabinetSyncPage extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         children: [
           if (c.syncing) const LinearProgressIndicator(),
-          FilledButton(
+          CabinetBusyButton(
             onPressed: c.syncing ? null : () => c.synchronize(force: true),
             child: const Text('Reintentar ahora'),
           ),
@@ -1685,7 +1857,7 @@ class CabinetSyncPage extends StatelessWidget {
                                     onPressed: () => Navigator.pop(ctx),
                                     child: const Text('Cancelar'),
                                   ),
-                                  FilledButton(
+                                  CabinetBusyButton(
                                     onPressed: () => Navigator.pop(ctx, true),
                                     child: const Text('Abrir existente'),
                                   ),
@@ -1731,7 +1903,7 @@ class CabinetSyncPage extends StatelessWidget {
                                     'Usar servidor, conservar borrador',
                                   ),
                                 ),
-                                FilledButton(
+                                CabinetBusyButton(
                                   onPressed: () => Navigator.pop(ctx, true),
                                   child: const Text('Reintentar captura local'),
                                 ),
@@ -1758,28 +1930,77 @@ class CabinetSyncPage extends StatelessWidget {
   }
 }
 
-class CabinetHistoryPage extends StatelessWidget {
+class CabinetHistoryPage extends StatefulWidget {
   const CabinetHistoryPage({super.key, required this.id});
   final String id;
+  @override
+  State<CabinetHistoryPage> createState() => _CabinetHistoryPageState();
+}
+
+class _CabinetHistoryPageState extends State<CabinetHistoryPage> {
+  bool loading = true;
+  bool failed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _load();
+    });
+  }
+
+  Future<void> _load() async {
+    final c = context.read<CabinetController>();
+    if (!c.allowed) return;
+    setState(() {
+      loading = true;
+      failed = false;
+    });
+    try {
+      await c.history(widget.id);
+    } catch (_) {
+      if (mounted) setState(() => failed = true);
+    } finally {
+      if (mounted) setState(() => loading = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = context.watch<CabinetController>();
     if (!c.allowed) return cabinetDenied(c);
-    final r = c.record(id);
+    final r = c.record(widget.id);
     return Scaffold(
       appBar: AppBar(
         title: const Text('Historial y versiones'),
         actions: [
           IconButton(
-            onPressed: () => cabinetAction(context, () async {
-              await c.history(id);
-            }),
+            tooltip: 'Actualizar historial',
+            onPressed: loading ? null : _load,
             icon: const Icon(Icons.refresh),
           ),
         ],
       ),
       body: ListView(
         children: [
+          if (loading) const LinearProgressIndicator(),
+          if (failed)
+            ListTile(
+              title: const Text('No se pudo actualizar el historial.'),
+              subtitle: const Text('Se conserva la información descargada.'),
+              trailing: TextButton(
+                onPressed: loading ? null : _load,
+                child: const Text('Reintentar'),
+              ),
+            ),
+          if (!loading &&
+              !failed &&
+              objects(r.json['history']).isEmpty &&
+              r.operations.isEmpty)
+            const Padding(
+              padding: EdgeInsets.all(24),
+              child: Text('Este gabinete aún no tiene historial.'),
+            ),
           for (final op in objects(r.json['history']))
             ExpansionTile(
               title: Text(

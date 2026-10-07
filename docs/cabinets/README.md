@@ -4,7 +4,7 @@ Implementación en `feat/ddr001-cabinets-mobile`, creada mediante worktree desde
 `origin/main` **0b78ac7** de `ddr001_levantamientos`. Versión de integración
 `1.5.0+11`; no es una publicación productiva. El checkout original
 `feature/map-coordinates-1.4.1` y sus cambios sin commit se conservaron íntegros.
-No se incorporan esos cambios de mapa/galería a esta rama.
+Los cambios de mapa/galería se integraron posteriormente en `c565e11`.
 
 ## Contrato comprobado
 
@@ -56,8 +56,7 @@ catálogo alternativo, Excel, ni valores de cumplimiento prellenados.
 - Instalación con selección paginada de bases accepted/delivered, cuenta
   propuesta y resolución expresa de discrepancias, GPS propio con fecha y
   precisión, diez bloques de checklist, progreso y accesos a pendientes.
-  Confirmación de bloque sólo sobre respuestas aún vacías no críticas. No
-  cambia un No, no auto-confirma identidad/anclaje/fugas/electricidad/pruebas.
+  Cada punto requiere respuesta individual; se retiró la confirmación masiva de bloques.
 - Motivos, pruebas diferidas y evaluación de impacto consumen la política
   descargada; no se calculan umbrales eléctricos/hidráulicos. Fotografías son
   relaciones de evidencia, no un Sí. La prevalidación local es orientativa;
@@ -142,3 +141,12 @@ remota sólo puede conocerse al recuperar conexión.
 
 [Contrato consumido](contract-matrix.md) · [TEST reproducible](testing.md) ·
 [Resultados](validation.md). Scanner: [documentación del paquete](https://pub.dev/packages/mobile_scanner).
+
+## Prevención de errores humanos (2026-10-06)
+
+Ver [protecciones y validación](human-error-prevention-20261006.md). Incluye bloqueo
+contra doble envío, confirmaciones de identidad/base/dictamen, conservación de piezas
+compatibles al corregir modelo, motivos validados, revisión visual de originales,
+advertencias de series/distancia, captura GPS reciente y conservación de borradores.
+La conservación de piezas compatibles requiere también el cambio en la API; no basta
+con actualizar únicamente el APK.

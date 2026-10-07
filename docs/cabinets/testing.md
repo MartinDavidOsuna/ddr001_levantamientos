@@ -94,3 +94,10 @@ iOS: el build de simulador con Xcode 16.4 falla en la dependencia existente
 `connectivity_plus 7.3.1` (`NWPath.isUltraConstrained` ausente del SDK). Se necesita
 un Xcode/SDK compatible con esa dependencia para terminar la compilación y smoke;
 no se parcheó el caché compartido ni se degradaron dependencias para ocultarlo.
+
+## Pixel con paquete TEST aislado (2026-10-06)
+
+Por instrucción del usuario se probó también el Pixel con una instalación separada
+`com.aquafim.ddr001levantamientos.cabinetstest`, conservando la aplicación operativa.
+El [reporte de QR físico y recuperación](pixel-qa-20261006.md) detalla lo probado,
+las correcciones y los casos que siguen sin certificarse.
