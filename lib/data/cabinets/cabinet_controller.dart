@@ -491,7 +491,7 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
               w['status'] = pending.isEmpty ? 'validated' : 'incomplete';
             }
           case 'identity_correct':
-            final catalog = store.catalog()!;
+            final catalog = catalogFor(current);
             final retained = compatibleParts(
               w,
               catalog.parts(extra['model'], extra['automated']),
