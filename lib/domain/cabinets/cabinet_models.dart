@@ -249,3 +249,8 @@ const cabinetSyncLabels = {
   'conflict': 'Requiere resolución',
   'superseded': 'Intento conservado',
 };
+
+/// Display text is presentation only; capture/evidence always use code.
+String cabinetPartName(Json part) =>
+    (part["displayName"] ?? part["description"] ?? part["code"] ?? "")
+        .toString();

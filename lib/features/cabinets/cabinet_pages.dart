@@ -894,10 +894,14 @@ class _CabinetPartsState extends State<CabinetParts> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              '${definition['description']} · ${definition['code']}',
+                              cabinetPartName(definition),
                               style: const TextStyle(
                                 fontWeight: FontWeight.bold,
                               ),
+                            ),
+                            Text(
+                              '${definition['code']}',
+                              style: Theme.of(context).textTheme.bodySmall,
                             ),
                             for (final pending in partsPending(
                               w,
