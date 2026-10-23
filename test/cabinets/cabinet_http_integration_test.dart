@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ddr001_levantamientos/core/security/session_store.dart';
 import 'package:ddr001_levantamientos/domain/cabinets/cabinet_models.dart';
@@ -129,7 +130,10 @@ void main() {
           (await h.controller.remote.get('/$id'))['cabinet'],
         );
         expect(detail, h.store.read(id)!.server);
-        expect(objects(detail['parts']).length, 41);
+        expect(
+          objects(detail['parts']).length,
+          catalog.parts('A4', true).length,
+        );
         expect(
           objects(detail['parts'])
               .where((p) => p['serial'] != null)
@@ -226,6 +230,46 @@ void main() {
         expect(finalDetail['status'], 'deliverable');
         final finalHistory = await h.controller.history(id);
         expect(finalHistory.length, 12);
+        // Read originals through a different resident's real HTTP identity.
+        final other = object(fixture['otherSession']);
+        final reader = HttpClient();
+        try {
+          final base = 'http://127.0.0.1:3003/api/v1/construction/cabinets/$id';
+          Future<List<int>> getAsOther(String path) async {
+            final request = await reader.getUrl(Uri.parse('$base$path'));
+            request.headers.set(
+              HttpHeaders.authorizationHeader,
+              'Bearer ${other['accessToken']}',
+            );
+            final response = await request.close();
+            expect(response.statusCode, 200, reason: path);
+            return response.fold<List<int>>(
+              [],
+              (bytes, chunk) => bytes..addAll(chunk),
+            );
+          }
+
+          final inventory = objects(
+            object(
+              jsonDecode(
+                utf8.decode(await getAsOther('/photos?page=1&limit=100')),
+              ),
+            )['items'],
+          );
+          expect(inventory.length, 6);
+          for (final photo in inventory) {
+            expect(
+              '${photo['actor_user_id']}'.toLowerCase(),
+              isNot('${other['userId']}'.toLowerCase()),
+            );
+            final bytes = await getAsOther(
+              '/photos/${photo['photo_id']}/content?thumbnail=false',
+            );
+            expect(sha256.convert(bytes).toString(), photo['server_sha256']);
+          }
+        } finally {
+          reader.close(force: true);
+        }
         final log = {
           'cabinetId': id,
           'uid': fixture['uid'],
@@ -238,6 +282,7 @@ void main() {
           'historyOperations': finalHistory.length,
           'approvalInvalidationAndNegativeReviewResolved': true,
           'allPhotosVerified': true,
+          'otherResidentOriginalHashesVerified': true,
         };
         await Directory('.test-cabinets').create(recursive: true);
         await File('.test-cabinets/result.json').writeAsString(jsonEncode(log));

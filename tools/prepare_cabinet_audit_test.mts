@@ -1,10 +1,13 @@
 // Creates synthetic data only in identity-verified TEST; retains it for audit.
+import { resolve, dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { writeFile, mkdir } from 'node:fs/promises';
 const root=process.env.API_CHECKOUT;
 if(!root?.startsWith('/')) throw Error('Set API_CHECKOUT to the absolute local API checkout');
-const output=process.env.CABINETS_TEST_SESSION ?? '.test-cabinets/session.json';
-await mkdir('.test-cabinets',{recursive:true});
+const output=resolve(process.env.CABINETS_TEST_SESSION ?? '.test-cabinets/session.json');
+await mkdir(dirname(output),{recursive:true});
+// The API profile validates storage against its own checkout, not the caller cwd.
+process.chdir(root);
 process.env.NODE_ENV='test';
 process.env.DOTENV_CONFIG_PATH=root+'/.env.construction-test.local';
 process.env.CONFIG_PROFILE='construction-test';
