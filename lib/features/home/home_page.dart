@@ -56,7 +56,7 @@ class HomePage extends StatelessWidget {
                 key: const Key('register_cabinet_action'),
                 icon: Icons.add_business,
                 title: 'REGISTRAR GABINETE',
-                subtitle: 'Registro, piezas e instalación',
+                subtitle: 'Registro y revisión de piezas',
                 onTap: () => Navigator.push(
                   context,
                   MaterialPageRoute(builder: (_) => const CabinetsPage()),
@@ -77,14 +77,15 @@ class HomePage extends StatelessWidget {
             if (cabinets?.eligible == true) ...[
               const SizedBox(height: 12),
               _ActionCard(
-                key: const Key('review_cabinet_action'),
+                key: const Key('install_cabinet_action'),
                 icon: Icons.verified,
-                title: 'REVISIÓN DE HIDRANTE',
-                subtitle: 'Expediente, pruebas y dictamen final',
+                title: 'INSTALAR GABINETE',
+                subtitle: 'Instalación en campo y revisión final',
                 onTap: () => Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (_) => const CabinetsPage(finalReview: true),
+                    builder: (_) =>
+                        const CabinetRegisterPage(installation: true),
                   ),
                 ),
               ),

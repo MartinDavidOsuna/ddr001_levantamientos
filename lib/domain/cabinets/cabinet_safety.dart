@@ -153,3 +153,31 @@ String partGroupLabel(String group) {
       }[group] ??
       group.replaceAll('_', ' ');
 }
+
+const installationDefaultYesCodes = {'CI029', 'CI030', 'CI031'};
+Json installationWithDefaults(
+  Json installation, [
+  List<Json> parts = const [],
+]) {
+  final result = clone(installation);
+  final answers = objects(result['answers']);
+  for (final code in installationDefaultYesCodes) {
+    if (!answers.any((a) => a['code'] == code)) {
+      answers.add({
+        'code': code,
+        'answer': 'yes',
+        'evidence': <Json>[],
+        if (code == 'CI031')
+          'serialComponents': parts
+              .where((p) => (p['serial'] ?? '').toString().isNotEmpty)
+              .map((p) => p['code'])
+              .toList(),
+      });
+    }
+  }
+  result['answers'] = answers;
+  return result;
+}
+
+bool installationWithinBase(double meters) =>
+    meters.isFinite && meters >= 0 && meters < 50;

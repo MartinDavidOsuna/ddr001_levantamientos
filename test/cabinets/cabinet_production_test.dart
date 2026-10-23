@@ -42,7 +42,7 @@ void main() {
       ),
     );
     expect(find.text('REGISTRAR GABINETE'), findsOneWidget);
-    expect(find.text('REVISIÓN DE HIDRANTE'), findsOneWidget);
+    expect(find.text('INSTALAR GABINETE'), findsOneWidget);
   });
 
   test('production preserves role and identity restrictions', () async {

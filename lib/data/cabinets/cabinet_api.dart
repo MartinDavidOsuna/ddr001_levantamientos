@@ -5,6 +5,8 @@ import '../../core/network/api_client.dart';
 import '../../domain/cabinets/cabinet_models.dart';
 
 abstract class CabinetRemote {
+  Future<Json> deleteCabinet(String id, Json body);
+  Future<Json> deletePhoto(String id, String photoId);
   Future<Json> get(String path, [Json? query]);
   Future<Json> command(String id, Json body);
   Future<Json> upload(String id, Json photo);
@@ -20,6 +22,24 @@ class CabinetApi implements CabinetRemote {
   @override
   Future<Json> get(String path, [Json? query]) async => object(
     (await client.dio.get<dynamic>('$root$path', queryParameters: query)).data,
+  );
+  @override
+  Future<Json> deleteCabinet(String id, Json body) async => object(
+    (await client.dio.delete<dynamic>(
+      '$root/$id',
+      data: body,
+      options: Options(
+        headers: {'Idempotency-Key': body['operationId']},
+        extra: {'expectedActor': operationActor},
+      ),
+    )).data,
+  );
+  @override
+  Future<Json> deletePhoto(String id, String photoId) async => object(
+    (await client.dio.delete<dynamic>(
+      '$root/$id/photos/$photoId',
+      options: Options(extra: {'expectedActor': operationActor}),
+    )).data,
   );
   @override
   Future<Json> command(String id, Json body) async => object(

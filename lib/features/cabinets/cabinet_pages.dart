@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../../core/security/session_store.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
@@ -49,6 +50,23 @@ Widget cabinetDenied(CabinetController controller) => Scaffold(
               onPressed: controller.refreshing ? null : controller.refresh,
               child: const Text('Conectar y descargar'),
             ),
+          if (controller.app.session?.kind == SessionKind.field)
+            Builder(
+              builder: (context) => CabinetBusyButton(
+                onPressed: () => cabinetAction(context, () async {
+                  if (await confirmCabinetAction(
+                    context,
+                    title: 'Reconectar sesión',
+                    message:
+                        'Se comprobará tu misma identidad en esta API. Los expedientes, fotografías y pendientes locales se conservan.',
+                    confirm: 'Reconectar',
+                  )) {
+                    await controller.reconnectSession();
+                  }
+                }),
+                child: const Text('Reconectar sesión'),
+              ),
+            ),
         ],
       ),
     ),
@@ -56,8 +74,8 @@ Widget cabinetDenied(CabinetController controller) => Scaffold(
 );
 
 class CabinetsPage extends StatefulWidget {
-  const CabinetsPage({super.key, this.finalReview = false});
-  final bool finalReview;
+  const CabinetsPage({super.key, this.installation = false});
+  final bool installation;
   @override
   State<CabinetsPage> createState() => _CabinetsPageState();
 }
@@ -81,8 +99,12 @@ class _CabinetsPageState extends State<CabinetsPage> {
       final base = c.app.visibleSurveys
           .where((b) => b.id == installation['baseId'])
           .firstOrNull;
-      return (!widget.finalReview ||
-              ['installed', 'deliverable'].contains(w['status'])) &&
+      return (!widget.installation ||
+              [
+                'validated',
+                'installed',
+                'deliverable',
+              ].contains(w['status'])) &&
           (status.isEmpty || w['status'] == status) &&
           (model.isEmpty ||
               '${w['model']}${w['automated'] == true ? '-A' : ''}' == model) &&
@@ -95,7 +117,7 @@ class _CabinetsPageState extends State<CabinetsPage> {
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          widget.finalReview ? 'Revisión de hidrante' : 'Registrar gabinete',
+          widget.installation ? 'Instalar gabinete' : 'Registrar gabinete',
         ),
         actions: [
           IconButton(
@@ -118,7 +140,15 @@ class _CabinetsPageState extends State<CabinetsPage> {
           if (c.refreshing) const LinearProgressIndicator(),
           if (c.message != null)
             Padding(padding: const EdgeInsets.all(8), child: Text(c.message!)),
-          if (!widget.finalReview)
+          if (c.app.config.environment == 'test')
+            const Padding(
+              padding: EdgeInsets.all(8),
+              child: Text(
+                'Entorno TEST · API local por USB. Mantén el servidor y la conexión USB activos.',
+              ),
+            ),
+
+          if (!widget.installation)
             Padding(
               padding: const EdgeInsets.all(12),
               child: CabinetBusyButton.icon(
@@ -267,7 +297,15 @@ class _CabinetsPageState extends State<CabinetsPage> {
                           MaterialPageRoute(
                             builder: (_) => CabinetDetailPage(
                               id: r.id,
-                              initialTab: widget.finalReview ? 3 : 0,
+                              fieldWork: widget.installation,
+                              initialTab:
+                                  widget.installation &&
+                                      [
+                                        'installed',
+                                        'deliverable',
+                                      ].contains(r.working['status'])
+                                  ? 1
+                                  : 0,
                             ),
                           ),
                         ),
@@ -302,13 +340,19 @@ class _CabinetsPageState extends State<CabinetsPage> {
 }
 
 class CabinetRegisterPage extends StatefulWidget {
-  const CabinetRegisterPage({super.key});
+  const CabinetRegisterPage({
+    super.key,
+    this.installation = false,
+    this.initialUid = '',
+  });
+  final bool installation;
+  final String initialUid;
   @override
   State<CabinetRegisterPage> createState() => _CabinetRegisterPageState();
 }
 
 class _CabinetRegisterPageState extends State<CabinetRegisterPage> {
-  final uid = TextEditingController();
+  late final uid = TextEditingController(text: widget.initialUid);
   String model = 'A1';
   bool automated = false, busy = false;
   @override
@@ -321,17 +365,59 @@ class _CabinetRegisterPageState extends State<CabinetRegisterPage> {
     if (busy) return;
     setState(() => busy = true);
     await cabinetAction(context, () async {
-      final id = await context.read<CabinetController>().scan(
-        raw.trim(),
-        model,
-        automated,
-      );
-      if (mounted) {
-        await Navigator.pushReplacement(
-          context,
-          MaterialPageRoute<void>(builder: (_) => CabinetDetailPage(id: id)),
+      final c = context.read<CabinetController>();
+      final normalized = cabinetUid(raw.trim());
+      final id = widget.installation
+          ? await c.findForInstallation(normalized)
+          : await c.scan(normalized, model, automated);
+      if (!mounted) return;
+      if (id == null) {
+        await showDialog<void>(
+          context: context,
+          barrierDismissible: false,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('Gabinete no encontrado'),
+            content: Text(
+              'No se encontró el hidrante ${displayUid(normalized)}. Debes registrar el gabinete antes de instalarlo.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Registrar gabinete'),
+              ),
+            ],
+          ),
         );
+        if (!mounted || !c.allowed) return;
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute<void>(
+            builder: (_) =>
+                CabinetRegisterPage(initialUid: displayUid(normalized)),
+          ),
+        );
+        return;
       }
+      if (!c.allowed) return;
+      final fieldWork = widget.installation;
+      final initialTab =
+          fieldWork &&
+              [
+                'installed',
+                'deliverable',
+              ].contains(c.record(id).working['status'])
+          ? 1
+          : 0;
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute<void>(
+          builder: (_) => CabinetDetailPage(
+            id: id,
+            fieldWork: fieldWork,
+            initialTab: initialTab,
+          ),
+        ),
+      );
     });
     if (mounted) setState(() => busy = false);
   }
@@ -341,7 +427,11 @@ class _CabinetRegisterPageState extends State<CabinetRegisterPage> {
     final c = context.watch<CabinetController>();
     if (!c.allowed) return cabinetDenied(c);
     return Scaffold(
-      appBar: AppBar(title: const Text('Identificar gabinete')),
+      appBar: AppBar(
+        title: Text(
+          widget.installation ? 'Instalar gabinete' : 'Identificar gabinete',
+        ),
+      ),
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
@@ -352,7 +442,7 @@ class _CabinetRegisterPageState extends State<CabinetRegisterPage> {
           TextField(
             controller: uid,
             decoration: const InputDecoration(
-              labelText: 'UID / URL QR',
+              labelText: 'Número de hidrante / URL QR',
               hintText: 'AQ26-00001-7',
               helperText:
                   'Lee la placa del gabinete. Un UID válido no garantiza que sea el gabinete correcto.',
@@ -360,23 +450,25 @@ class _CabinetRegisterPageState extends State<CabinetRegisterPage> {
             ),
           ),
           const SizedBox(height: 12),
-          DropdownButtonFormField<String>(
-            initialValue: model,
-            decoration: const InputDecoration(labelText: 'Modelo base'),
-            items: [
-              'A1',
-              'A2',
-              'A3',
-              'A4',
-            ].map((m) => DropdownMenuItem(value: m, child: Text(m))).toList(),
-            onChanged: (v) => setState(() => model = v!),
-          ),
-          SwitchListTile(
-            title: const Text('Incluye automatización'),
-            subtitle: Text(automated ? '$model-A' : model),
-            value: automated,
-            onChanged: (v) => setState(() => automated = v),
-          ),
+          if (!widget.installation) ...[
+            DropdownButtonFormField<String>(
+              initialValue: model,
+              decoration: const InputDecoration(labelText: 'Modelo base'),
+              items: [
+                'A1',
+                'A2',
+                'A3',
+                'A4',
+              ].map((m) => DropdownMenuItem(value: m, child: Text(m))).toList(),
+              onChanged: (v) => setState(() => model = v!),
+            ),
+            SwitchListTile(
+              title: const Text('Incluye automatización'),
+              subtitle: Text(automated ? '$model-A' : model),
+              value: automated,
+              onChanged: (v) => setState(() => automated = v),
+            ),
+          ],
           CabinetBusyButton.icon(
             onPressed: busy
                 ? null
@@ -397,11 +489,16 @@ class _CabinetRegisterPageState extends State<CabinetRegisterPage> {
           ),
           TextButton(
             onPressed: busy ? null : () => open(uid.text),
-            child: const Text('Continuar con UID escrito'),
+            child: Text(
+              widget.installation
+                  ? 'Buscar gabinete'
+                  : 'Continuar con UID escrito',
+            ),
           ),
-          const Text(
-            'Sin conexión, la unicidad global se comprobará al sincronizar. Para completar el registro se requiere fotografía de identificación.',
-          ),
+          if (!widget.installation)
+            const Text(
+              'Sin conexión, la unicidad global se comprobará al sincronizar. Para completar el registro se requiere fotografía de identificación.',
+            ),
         ],
       ),
     );
@@ -487,22 +584,45 @@ class _CabinetScannerPageState extends State<CabinetScannerPage>
 }
 
 class CabinetDetailPage extends StatelessWidget {
-  const CabinetDetailPage({super.key, required this.id, this.initialTab = 0});
+  const CabinetDetailPage({
+    super.key,
+    required this.id,
+    this.initialTab = 0,
+    this.fieldWork = false,
+  });
   final String id;
   final int initialTab;
+  final bool fieldWork;
   @override
   Widget build(BuildContext context) {
     final c = context.watch<CabinetController>();
     if (!c.allowed) return cabinetDenied(c);
+    if (c.store.read(id) == null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Gabinete eliminado')),
+        body: const Center(
+          child: Text(
+            'El expediente se eliminó. Puedes volver al listado y registrar el mismo número.',
+          ),
+        ),
+      );
+    }
     CabinetRecord r;
     try {
       r = c.record(id);
     } catch (_) {
       return cabinetDenied(c);
     }
+    final automated = r.working['automated'] == true;
+    final tabCount = fieldWork
+        ? 2
+        : automated
+        ? 4
+        : 3;
     return DefaultTabController(
-      length: 4,
-      initialIndex: initialTab,
+      key: ValueKey('$id-$automated-$fieldWork'),
+      length: tabCount,
+      initialIndex: initialTab.clamp(0, tabCount - 1),
       child: Scaffold(
         appBar: AppBar(
           title: Text(displayUid(r.working['uid'])),
@@ -524,67 +644,75 @@ class CabinetDetailPage extends StatelessWidget {
               ),
             ),
           ],
-          bottom: const TabBar(
+          bottom: TabBar(
             isScrollable: true,
             labelColor: Colors.white,
             unselectedLabelColor: Colors.white70,
             indicatorColor: Colors.white,
             tabs: [
-              Tab(text: '1 Registro'),
-              Tab(text: '2 Piezas'),
-              Tab(text: '3 Instalación'),
-              Tab(text: '4 Revisión final'),
+              if (fieldWork) ...[
+                const Tab(text: 'Instalación'),
+                const Tab(text: 'Revisión final'),
+              ] else ...[
+                const Tab(text: '1 Registro'),
+                const Tab(text: '2 Distrito'),
+                const Tab(text: '3 Productor'),
+                if (automated) const Tab(text: '4 Automatización'),
+              ],
             ],
           ),
         ),
-        body: Column(
-          children: [
-            Material(
-              color: Theme.of(context).colorScheme.primaryContainer,
-              child: ListTile(
-                isThreeLine: false,
-                title: Text(
-                  '${cabinetStatus(r.working['status'])} · ${r.working['model']}${r.working['automated'] == true ? '-A' : ''}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+        body: Builder(
+          builder: (context) => AnimatedBuilder(
+            animation: DefaultTabController.of(context),
+            builder: (context, _) => Column(
+              children: [
+                Material(
+                  color: Theme.of(context).colorScheme.primaryContainer,
+                  child: ListTile(
+                    isThreeLine: false,
+                    title: Text(
+                      '${fieldWork ? "Modelo" : cabinetStatus(r.working['status'])} · ${r.working['model']}${r.working['automated'] == true ? '-A' : ''}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
                 ),
-                subtitle: Text(
-                  r.synchronized
-                      ? 'Confirmado por servidor · versión ${r.server['version']}'
-                      : 'Guardado en este teléfono · ${r.pending.length} operaciones por enviar${r.json['dirty'] == true ? ' · borrador sin enviar' : ''}',
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
+                if (c.message != null &&
+                    !c.message!.startsWith('No se obtuvo ubicación válida'))
+                  Text(c.message!),
+                if (r.pending.any((o) => o['error'] != null))
+                  Padding(
+                    padding: const EdgeInsets.all(8),
+                    child: Text(
+                      '${r.pending.firstWhere((o) => o['error'] != null)['error']}',
+                    ),
+                  ),
+                Expanded(
+                  child: TabBarView(
+                    children: [
+                      if (fieldWork) ...[
+                        CabinetInstallation(id: id),
+                        CabinetFinalReview(id: id),
+                      ] else ...[
+                        CabinetRegistration(
+                          id: id,
+                          onNext: () {
+                            if (context.mounted) {
+                              DefaultTabController.of(context).animateTo(1);
+                            }
+                          },
+                        ),
+                        CabinetParts(id: id, side: 'district'),
+                        CabinetParts(id: id, side: 'producer'),
+                        if (automated) CabinetParts(id: id, side: 'automation'),
+                      ],
+                    ],
+                  ),
                 ),
-              ),
+              ],
             ),
-            if (r.json['draftSavedAt'] != null)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Text(
-                  'Última captura local: ${cabinetCaptureDate(r.json['draftSavedAt'])}. Los campos se guardan automáticamente; usa el botón de cada etapa para enviarlos.',
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            if (c.message != null) Text(c.message!),
-            if (r.pending.any((o) => o['error'] != null))
-              Padding(
-                padding: const EdgeInsets.all(8),
-                child: Text(
-                  '${r.pending.firstWhere((o) => o['error'] != null)['error']}',
-                ),
-              ),
-            Expanded(
-              child: TabBarView(
-                children: [
-                  CabinetRegistration(id: id),
-                  CabinetParts(id: id),
-                  CabinetInstallation(id: id),
-                  CabinetFinalReview(id: id),
-                ],
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -592,15 +720,27 @@ class CabinetDetailPage extends StatelessWidget {
 }
 
 class CabinetRegistration extends StatelessWidget {
-  const CabinetRegistration({super.key, required this.id});
+  const CabinetRegistration({super.key, required this.id, this.onNext});
   final String id;
+  final VoidCallback? onNext;
   @override
   Widget build(BuildContext context) {
     final c = context.watch<CabinetController>(), r = c.record(id);
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        Text('Catálogo: ${r.working['catalogVersion']}'),
+        if (r.json['deletion'] != null)
+          Text(
+            'Eliminación pendiente: ${object(r.json['deletion'])['error'] ?? 'esperando confirmación del servidor'}. Reintenta desde Sincronización.',
+          ),
+        if (object(r.json['deletion'])['code'] == 'VERSION_CONFLICT')
+          TextButton(
+            onPressed: () =>
+                cabinetAction(context, () => c.cancelRejectedDeletion(id)),
+            child: const Text(
+              'Cancelar eliminación rechazada y actualizar expediente',
+            ),
+          ),
         const SizedBox(height: 12),
         EvidenceEditor(
           id: id,
@@ -618,22 +758,43 @@ class CabinetRegistration extends StatelessWidget {
               );
               if (evidence.isEmpty) {
                 throw StateError(
-                  'Falta fotografía de identificación confirmada.',
+                  c
+                          .record(id)
+                          .photos
+                          .any(
+                            (p) =>
+                                p['deleting'] != true &&
+                                object(p['metadata'])['context'] ==
+                                    'registration',
+                          )
+                      ? 'La foto está guardada, pero falta una ubicación válida del momento de captura. Activa la ubicación del teléfono y toma otra foto.'
+                      : 'Agrega al menos una foto del gabinete.',
                 );
               }
-              if (!context.mounted ||
-                  !await confirmCabinetAction(
-                    context,
-                    title: 'Confirmar identificación',
-                    message:
-                        '${cabinetIdentity(c, id)}\n\nComprueba la placa física y la foto de identificación. El dígito verificador no identifica por sí solo el gabinete correcto.',
-                    confirm: 'Corresponde a este gabinete',
-                  )) {
-                return;
-              }
               await c.enqueue(id, 'registration_close', {'evidence': evidence});
+              onNext?.call();
             }),
-            child: const Text('Completar registro local'),
+            child: const Text('Siguiente'),
+          ),
+        if (r.working['status'] != 'draft')
+          FilledButton(onPressed: onNext, child: const Text('Siguiente')),
+        if (r.working['installation'] == null &&
+            !['installed', 'deliverable'].contains(r.working['status']))
+          OutlinedButton.icon(
+            key: const Key('delete_cabinet'),
+            icon: const Icon(Icons.delete_forever),
+            label: const Text('Eliminar gabinete y fotografías'),
+            onPressed: c.syncing || c.capturing || r.json['deletion'] != null
+                ? null
+                : () => cabinetAction(context, () async {
+                    final uid = await showDialog<String>(
+                      context: context,
+                      builder: (_) => CabinetDeleteDialog(id: id),
+                    );
+                    if (uid == null) return;
+                    await c.deleteRegistration(id, uid);
+                    if (context.mounted) Navigator.pop(context);
+                  }),
           ),
         if (r.working['status'] != 'draft')
           CabinetBusyButton(
@@ -653,6 +814,137 @@ class CabinetRegistration extends StatelessWidget {
   }
 }
 
+class CabinetRegistrationPhotos extends StatelessWidget {
+  const CabinetRegistrationPhotos({
+    super.key,
+    required this.id,
+    required this.readOnly,
+    required this.onChanged,
+  });
+  final String id;
+  final bool readOnly;
+  final Future<void> Function(List<Json>) onChanged;
+  @override
+  Widget build(BuildContext context) {
+    final c = context.watch<CabinetController>(), record = c.record(id);
+    final photos = record.photos
+        .where(
+          (p) =>
+              p['deleting'] != true &&
+              object(p['metadata'])['context'] == 'registration',
+        )
+        .toList();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Foto(s) del gabinete',
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+        ),
+        const Text('Al menos una es obligatoria.'),
+        Text('${photos.length} ${photos.length == 1 ? 'foto' : 'fotos'}'),
+        OutlinedButton.icon(
+          onPressed: readOnly || c.capturing
+              ? null
+              : () => cabinetAction(context, () async {
+                  await c.capture(id, 'registration');
+                  if (!context.mounted) return;
+                  final r = c.record(id);
+                  await onChanged(
+                    r.photos
+                        .where(
+                          (p) =>
+                              p['deleting'] != true &&
+                              object(p['metadata'])['context'] ==
+                                  'registration' &&
+                              object(p['metadata'])['accuracy'] != null,
+                        )
+                        .map(
+                          (p) => <String, dynamic>{
+                            'photoId': p['id'],
+                            'confirmed': true,
+                          },
+                        )
+                        .toList(),
+                  );
+                }),
+          icon: const Icon(Icons.camera_alt),
+          label: Text(c.capturing ? 'Guardando foto…' : 'Tomar fotografía'),
+        ),
+        if (readOnly && photos.isEmpty)
+          TextButton(
+            onPressed: () =>
+                cabinetAction(context, () => c.downloadEvidence(id)),
+            child: const Text('Ver fotos del gabinete'),
+          ),
+        for (var index = 0; index < photos.length; index++)
+          Card(
+            child: Row(
+              children: [
+                Expanded(
+                  child: InkWell(
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            CabinetPhotoPage(id: id, photo: photos[index]),
+                      ),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(8),
+                      child: Row(
+                        children: [
+                          SizedBox(
+                            width: 96,
+                            height: 96,
+                            child: FutureBuilder(
+                              future: c.photoBytes(id, photos[index]),
+                              builder: (context, snapshot) => snapshot.hasData
+                                  ? Image.memory(
+                                      snapshot.data!,
+                                      fit: BoxFit.cover,
+                                    )
+                                  : const Icon(Icons.photo),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Text('Foto ${index + 1}'),
+                          const Icon(Icons.zoom_in),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                if (!readOnly)
+                  IconButton(
+                    tooltip: 'Eliminar foto',
+                    icon: const Icon(Icons.delete_outline),
+                    onPressed: c.syncing || c.capturing
+                        ? null
+                        : () => cabinetAction(context, () async {
+                            if (await confirmCabinetAction(
+                              context,
+                              title: 'Eliminar foto',
+                              message:
+                                  'Se quitará esta foto del gabinete. Puedes tomar otra.',
+                              confirm: 'Eliminar foto',
+                            )) {
+                              await c.deleteRegistrationPhoto(
+                                id,
+                                '${photos[index]['id']}',
+                              );
+                            }
+                          }),
+                  ),
+              ],
+            ),
+          ),
+        const SizedBox(height: 12),
+      ],
+    );
+  }
+}
+
 class EvidenceEditor extends StatelessWidget {
   const EvidenceEditor({
     super.key,
@@ -660,24 +952,25 @@ class EvidenceEditor extends StatelessWidget {
     required this.contextName,
     required this.value,
     required this.onChanged,
+    this.rubricTitle = 'Fotos del gabinete',
     this.serial = false,
     this.readOnly = false,
   });
-  final String id, contextName;
+  final String id, contextName, rubricTitle;
   final List<Json> value;
   final Future<void> Function(List<Json>) onChanged;
   final bool serial, readOnly;
   @override
   Widget build(BuildContext context) {
-    final c = context.watch<CabinetController>(), r = c.record(id);
-    final photos = r.photos
-        .where(
-          (p) => [
-            contextName,
-            'correction',
-          ].contains(object(p['metadata'])['context']),
-        )
-        .toList();
+    final c = context.watch<CabinetController>();
+    if (contextName == 'registration') {
+      return CabinetRegistrationPhotos(
+        id: id,
+        readOnly: readOnly,
+        onChanged: onChanged,
+      );
+    }
+    final photoIds = value.map((e) => '${e['photoId']}').toSet().toList();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -700,355 +993,280 @@ class EvidenceEditor extends StatelessWidget {
                           .where((p) => !before.contains(p['id']))
                           .firstOrNull;
                       if (captured == null || !context.mounted) return;
-                      if (object(captured['metadata'])['accuracy'] == null) {
-                        await Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) =>
-                                CabinetPhotoPage(id: id, photo: captured),
-                          ),
-                        );
-                        return;
-                      }
-                      final confirmed = await Navigator.push<bool>(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => CabinetEvidenceReview(
-                            id: id,
-                            photo: captured,
-                            serial: serial,
-                          ),
-                        ),
-                      );
-                      if (confirmed == true && context.mounted) {
-                        await onChanged([
-                          ...value,
-                          {
-                            'photoId': captured['id'],
-                            'confirmed': true,
-                            if (serial) 'legible': true,
-                          },
-                        ]);
-                      }
+                      await onChanged([
+                        ...value,
+                        {
+                          'photoId': captured['id'],
+                          'confirmed':
+                              object(captured['metadata'])['accuracy'] != null,
+                        },
+                      ]);
                     }),
               icon: const Icon(Icons.camera_alt),
               label: const Text('Tomar fotografía'),
             ),
-            TextButton(
-              onPressed: () =>
-                  cabinetAction(context, () => c.downloadEvidence(id)),
-              child: const Text('Descargar evidencia remota'),
-            ),
           ],
         ),
-        Text(
-          '${value.length} fotografías relacionadas. Una misma foto puede respaldar varias piezas.',
-        ),
-        for (final p in photos)
-          CheckboxListTile(
-            contentPadding: EdgeInsets.zero,
-            secondary: GestureDetector(
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => CabinetPhotoPage(id: id, photo: p),
-                ),
-              ),
-              child: SizedBox(
-                width: 56,
-                height: 56,
-                child: FutureBuilder(
-                  builder: (context, snapshot) => snapshot.hasData
-                      ? Image.memory(snapshot.data!, fit: BoxFit.cover)
-                      : const Icon(Icons.image_not_supported_outlined),
-                  future: c.photoBytes(id, p),
-                ),
+        TextButton(
+          onPressed: () => Navigator.push(
+            context,
+            MaterialPageRoute<void>(
+              builder: (_) => CabinetRubricGallery(
+                id: id,
+                photoIds: photoIds,
+                title: rubricTitle,
               ),
             ),
-            title: Text(
-              '${p['verified'] == true ? 'Archivo verificado' : 'Guardada localmente'} · ${cabinetCaptureDate(object(p['metadata'])['capturedAt'])}',
-            ),
-            subtitle: Text(
-              object(p['metadata'])['accuracy'] == null
-                  ? 'GPS pendiente; conserva esta foto y toma otra con GPS'
-                  : serial
-                  ? 'Confirmo placa legible y correspondencia con esta serie'
-                  : 'Confirmo que documenta este punto',
-            ),
-            value: value.any((e) => e['photoId'] == p['id']),
-            onChanged: readOnly || object(p['metadata'])['accuracy'] == null
-                ? null
-                : (checked) => cabinetAction(context, () async {
-                    if (checked == true) {
-                      final ok = await Navigator.push<bool>(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => CabinetEvidenceReview(
-                            id: id,
-                            photo: p,
-                            serial: serial,
-                          ),
-                        ),
-                      );
-                      if (ok != true || !context.mounted) return;
-                    }
-                    await onChanged([
-                      ...value.where((e) => e['photoId'] != p['id']),
-                      if (checked == true)
-                        {
-                          'photoId': p['id'],
-                          'confirmed': true,
-                          if (serial) 'legible': true,
-                        },
-                    ]);
-                  }),
           ),
+          child: Text(
+            '${photoIds.length} ${photoIds.length == 1 ? 'foto tomada' : 'fotos tomadas'}',
+          ),
+        ),
       ],
     );
   }
 }
 
-class CabinetParts extends StatefulWidget {
-  const CabinetParts({super.key, required this.id});
-  final String id;
-  @override
-  State<CabinetParts> createState() => _CabinetPartsState();
-}
-
-class _CabinetPartsState extends State<CabinetParts> {
-  String get id => widget.id;
-  String? selectedGroup;
+class CabinetRubricGallery extends StatelessWidget {
+  const CabinetRubricGallery({
+    super.key,
+    required this.id,
+    required this.photoIds,
+    required this.title,
+  });
+  final String id, title;
+  final List<String> photoIds;
   @override
   Widget build(BuildContext context) {
-    final c = context.watch<CabinetController>(),
-        r = c.record(id),
-        w = r.working;
+    final c = context.watch<CabinetController>();
+    if (!c.allowed) return cabinetDenied(c);
+    final r = c.record(id);
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(title, maxLines: 2, overflow: TextOverflow.ellipsis),
+        actions: [
+          IconButton(
+            tooltip: 'Descargar evidencia remota',
+            icon: const Icon(Icons.download),
+            onPressed: () =>
+                cabinetAction(context, () => c.downloadEvidence(id)),
+          ),
+        ],
+      ),
+      body: photoIds.isEmpty
+          ? const Center(child: Text('Todavía no hay fotos en este rubro.'))
+          : GridView.builder(
+              padding: const EdgeInsets.all(16),
+              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                maxCrossAxisExtent: 240,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+              ),
+              itemCount: photoIds.length,
+              itemBuilder: (context, index) {
+                final photo = r.photos
+                    .where((p) => p['id'] == photoIds[index])
+                    .firstOrNull;
+                return Card(
+                  key: ValueKey('rubric-photo-${photoIds[index]}'),
+                  clipBehavior: Clip.antiAlias,
+                  child: photo == null
+                      ? const Center(
+                          child: Text(
+                            'Foto pendiente de descarga',
+                            textAlign: TextAlign.center,
+                          ),
+                        )
+                      : InkWell(
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute<void>(
+                              builder: (_) =>
+                                  CabinetPhotoPage(id: id, photo: photo),
+                            ),
+                          ),
+                          child: FutureBuilder(
+                            future: c.photoBytes(id, photo),
+                            builder: (context, snapshot) => snapshot.hasData
+                                ? Image.memory(
+                                    snapshot.data!,
+                                    fit: BoxFit.cover,
+                                  )
+                                : Center(
+                                    child: snapshot.hasError
+                                        ? const Text(
+                                            'Foto no disponible. Reintenta la descarga.',
+                                            textAlign: TextAlign.center,
+                                          )
+                                        : const CircularProgressIndicator(),
+                                  ),
+                          ),
+                        ),
+                );
+              },
+            ),
+    );
+  }
+}
+
+class CabinetParts extends StatelessWidget {
+  const CabinetParts({super.key, required this.id, required this.side});
+  final String id, side;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.watch<CabinetController>(), w = c.record(id).working;
     if (w['status'] == 'draft') {
+      return const Center(child: Text('Completa primero el registro.'));
+    }
+    final policy = object(c.catalogFor(c.record(id)).json['partsReviewPolicy']);
+    if (policy['version'] != 'ddr001-parts-20261019-v2') {
       return const Center(
-        child: Text('Completa primero el registro con identificación.'),
+        child: Padding(
+          padding: EdgeInsets.all(16),
+          child: Text(
+            'Conecta con la API actualizada para descargar la revisión de piezas por lado. Los datos siguen conservados.',
+          ),
+        ),
       );
     }
-    final definitions = objects(w['partDefinitions']);
-    final groups = <String, List<Json>>{};
-    for (final p in definitions) {
-      final group = '${p['position']}'.split('.').first;
-      (groups[group] ??= []).add(p);
-    }
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        Text(
-          '${definitions.length} piezas · ${partsPending(w).length} pendientes',
-        ),
-        for (final warning in duplicateSerialWarnings(w))
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4),
-            child: Text(warning),
+    final lastPartsStep =
+        side == 'automation' || (side == 'producer' && w['automated'] != true);
+    final rules = object(policy['parts']);
+    final definitions =
+        cabinetReviewDefinitions(
+          w,
+          policy,
+        ).where((p) => cabinetPartStep(p, policy) == side).toList()..sort(
+          (a, b) => (object(rules[a['code']])['order'] as num).compareTo(
+            object(rules[b['code']])['order'] as num,
           ),
-        Wrap(
-          children: [
-            for (final group in groups.entries)
-              if (partsPending(
-                w,
-              ).any((p) => group.value.any((d) => d['code'] == p['subject'])))
-                TextButton(
-                  onPressed: () => setState(() => selectedGroup = group.key),
-                  child: Text(
-                    'Revisar pendientes: ${partGroupLabel(group.key)}',
-                  ),
-                ),
-            if (selectedGroup != null)
-              TextButton(
-                onPressed: () => setState(() => selectedGroup = null),
-                child: const Text('Ver todas las piezas'),
+        );
+    Json capture(Json definition) =>
+        objects(
+          w['parts'],
+        ).where((p) => p['code'] == definition['code']).firstOrNull ??
+        {};
+    Widget row(Json definition) {
+      final p = capture(definition);
+      return Row(
+        children: [
+          SizedBox(
+            width: 36,
+            height: 24,
+            child: Checkbox(
+              key: ValueKey('present-${definition['code']}'),
+              visualDensity: VisualDensity.compact,
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              value: p['present'] as bool? ?? true,
+              onChanged: (v) => cabinetAction(
+                context,
+                () => c.patchPart(id, '${definition['code']}', {'present': v}),
               ),
-          ],
-        ),
-        for (final group in groups.entries.where(
-          (g) => selectedGroup == null || selectedGroup == g.key,
-        ))
-          Card(
-            child: ExpansionTile(
-              key: ValueKey('${group.key}-$selectedGroup'),
-              initiallyExpanded: selectedGroup == group.key,
-              title: Text(partGroupLabel(group.key)),
-              subtitle: Text('${group.value.length} instancias'),
-              children: [
-                for (final definition in group.value)
-                  Builder(
-                    builder: (context) {
-                      final p =
-                          objects(w['parts'])
-                              .where((p) => p['code'] == definition['code'])
-                              .firstOrNull ??
-                          <String, dynamic>{
-                            'code': definition['code'],
-                            'present': null,
-                            'evidence': <Json>[],
-                          };
-                      Future<void> update(String key, Object? value) =>
-                          c.patchPart(id, '${p['code']}', {key: value});
-                      return Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              cabinetPartName(definition),
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            Text(
-                              '${definition['code']}',
-                              style: Theme.of(context).textTheme.bodySmall,
-                            ),
-                            for (final pending in partsPending(
-                              w,
-                            ).where((p) => p['subject'] == definition['code']))
-                              Text(
-                                '${pending['reason']}',
-                                style: TextStyle(
-                                  color: Theme.of(context).colorScheme.error,
-                                ),
-                              ),
-                            SegmentedButton<bool>(
-                              emptySelectionAllowed: true,
-                              segments: const [
-                                ButtonSegment(
-                                  value: true,
-                                  label: Text('Presente'),
-                                ),
-                                ButtonSegment(
-                                  value: false,
-                                  label: Text('Faltante'),
-                                ),
-                              ],
-                              selected: p['present'] == null
-                                  ? {}
-                                  : {p['present'] as bool},
-                              onSelectionChanged: (s) =>
-                                  update('present', s.firstOrNull),
-                            ),
-                            if (definition['serial'] != 'none') ...[
-                              TextFormField(
-                                key: ValueKey(
-                                  '${definition['code']}-serial-${p['serialException']}',
-                                ),
-                                maxLength: 180,
-                                autocorrect: false,
-                                enableSuggestions: false,
-                                enabled: p['serialException'] == null,
-                                initialValue: p['serial'],
-                                decoration: InputDecoration(
-                                  labelText: definition['serial'] == 'required'
-                                      ? 'Serie obligatoria'
-                                      : 'Serie opcional',
-                                  helperText:
-                                      'Copia la placa; conserva ceros iniciales. Revisa 0/O y 1/I.',
-                                  helperMaxLines: 3,
-                                ),
-                                onChanged: (v) =>
-                                    c.patchPart(id, '${p['code']}', {
-                                      'serial': normalizeSerial(v).isEmpty
-                                          ? null
-                                          : normalizeSerial(v),
-                                      'serialException': null,
-                                    }),
-                              ),
-                              DropdownButtonFormField<String>(
-                                key: ValueKey(
-                                  '${definition['code']}-${p['serialException']}',
-                                ),
-                                initialValue: p['serialException'] ?? '',
-                                decoration: const InputDecoration(
-                                  labelText: 'Serie pendiente',
-                                ),
-                                items: const [
-                                  DropdownMenuItem(
-                                    value: '',
-                                    child: Text('Sin excepción'),
-                                  ),
-                                  DropdownMenuItem(
-                                    value: 'illegible',
-                                    child: Text('Ilegible'),
-                                  ),
-                                  DropdownMenuItem(
-                                    value: 'unavailable',
-                                    child: Text('No disponible'),
-                                  ),
-                                ],
-                                onChanged: (v) =>
-                                    c.patchPart(id, '${p['code']}', {
-                                      'serialException': v == '' ? null : v,
-                                      if (v != '') 'serial': null,
-                                    }),
-                              ),
-                              if (p['serialException'] != null)
-                                TextFormField(
-                                  maxLength: 2000,
-                                  validator: reasonError,
-                                  autovalidateMode:
-                                      AutovalidateMode.onUserInteraction,
-                                  initialValue: p['reason'],
-                                  decoration: const InputDecoration(
-                                    labelText: 'Motivo de serie pendiente',
-                                  ),
-                                  onChanged: (v) => update('reason', v),
-                                ),
-                            ],
-                            TextFormField(
-                              initialValue: p['observations'],
-                              decoration: const InputDecoration(
-                                labelText: 'Observación',
-                              ),
-                              onChanged: (v) => update('observations', v),
-                            ),
-                            EvidenceEditor(
-                              id: id,
-                              contextName: 'parts_validation',
-                              serial: (p['serial'] ?? '').toString().isNotEmpty,
-                              value: objects(p['evidence']),
-                              onChanged: (v) => update('evidence', v),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
-              ],
             ),
           ),
-        _CorrectionReason(id: id),
-        CabinetBusyButton(
-          onPressed: () => cabinetAction(context, () async {
-            await c.flushDrafts();
-            final now = c.record(id).working;
-            final warnings = duplicateSerialWarnings(now);
-            if (warnings.isNotEmpty &&
-                (!context.mounted ||
-                    !await confirmCabinetAction(
-                      context,
-                      title: 'Revisar series repetidas',
-                      message:
-                          '${cabinetIdentity(c, id)}\n\n${warnings.join('\n')}',
-                      confirm: 'Comprobé las placas',
-                    ))) {
-              return;
-            }
-            await c.enqueue(id, 'parts_save', {
-              'parts': objects(now['parts']),
-              if (now['correctionReason'] != null)
-                'reason': now['correctionReason'],
-            });
-            await c.enqueue(id, 'parts_validate', {});
-          }),
-          child: const Text('Guardar y validar piezas'),
-        ),
-        const Text(
-          'Faltantes, series obligatorias o evidencia pendientes mantienen el expediente Incompleto.',
-        ),
-      ],
+          Expanded(
+            child: Text(
+              cabinetPartName(definition).toUpperCase(),
+              style: const TextStyle(fontSize: 13),
+            ),
+          ),
+        ],
+      );
+    }
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(switch (side) {
+                'district' => 'PIEZAS DEL DISTRITO',
+                'producer' => 'PIEZAS DEL PRODUCTOR',
+                _ => 'PIEZAS DE AUTOMATIZACIÓN',
+              }, style: Theme.of(context).textTheme.titleMedium),
+              Expanded(
+                child: ListView(
+                  children: [
+                    for (final definition in definitions) ...[
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        child: row(definition),
+                      ),
+                      if (object(rules[definition['code']])['serial'] ==
+                          'required')
+                        Padding(
+                          padding: const EdgeInsets.only(left: 36, bottom: 8),
+                          child: TextFormField(
+                            key: ValueKey('${definition['code']}-serial'),
+                            initialValue: capture(definition)['serial'],
+                            autocorrect: false,
+                            enableSuggestions: false,
+                            decoration: const InputDecoration(
+                              labelText: 'Número de serie del flujómetro',
+                              isDense: true,
+                            ),
+                            onChanged: (v) =>
+                                c.patchPart(id, '${definition['code']}', {
+                                  'serial': normalizeSerial(v).isEmpty
+                                      ? null
+                                      : normalizeSerial(v),
+                                  'serialException': null,
+                                }),
+                          ),
+                        ),
+                    ],
+                  ],
+                ),
+              ),
+              _CorrectionReason(id: id),
+              CabinetBusyButton(
+                onPressed: () => cabinetAction(context, () async {
+                  if (lastPartsStep &&
+                      !await confirmCabinetAction(
+                        context,
+                        title: 'Guardar gabinete',
+                        message:
+                            '¿Deseas guardar el gabinete y salir o continuar la revisión? La instalación y la revisión final se realizarán después en campo.',
+                        confirm: 'Guardar gabinete',
+                        cancel: 'Continuar revisión',
+                      )) {
+                    return;
+                  }
+                  await c.savePartsSide(id, side);
+                  if (!context.mounted) return;
+                  if (lastPartsStep) {
+                    final incomplete =
+                        c.record(id).working['partsValidated'] != true;
+                    final messenger = ScaffoldMessenger.of(context);
+                    Navigator.of(context).pop();
+                    messenger.showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          incomplete
+                              ? 'Gabinete guardado con pendientes de revisión.'
+                              : 'Gabinete guardado. Instalación pendiente para realizar en campo.',
+                        ),
+                      ),
+                    );
+                    return;
+                  }
+                  DefaultTabController.of(context).animateTo(
+                    side == 'district'
+                        ? 2
+                        : side == 'producer'
+                        ? 3
+                        : 4,
+                  );
+                }),
+                child: Text(lastPartsStep ? 'Guardar y salir' : 'Siguiente'),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
@@ -1083,11 +1301,13 @@ class CabinetInstallation extends StatefulWidget {
 }
 
 class _CabinetInstallationState extends State<CabinetInstallation> {
-  String? expandedGroup;
   final accountText = TextEditingController();
   String? accountBase;
+  int reviewStep = 0;
+  final reviewScroll = ScrollController();
   @override
   void dispose() {
+    reviewScroll.dispose();
     accountText.dispose();
     super.dispose();
   }
@@ -1112,9 +1332,26 @@ class _CabinetInstallationState extends State<CabinetInstallation> {
         child: Text('Completa y valida las piezas antes de instalar.'),
       );
     }
-    final catalog = c.catalogFor(r), install = object(w['installation']);
-    final questions = catalog.applicable(w),
-        pending = installationPending(w, catalog);
+    final catalog = c.catalogFor(r),
+        install = installationWithDefaults(
+          object(w['installation']),
+          objects(w['parts']),
+        );
+    final questions = catalog
+            .applicable(w)
+            .where(
+              (q) =>
+                  !installationDefaultYesCodes.contains(q['code']) ||
+                  objects(
+                    install['answers'],
+                  ).any((a) => a['code'] == q['code'] && a['answer'] != 'yes'),
+            )
+            .toList(),
+        pending = installationPending({...w, 'installation': install}, catalog);
+    final groups = cabinetGroups.entries
+        .where((g) => questions.any((q) => q['group'] == g.key))
+        .toList();
+    final step = reviewStep.clamp(0, groups.length);
     final base = c.app.visibleSurveys
         .where((b) => b.id == install['baseId'])
         .firstOrNull;
@@ -1123,255 +1360,343 @@ class _CabinetInstallationState extends State<CabinetInstallation> {
       accountText.text = '${install['accountNumber'] ?? ''}';
     }
 
-    return ListView(
-      padding: const EdgeInsets.all(16),
+    final stepQuestions = step == 0
+        ? <Json>[]
+        : questions.where((q) => q['group'] == groups[step - 1].key).toList();
+    final completed = stepQuestions
+        .where((q) => !pending.any((p) => p['subject'] == q['code']))
+        .length;
+    return Column(
       children: [
-        OutlinedButton.icon(
-          onPressed: () async {
-            final selected = await Navigator.push<bases.BaseSurvey>(
-              context,
-              MaterialPageRoute(builder: (_) => const CabinetBasePicker()),
-            );
-            if (selected != null && context.mounted) {
-              final ok = await confirmCabinetAction(
-                context,
-                title: 'Confirmar base',
-                message:
-                    '${cabinetIdentity(c, widget.id)}\n\nBase elegida: ${selected.displayIdentifier}\nCuenta: ${selected.accountNumber ?? 'sin cuenta'}\nCoordenadas: ${selected.canonicalLocation?.latitude ?? 'sin dato'}, ${selected.canonicalLocation?.longitude ?? 'sin dato'}',
-                confirm: 'Usar esta base',
-              );
-              if (!ok) return;
-              await update(c, 'baseId', selected.id);
-              await update(c, 'accountNumber', selected.accountNumber);
-              await update(c, 'accountResolution', null);
-            }
-          },
-          icon: const Icon(Icons.foundation),
-          label: Text(
-            base == null
-                ? 'Seleccionar base aceptada / entregada'
-                : 'Base: ${base.displayIdentifier}',
-          ),
-        ),
-        if (base != null)
-          Text(
-            'Ubicación de base: ${base.canonicalLocation?.latitude ?? 'sin dato'}, ${base.canonicalLocation?.longitude ?? 'sin dato'}',
-          ),
-        Text(
-          'GPS de instalación: ${object(install['gps'])['latitude'] ?? 'pendiente'}, ${object(install['gps'])['longitude'] ?? 'pendiente'} · precisión ${object(install['gps'])['accuracy'] ?? '—'} m\nCaptura: ${w['installationGpsAt'] ?? '—'}',
-        ),
-        OutlinedButton(
-          onPressed: () => cabinetAction(context, () async {
-            final gps = await c.installationGps();
-            final at = gps.remove('capturedAt');
-            await c.saveDraft(widget.id, 'installationGpsAt', at);
-            await update(c, 'gps', gps);
-          }),
-          child: const Text('Capturar GPS propio de instalación'),
-        ),
-        if (!freshInstallationGps(w['installationGpsAt'], DateTime.now()))
-          const Text(
-            'GPS pendiente o antiguo. Captura una ubicación actual antes de guardar.',
-          ),
-        for (final warning in installationWarnings(c, widget.id))
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4),
-            child: Text(warning),
-          ),
-        TextFormField(
-          maxLength: 50,
-          autocorrect: false,
-          enableSuggestions: false,
-          controller: accountText,
-          decoration: const InputDecoration(
-            labelText: 'Cuenta de la base (opcional)',
-            helperText:
-                'No escribas aquí la serie del equipo. Conserva los ceros iniciales.',
-            helperMaxLines: 2,
-          ),
-          onChanged: (v) =>
-              update(c, 'accountNumber', v.trim().isEmpty ? null : v.trim()),
-        ),
-        if (base != null &&
-            (install['accountNumber'] != base.accountNumber ||
-                install['accountResolution'] != null)) ...[
-          const Text(
-            'La cuenta difiere de la base. Elige y explica la resolución; la base no se modificará.',
-          ),
-          DropdownButtonFormField<String>(
-            initialValue: object(install['accountResolution'])['decision'],
-            decoration: const InputDecoration(labelText: 'Resolución'),
-            items: const [
-              DropdownMenuItem(
-                value: 'use_base',
-                child: Text('Usar cuenta de base'),
+        Container(
+          key: const ValueKey('installation_fixed_header'),
+          width: double.infinity,
+          color: Theme.of(context).colorScheme.surface,
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Paso ${step + 1} de ${groups.length + 1} · ${step == 0 ? "Ubicación y base" : groups[step - 1].value}',
+                style: Theme.of(context).textTheme.titleLarge,
               ),
-              DropdownMenuItem(
-                value: 'use_cabinet',
-                child: Text('Usar cuenta del gabinete'),
+              const SizedBox(height: 6),
+              Text(
+                step == 0
+                    ? 'Selecciona la base y captura el GPS de instalación a menos de 50 m.'
+                    : 'Comprueba y responde cada punto individualmente. Los puntos sin respuesta quedan pendientes.',
               ),
-              DropdownMenuItem(value: 'no_account', child: Text('Sin cuenta')),
+              const SizedBox(height: 6),
+              Text(
+                step == 0
+                    ? '${pending.where((p) => p['classification'] == 'blocking').length} bloqueos · ${pending.where((p) => p['classification'] == 'minor').length} observaciones menores · ${pending.where((p) => p['classification'] == 'mandatory_test').length} pruebas pendientes'
+                    : '$completed / ${stepQuestions.length} sin pendientes · ${stepQuestions.length - completed} pendientes',
+              ),
             ],
-            onChanged: (v) async {
-              await update(c, 'accountResolution', {
-                ...object(install['accountResolution']),
-                'decision': v,
-              });
-              if (v == 'use_base') {
-                accountText.text = base.accountNumber ?? '';
-                await update(c, 'accountNumber', base.accountNumber);
-              }
-              if (v == 'no_account') await update(c, 'accountNumber', null);
-            },
           ),
-          TextFormField(
-            maxLength: 2000,
-            validator: reasonError,
-            autovalidateMode: AutovalidateMode.onUserInteraction,
-            initialValue: object(install['accountResolution'])['reason'],
-            decoration: const InputDecoration(
-              labelText: 'Motivo de discrepancia',
-            ),
-            onChanged: (v) => update(c, 'accountResolution', {
-              ...object(install['accountResolution']),
-              'reason': v,
-            }),
-          ),
-        ],
-        Text(
-          '${pending.where((p) => p['classification'] == 'blocking').length} bloqueos · ${pending.where((p) => p['classification'] == 'minor').length} observaciones menores · ${pending.where((p) => p['classification'] == 'mandatory_test').length} pruebas pendientes',
         ),
-        Wrap(
-          children: [
-            for (final group in cabinetGroups.entries)
-              if (pending.any(
-                (p) => questions.any(
-                  (q) => q['code'] == p['subject'] && q['group'] == group.key,
-                ),
-              ))
-                TextButton(
-                  onPressed: () => setState(() => expandedGroup = group.key),
-                  child: Text(
-                    '${group.value}: ${pending.where((p) => questions.any((q) => q['code'] == p['subject'] && q['group'] == group.key)).length} pendientes',
+        const Divider(height: 1),
+        Expanded(
+          child: ListView(
+            controller: reviewScroll,
+            padding: const EdgeInsets.all(16),
+            children: [
+              if (step == 0) ...[
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    final selected = await Navigator.push<bases.BaseSurvey>(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const CabinetBasePicker(),
+                      ),
+                    );
+                    if (selected != null && context.mounted) {
+                      final ok = await confirmCabinetAction(
+                        context,
+                        title: 'Confirmar base',
+                        message:
+                            '${cabinetIdentity(c, widget.id)}\n\nBase elegida: ${selected.displayIdentifier}\nCuenta: ${selected.accountNumber ?? 'sin cuenta'}\nCoordenadas: ${selected.canonicalLocation?.latitude ?? 'sin dato'}, ${selected.canonicalLocation?.longitude ?? 'sin dato'}',
+                        confirm: 'Usar esta base',
+                      );
+                      if (!ok) return;
+                      await update(c, 'baseId', selected.id);
+                      await update(c, 'accountNumber', selected.accountNumber);
+                      await update(c, 'accountResolution', null);
+                    }
+                  },
+                  icon: const Icon(Icons.foundation),
+                  label: Text(
+                    base == null
+                        ? 'Seleccionar base aceptada / entregada'
+                        : 'Base: ${base.displayIdentifier}',
                   ),
                 ),
-            if (expandedGroup != null)
-              TextButton(
-                onPressed: () => setState(() => expandedGroup = null),
-                child: const Text('Ver todos los bloques'),
-              ),
-          ],
-        ),
-        for (final group in cabinetGroups.entries)
-          Builder(
-            builder: (context) {
-              if (expandedGroup != null && expandedGroup != group.key) {
-                return const SizedBox.shrink();
-              }
-              final qs = questions
-                  .where((q) => q['group'] == group.key)
-                  .toList();
-              if (qs.isEmpty) return const SizedBox.shrink();
-              final count = qs
-                  .where((q) => !pending.any((p) => p['subject'] == q['code']))
-                  .length;
-              return Card(
-                child: ExpansionTile(
-                  key: ValueKey('${group.key}-${expandedGroup == group.key}'),
-                  initiallyExpanded: expandedGroup == group.key,
-                  title: Text(group.value),
-                  subtitle: Text('$count / ${qs.length} sin pendientes'),
-                  children: [
-                    const Padding(
-                      padding: EdgeInsets.all(12),
-                      child: Text(
-                        'Comprueba y responde cada punto individualmente. Los puntos sin respuesta quedan pendientes.',
-                      ),
-                    ),
-                    for (final q in qs)
-                      Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: q['kind'] == 'evidence'
-                            ? Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text('${q['code']} · ${q['label']}'),
-                                  EvidenceEditor(
-                                    id: widget.id,
-                                    contextName: 'installation',
-                                    value: objects(
-                                      object(install['evidence'])[q['code']],
-                                    ),
-                                    onChanged: (v) => update(c, 'evidence', {
-                                      ...object(
-                                        object(
-                                          c
-                                              .record(widget.id)
-                                              .working['installation'],
-                                        )['evidence'],
-                                      ),
-                                      q['code']: v,
-                                    }),
-                                  ),
-                                ],
-                              )
-                            : CabinetAnswerEditor(
-                                id: widget.id,
-                                question: q,
-                                value:
-                                    objects(install['answers'])
-                                        .where((a) => a['code'] == q['code'])
-                                        .firstOrNull ??
-                                    {'code': q['code'], 'evidence': <Json>[]},
-                                onChanged: (v) => answer(c, v),
-                              ),
-                      ),
-                  ],
+                if (base != null)
+                  Text(
+                    'Ubicación de base: ${base.canonicalLocation?.latitude ?? 'sin dato'}, ${base.canonicalLocation?.longitude ?? 'sin dato'}',
+                  ),
+                Text(
+                  'GPS de instalación: ${object(install['gps'])['latitude'] ?? 'pendiente'}, ${object(install['gps'])['longitude'] ?? 'pendiente'} · precisión ${object(install['gps'])['accuracy'] ?? '—'} m\nCaptura: ${w['installationGpsAt'] ?? '—'}',
                 ),
-              );
-            },
+                OutlinedButton(
+                  onPressed: () => cabinetAction(context, () async {
+                    if (base?.canonicalLocation == null) {
+                      throw StateError(
+                        'Selecciona primero una base con coordenadas descargadas.',
+                      );
+                    }
+                    final gps = await c.installationGps();
+                    final at = gps.remove('capturedAt');
+                    await c.saveDraft(widget.id, 'installationGpsAt', at);
+                    await update(c, 'gps', gps);
+                    final distance = validateInstallationLocation(c, widget.id);
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            'Ubicación válida: ${distance.toStringAsFixed(1)} m de la base (menos de 50 m).',
+                          ),
+                        ),
+                      );
+                    }
+                  }),
+                  child: const Text('Capturar GPS propio de instalación'),
+                ),
+                if (!freshInstallationGps(
+                  w['installationGpsAt'],
+                  DateTime.now(),
+                ))
+                  const Text(
+                    'GPS pendiente o antiguo. Captura una ubicación actual antes de guardar.',
+                  ),
+                for (final warning in installationWarnings(c, widget.id))
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Text(warning),
+                  ),
+                TextFormField(
+                  maxLength: 50,
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  controller: accountText,
+                  decoration: const InputDecoration(
+                    labelText: 'Cuenta de la base (opcional)',
+                    helperText:
+                        'No escribas aquí la serie del equipo. Conserva los ceros iniciales.',
+                    helperMaxLines: 2,
+                  ),
+                  onChanged: (v) => update(
+                    c,
+                    'accountNumber',
+                    v.trim().isEmpty ? null : v.trim(),
+                  ),
+                ),
+                if (base != null &&
+                    (install['accountNumber'] != base.accountNumber ||
+                        install['accountResolution'] != null)) ...[
+                  const Text(
+                    'La cuenta difiere de la base. Elige y explica la resolución; la base no se modificará.',
+                  ),
+                  DropdownButtonFormField<String>(
+                    initialValue: object(
+                      install['accountResolution'],
+                    )['decision'],
+                    decoration: const InputDecoration(labelText: 'Resolución'),
+                    items: const [
+                      DropdownMenuItem(
+                        value: 'use_base',
+                        child: Text('Usar cuenta de base'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'use_cabinet',
+                        child: Text('Usar cuenta del gabinete'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'no_account',
+                        child: Text('Sin cuenta'),
+                      ),
+                    ],
+                    onChanged: (v) async {
+                      await update(c, 'accountResolution', {
+                        ...object(install['accountResolution']),
+                        'decision': v,
+                      });
+                      if (v == 'use_base') {
+                        accountText.text = base.accountNumber ?? '';
+                        await update(c, 'accountNumber', base.accountNumber);
+                      }
+                      if (v == 'no_account') {
+                        await update(c, 'accountNumber', null);
+                      }
+                    },
+                  ),
+                  TextFormField(
+                    maxLength: 2000,
+                    validator: reasonError,
+                    autovalidateMode: AutovalidateMode.onUserInteraction,
+                    initialValue: object(
+                      install['accountResolution'],
+                    )['reason'],
+                    decoration: const InputDecoration(
+                      labelText: 'Motivo de discrepancia',
+                    ),
+                    onChanged: (v) => update(c, 'accountResolution', {
+                      ...object(install['accountResolution']),
+                      'reason': v,
+                    }),
+                  ),
+                ],
+              ],
+              for (final group in groups.where(
+                (g) => step > 0 && g.key == groups[step - 1].key,
+              ))
+                Builder(
+                  builder: (context) {
+                    final qs = questions
+                        .where((q) => q['group'] == group.key)
+                        .toList();
+                    if (qs.isEmpty) return const SizedBox.shrink();
+                    return Card(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          for (final q in qs)
+                            Padding(
+                              padding: const EdgeInsets.all(12),
+                              child: q['kind'] == 'evidence'
+                                  ? Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text('${q['label']}'),
+                                        EvidenceEditor(
+                                          id: widget.id,
+                                          contextName: 'installation',
+                                          rubricTitle: '${q['label']}',
+                                          value: objects(
+                                            object(
+                                              install['evidence'],
+                                            )[q['code']],
+                                          ),
+                                          onChanged: (v) => update(
+                                            c,
+                                            'evidence',
+                                            {
+                                              ...object(
+                                                object(
+                                                  c
+                                                      .record(widget.id)
+                                                      .working['installation'],
+                                                )['evidence'],
+                                              ),
+                                              q['code']: v,
+                                            },
+                                          ),
+                                        ),
+                                      ],
+                                    )
+                                  : CabinetAnswerEditor(
+                                      id: widget.id,
+                                      question: q,
+                                      value:
+                                          objects(install['answers'])
+                                              .where(
+                                                (a) => a['code'] == q['code'],
+                                              )
+                                              .firstOrNull ??
+                                          {
+                                            'code': q['code'],
+                                            'evidence': <Json>[],
+                                          },
+                                      onChanged: (v) => answer(c, v),
+                                    ),
+                            ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: step > 0
+                          ? () {
+                              setState(() => reviewStep = step - 1);
+                              reviewScroll.jumpTo(0);
+                            }
+                          : null,
+                      child: const Text('Anterior'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: step < groups.length
+                          ? () {
+                              setState(() => reviewStep = step + 1);
+                              reviewScroll.jumpTo(0);
+                            }
+                          : null,
+                      child: const Text('Siguiente'),
+                    ),
+                  ),
+                ],
+              ),
+              if (step == groups.length) ...[
+                if (catalog.questions.any((q) => q['automatedOnly'] == true) &&
+                    w['automated'] != true)
+                  const Text(
+                    'Automatización: No aplica, derivado del modelo manual y del catálogo de este expediente.',
+                  ),
+                TextFormField(
+                  initialValue: install['observations'],
+                  decoration: const InputDecoration(
+                    labelText: 'Observaciones de instalación',
+                  ),
+                  onChanged: (v) => update(c, 'observations', v),
+                ),
+                _CorrectionReason(id: widget.id),
+                CabinetBusyButton(
+                  onPressed: () => cabinetAction(context, () async {
+                    if (!await confirmInstallation(context, c, widget.id)) {
+                      return;
+                    }
+                    final now = c.record(widget.id).working;
+                    final payload = object(now['installation']);
+                    payload.removeWhere(
+                      (k, v) => v == null && k != 'accountNumber',
+                    );
+                    await c.enqueue(widget.id, 'installation_save', {
+                      'installation': payload,
+                      if (now['correctionReason'] != null)
+                        'reason': now['correctionReason'],
+                    });
+                  }),
+                  child: const Text('Guardar instalación para sincronizar'),
+                ),
+                OutlinedButton(
+                  onPressed: () => cabinetAction(context, () async {
+                    if (!await confirmInstallation(context, c, widget.id)) {
+                      return;
+                    }
+                    final now = c.record(widget.id).working;
+                    final payload = object(now['installation']);
+                    payload.removeWhere(
+                      (k, v) => v == null && k != 'accountNumber',
+                    );
+                    await c.enqueue(widget.id, 'installation_save', {
+                      'installation': payload,
+                      if (now['correctionReason'] != null)
+                        'reason': now['correctionReason'],
+                    });
+                    await c.enqueue(widget.id, 'installation_close', {});
+                  }),
+                  child: const Text('Completar instalación en este teléfono'),
+                ),
+              ],
+            ],
           ),
-        if (catalog.questions.any((q) => q['automatedOnly'] == true) &&
-            w['automated'] != true)
-          const Text(
-            'Automatización: No aplica, derivado del modelo manual y del catálogo de este expediente.',
-          ),
-        TextFormField(
-          initialValue: install['observations'],
-          decoration: const InputDecoration(
-            labelText: 'Observaciones de instalación',
-          ),
-          onChanged: (v) => update(c, 'observations', v),
-        ),
-        _CorrectionReason(id: widget.id),
-        CabinetBusyButton(
-          onPressed: () => cabinetAction(context, () async {
-            if (!await confirmInstallation(context, c, widget.id)) return;
-            final now = c.record(widget.id).working;
-            final payload = object(now['installation']);
-            payload.removeWhere((k, v) => v == null && k != 'accountNumber');
-            await c.enqueue(widget.id, 'installation_save', {
-              'installation': payload,
-              if (now['correctionReason'] != null)
-                'reason': now['correctionReason'],
-            });
-          }),
-          child: const Text('Guardar instalación para sincronizar'),
-        ),
-        OutlinedButton(
-          onPressed: () => cabinetAction(context, () async {
-            if (!await confirmInstallation(context, c, widget.id)) return;
-            final now = c.record(widget.id).working;
-            final payload = object(now['installation']);
-            payload.removeWhere((k, v) => v == null && k != 'accountNumber');
-            await c.enqueue(widget.id, 'installation_save', {
-              'installation': payload,
-              if (now['correctionReason'] != null)
-                'reason': now['correctionReason'],
-            });
-            await c.enqueue(widget.id, 'installation_close', {});
-          }),
-          child: const Text('Completar instalación en este teléfono'),
         ),
       ],
     );
@@ -1409,7 +1734,7 @@ class CabinetAnswerEditor extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          '${question['code']} · ${question['label']}',
+          '${question['label']}',
           style: const TextStyle(fontWeight: FontWeight.w600),
         ),
         Wrap(
@@ -1478,6 +1803,7 @@ class CabinetAnswerEditor extends StatelessWidget {
           EvidenceEditor(
             id: id,
             contextName: 'installation',
+            rubricTitle: '${question['label']}',
             value: objects(value['evidence']),
             onChanged: (v) => onChanged({...value, 'evidence': v}),
           ),
@@ -1673,6 +1999,7 @@ class CabinetFinalReview extends StatelessWidget {
         EvidenceEditor(
           id: id,
           contextName: 'final_review',
+          rubricTitle: 'Fotografía general de revisión final',
           value: objects(review['evidence']),
           onChanged: (v) => update('evidence', v),
         ),
@@ -1822,6 +2149,13 @@ class CabinetSyncPage extends StatelessWidget {
             Card(
               child: Column(
                 children: [
+                  if (r.json['deletion'] != null)
+                    Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Text(
+                        'Eliminación pendiente: ${object(r.json['deletion'])['error'] ?? 'esperando confirmación del servidor'}',
+                      ),
+                    ),
                   ListTile(
                     title: Text(displayUid(r.working['uid'])),
                     subtitle: Text(
@@ -2174,4 +2508,86 @@ String cabinetCaptureDate(Object? value) {
   return date == null
       ? 'Fecha no disponible'
       : DateFormat('dd/MM/yyyy HH:mm').format(date.toLocal());
+}
+
+class CabinetDeleteDialog extends StatefulWidget {
+  const CabinetDeleteDialog({super.key, required this.id});
+  final String id;
+  @override
+  State<CabinetDeleteDialog> createState() => _CabinetDeleteDialogState();
+}
+
+class _CabinetDeleteDialogState extends State<CabinetDeleteDialog> {
+  final form = GlobalKey<FormState>();
+  final uid = TextEditingController();
+  bool confirmed = false;
+  @override
+  void dispose() {
+    uid.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.watch<CabinetController>();
+    if (!c.allowed) {
+      return const AlertDialog(
+        content: Text('La sesión cambió. Cierra este diálogo.'),
+      );
+    }
+    final r = c.record(widget.id);
+    return AlertDialog(
+      title: const Text('Eliminar definitivamente'),
+      content: SingleChildScrollView(
+        child: Form(
+          key: form,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                '${displayUid(r.working['uid'])}: se eliminarán el expediente, historial, fotografías y capturas pendientes de este teléfono y de la API. No se puede deshacer. Después podrás registrar el mismo número desde Escanear gabinete. Requiere conexión.',
+              ),
+              TextFormField(
+                controller: uid,
+                decoration: const InputDecoration(
+                  labelText: 'Escribe el número de gabinete',
+                ),
+                validator: (v) {
+                  try {
+                    if (cabinetUid((v ?? '').trim()) == r.working['uid']) {
+                      return null;
+                    }
+                  } catch (_) {}
+                  return 'Debe coincidir con el número mostrado.';
+                },
+              ),
+              CheckboxListTile(
+                title: const Text(
+                  'Entiendo que el expediente y sus fotos se borrarán definitivamente',
+                ),
+                value: confirmed,
+                onChanged: (v) => setState(() => confirmed = v == true),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton(
+          onPressed: !confirmed
+              ? null
+              : () {
+                  if (form.currentState!.validate()) {
+                    Navigator.pop(context, uid.text.trim());
+                  }
+                },
+          child: const Text('Eliminar definitivamente'),
+        ),
+      ],
+    );
+  }
 }

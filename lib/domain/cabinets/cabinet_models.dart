@@ -116,16 +116,13 @@ List<Json> partsPending(Json cabinet) {
       add('Pieza faltante o sin revisar');
       continue;
     }
-    final evidence = objects(capture['evidence']);
-    if (evidence.isEmpty) add('Falta evidencia confirmada');
-    if (p['serial'] == 'required' &&
+    final policy = object(cabinet['partsReviewPolicy']);
+    final serial =
+        object(object(policy['parts'])[p['code']])['serial'] ?? p['serial'];
+    if (serial == 'required' &&
         ((capture['serial'] ?? '').toString().isEmpty ||
             capture['serialException'] != null)) {
       add('Serie obligatoria pendiente');
-    }
-    if ((capture['serial'] ?? '').toString().isNotEmpty &&
-        !evidence.any((e) => e['legible'] == true)) {
-      add('Confirma la legibilidad de la placa');
     }
   }
   return result;
@@ -154,15 +151,7 @@ List<Json> installationPending(Json cabinet, CabinetCatalog catalog) {
         for (final p in objects(
           cabinet['parts'],
         ).where((p) => (p['serial'] ?? '').toString().isNotEmpty)) {
-          if (!(a['serialComponents'] as List? ?? []).contains(p['code']) ||
-              !objects(p['evidence']).any(
-                (e) =>
-                    e['legible'] == true &&
-                    objects(a['evidence']).any(
-                      (r) =>
-                          r['photoId'] == e['photoId'] && r['legible'] == true,
-                    ),
-              )) {
+          if (!(a['serialComponents'] as List? ?? []).contains(p['code'])) {
             reason = 'Comprueba las placas de todas las series';
           }
         }
@@ -254,3 +243,21 @@ const cabinetSyncLabels = {
 String cabinetPartName(Json part) =>
     (part["displayName"] ?? part["description"] ?? part["code"] ?? "")
         .toString();
+
+/// Review rules are supplied by the API, including universal hydraulic solenoids.
+String cabinetPartStep(Json definition, Json policy) =>
+    '${object(object(policy['parts'])[definition['code']])['step'] ?? (definition['automatedOnly'] == true ? 'automation' : object(object(policy['parts'])[definition['code']])['side'])}';
+
+List<Json> cabinetReviewDefinitions(Json cabinet, Json policy) {
+  final result = objects(cabinet['partDefinitions']);
+  for (final part in objects(policy['universalParts'])) {
+    if (!'${part['code']}'.startsWith('${cabinet['model']}.')) continue;
+    final index = result.indexWhere((p) => p['code'] == part['code']);
+    if (index < 0) {
+      result.add(part);
+    } else {
+      result[index] = {...result[index], 'automatedOnly': false};
+    }
+  }
+  return result;
+}

@@ -6,6 +6,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/widgets.dart';
 import 'package:uuid/uuid.dart';
 import '../../core/media/photo_capture_service.dart';
+import '../../core/location/location_service.dart';
 import '../../core/persistence/construction_operation_journal.dart';
 import '../../core/security/session_store.dart';
 import '../../core/services/app_controller.dart';
@@ -36,7 +37,11 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
     PhotoCaptureService? camera,
   }) : camera =
            camera ??
-           PhotoCaptureService(local: store.media, directoryName: 'cabinets') {
+           PhotoCaptureService(
+             local: store.media,
+             directoryName: 'cabinets',
+             preserveOriginalUpload: true,
+           ) {
     app.addListener(_appChanged);
     WidgetsBinding.instance.addObserver(this);
   }
@@ -45,6 +50,8 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
   final CabinetRemote remote;
   final PhotoCaptureService camera;
   Timer? _retry;
+  StreamSubscription<LocationFix>? _cabinetFixes;
+  bool _applyingGps = false;
   bool syncing = false, refreshing = false, capturing = false;
   String? message;
   final Set<String> _submitting = {};
@@ -85,6 +92,11 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
 
   void _requireWritable(String id) {
     final r = record(id);
+    if (r.json['deletion'] != null) {
+      throw StateError(
+        'Eliminación en curso. Reintenta la sincronización para terminar.',
+      );
+    }
     if (r.json['archived'] == true) {
       throw StateError(
         'Este conflicto está archivado. Sus capturas se conservan para consulta; continúa en el expediente vigente.',
@@ -140,7 +152,11 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> start() async {
+    _cabinetFixes ??= app.locations.fixes.listen(
+      (_) => unawaited(recoverPhotoGps()),
+    );
     await recoverPhotos();
+    await recoverPhotoGps();
     _appChanged();
   }
 
@@ -209,7 +225,9 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
     final cabinet = object(response['cabinet']);
     if (!allowed || actor != user) return;
     final version = cabinet['catalogVersion'] as String;
-    if (store.catalog(version) == null) {
+    if (store.catalog(version) == null ||
+        object(store.catalog(version)!.json['partsReviewPolicy'])['version'] !=
+            'ddr001-parts-20261019-v2') {
       await store.saveCatalog(
         CabinetCatalog(await remote.get('/catalog', {'version': version})),
         current: false,
@@ -233,6 +251,47 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
     });
     _notify();
   }
+
+  /// Resolves an existing dossier without creating a draft. Only 404 means absent.
+  Future<String?> findForInstallation(String raw) => _serial(() async {
+    if (!allowed) {
+      throw StateError('Acceso exclusivo para residentes autorizados.');
+    }
+    final user = actor!, uid = cabinetUid(raw.trim());
+    final local = records.where((r) => r.working['uid'] == uid).firstOrNull;
+    if (local != null) return local.id;
+    if (!app.online) {
+      throw StateError(
+        'El gabinete no está descargado en este teléfono. Conéctate para consultar la API.',
+      );
+    }
+    try {
+      final data = await remote.get('/resolve', {'uid': uid});
+      if (!allowed || actor != user) throw StateError('La sesión cambió.');
+      final cabinet = object(data['cabinet']);
+      final id = cabinet['cabinetId']?.toString().toLowerCase();
+      if (id == null || cabinet['uid'] != uid) {
+        throw StateError(
+          'La API devolvió un expediente inválido. Reintenta la consulta.',
+        );
+      }
+      await store.save({
+        'id': id,
+        'actor': user,
+        'working': cabinet,
+        'server': cabinet,
+        'operations': <Json>[],
+        'photos': <Json>[],
+      });
+      _notify();
+      return id;
+    } on DioException catch (e) {
+      if (!allowed || actor != user) throw StateError('La sesión cambió.');
+      if (e.response?.statusCode == 404) return null;
+      await _handleAccess(e, user);
+      rethrow;
+    }
+  });
 
   Future<String> scan(
     String raw,
@@ -351,7 +410,10 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
     await _edit(id, (r) {
       if (!allowed || actor != user) throw StateError('La sesión cambió.');
       final w = object(r['working']);
-      final installation = object(w['installation']);
+      final installation = installationWithDefaults(
+        object(w['installation']),
+        objects(w['parts']),
+      );
       if (answerCode != null) {
         final answers = objects(installation['answers']);
         answers.removeWhere((a) => a['code'] == answerCode);
@@ -374,6 +436,43 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
         'dossierConsulted': false,
       };
     });
+  }
+
+  /// Apply the downloaded review policy only through an explicit save operation.
+  Future<void> savePartsSide(String id, String side) async {
+    _requireWritable(id);
+    await flushDrafts();
+    final current = record(id);
+    final policy = object(catalogFor(current).json['partsReviewPolicy']);
+    if (policy['version'] != 'ddr001-parts-20261019-v2') {
+      throw StateError(
+        'Conecta con la API actualizada para descargar la revisión de piezas por lado. Datos conservados.',
+      );
+    }
+    final parts = objects(current.working['parts']);
+    for (final definition in cabinetReviewDefinitions(
+      current.working,
+      policy,
+    )) {
+      final code = definition['code'];
+      if (cabinetPartStep(definition, policy) != side) continue;
+      final index = parts.indexWhere((p) => p['code'] == code);
+      if (index < 0) {
+        parts.add({'code': code, 'present': true, 'evidence': <Json>[]});
+      } else if (parts[index]['present'] == null) {
+        parts[index]['present'] = true;
+      }
+    }
+    await enqueue(id, 'parts_save', {
+      'parts': parts,
+      'partsReviewPolicyVersion': policy['version'],
+      if (current.working['correctionReason'] != null)
+        'reason': current.working['correctionReason'],
+    });
+    if (side == 'automation' ||
+        (side == 'producer' && current.working['automated'] != true)) {
+      await enqueue(id, 'parts_validate', {});
+    }
   }
 
   Future<void> patchPart(String id, String code, Json patch) async {
@@ -403,6 +502,165 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
         'dossierConsulted': false,
       };
     });
+  }
+
+  Future<void> reconnectSession() async {
+    final previous = app.session;
+    if (previous == null || previous.kind != SessionKind.field) {
+      throw StateError('Inicia sesión como residente Construction.');
+    }
+    try {
+      final next = await app.remote.fieldLogin(
+        name: previous.name,
+        email: previous.email,
+        phone: previous.phone,
+        crew: previous.crew,
+      );
+      if (app.session != previous ||
+          next.userId.toLowerCase() != previous.userId.toLowerCase()) {
+        throw StateError(
+          'La identidad del entorno no coincide. Los pendientes siguen asociados al usuario original.',
+        );
+      }
+      final profile = await app.remote.profile();
+      await app.local.saveProfile(profile);
+      app.session = next;
+      app.profile = profile;
+      app.online = true;
+      message = eligible
+          ? null
+          : 'Sesión conectada. La API no autoriza a este usuario como residente Construction.';
+      if (!eligible) await store.authorize(next.userId.toLowerCase(), false);
+      await refresh();
+    } catch (_) {
+      if (app.session == previous) await app.sessions.save(previous);
+      rethrow;
+    } finally {
+      _notify();
+    }
+  }
+
+  Future<void> deleteRegistration(String id, String uid) async {
+    _requireWritable(id);
+    if (syncing || capturing) {
+      throw StateError(
+        'Espera a que termine la sincronización o captura actual.',
+      );
+    }
+    final user = actor;
+    final catalog = CabinetCatalog(await remote.get('/catalog'));
+    if (!allowed || actor != user) throw StateError('La sesión cambió.');
+    if (object(catalog.json['capabilities'])['permanentDeletion'] != true) {
+      throw StateError(
+        'Esta API aún no habilita eliminación definitiva. Datos conservados.',
+      );
+    }
+    await _edit(id, (value) {
+      final r = CabinetRecord(value);
+      if (syncing ||
+          capturing ||
+          !allowed ||
+          actor != user ||
+          value['deletion'] != null) {
+        throw StateError('Hay otra operación en curso. Reintenta.');
+      }
+      if (r.working['installation'] != null ||
+          r.server['installation'] != null ||
+          ['installed', 'deliverable'].contains(r.working['status']) ||
+          ['installed', 'deliverable'].contains(r.server['status'])) {
+        throw StateError(
+          'No se puede borrar un gabinete vinculado a instalación.',
+        );
+      }
+      if (cabinetUid(uid) != r.working['uid']) {
+        throw StateError('El número no coincide.');
+      }
+      value['deletion'] = {
+        'actor': user,
+        'body': {
+          'operationId': const Uuid().v4(),
+          'expectedVersion': r.server['version'] ?? 0,
+          'uid': cabinetUid(uid),
+          'confirmPermanent': true,
+        },
+      };
+    });
+    await synchronize(force: true);
+    if (store.read(id) != null) {
+      throw StateError(
+        '${object(store.read(id)!.json['deletion'])['error'] ?? message ?? 'Eliminación pendiente. Reintenta desde Sincronización.'}',
+      );
+    }
+  }
+
+  Future<void> cancelRejectedDeletion(String id) async {
+    if (!allowed) throw StateError('Acceso de residente requerido.');
+    await _edit(id, (value) {
+      final deletion = object(value['deletion']);
+      if (deletion['actor'] != actor ||
+          deletion['code'] != 'VERSION_CONFLICT') {
+        throw StateError(
+          'La eliminación no puede cancelarse sin confirmación del servidor.',
+        );
+      }
+      value.remove('deletion');
+    });
+    await refresh();
+  }
+
+  Future<void> _finishDeletion(String id, String user) async {
+    final record = store.read(id)!;
+    final deletion = object(record.json['deletion']);
+    if (deletion['actor'] != user || !allowed || actor != user) return;
+    final body = object(deletion['body']);
+    final result = await remote.deleteCabinet(id, body);
+    if (result['deleted'] != true ||
+        result['cabinetId'] != id ||
+        result['operationId'] != body['operationId']) {
+      throw StateError(
+        'No se confirmó la eliminación. Reintenta sin cambiar la solicitud.',
+      );
+    }
+    if (!allowed || actor != user) return;
+    await _serial(() async {
+      // Only the confirmed dossier directory and its own Hive rows are removed.
+      final root = await camera.supportDirectory();
+      if (!RegExp(r'^[0-9a-f-]{36}$').hasMatch(id)) {
+        throw StateError('UUID inválido.');
+      }
+      final folder = Directory('${root.path}/cabinets/$id');
+      if (await folder.exists()) {
+        final physical = await folder.resolveSymbolicLinks();
+        final expectedRoot = await root.resolveSymbolicLinks();
+        if (physical != '$expectedRoot/cabinets/$id') {
+          throw StateError('Ruta de fotografías no segura.');
+        }
+        await folder.delete(recursive: true);
+      }
+      for (final box in [
+        store.media.surveysBox,
+        store.media.photosBox,
+        store.media.queueBox,
+        store.media.journalBox,
+        store.media.metadataBox,
+      ]) {
+        for (final key in box.keys.toList()) {
+          Json entry;
+          try {
+            entry = object(jsonDecode(box.get(key)!));
+          } catch (_) {
+            continue;
+          }
+          if (entry['surveyId'] == id || entry['cabinetId'] == id) {
+            await box.delete(key);
+          }
+        }
+        await box.flush();
+      }
+      await store.box.delete('cabinet:$id');
+      await store.box.flush();
+    });
+    _notify();
   }
 
   Future<void> enqueue(String id, String type, Json extra) async {
@@ -442,6 +700,8 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
             .toList();
         final duplicate =
             matching.isNotEmpty &&
+            object(matching.last['body'])['operationId'] ==
+                object(current.pending.last['body'])['operationId'] &&
             (() {
               final op = matching.last;
               final old = clone(object(op['body']))
@@ -478,6 +738,16 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
             w['registrationEvidence'] = extra['evidence'];
             w['status'] = 'registered';
           case 'parts_save':
+            if (extra['partsReviewPolicyVersion'] != null) {
+              w['partsReviewPolicyVersion'] = extra['partsReviewPolicyVersion'];
+              w['partsReviewPolicy'] = clone(
+                object(catalogFor(current).json['partsReviewPolicy']),
+              );
+              w['partDefinitions'] = cabinetReviewDefinitions(
+                w,
+                object(w['partsReviewPolicy']),
+              );
+            }
             w['parts'] = extra['parts'];
             w['partsValidated'] = false;
             if (!['installed', 'deliverable'].contains(w['status'])) {
@@ -504,6 +774,11 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
               extra['model'],
               extra['automated'],
             );
+            if (w['partsReviewPolicyVersion'] != null) {
+              w['partsReviewPolicy'] = clone(
+                object(catalog.json['partsReviewPolicy']),
+              );
+            }
             w['parts'] = retained;
             w['partsValidated'] = false;
             w['installationValid'] = false;
@@ -595,13 +870,19 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
     _notify();
     final intent = <String, dynamic>{'actor': user, 'context': context};
     try {
+      await app.locations.startPrewarm();
+      _cabinetFixes ??= app.locations.fixes.listen(
+        (_) => unawaited(recoverPhotoGps()),
+      );
       await _edit(id, (r) => r['captureIntent'] = intent);
       final photo = await camera.capture(surveyId: id);
       if (photo == null) return;
       // Persist before GPS/network; a failed GPS never discards the photo.
       await _adoptPhoto(photo, intent);
       try {
-        final gps = await app.locations.capture();
+        final gps =
+            app.locations.bestFix(photo.capturedAt)?.toGeoPoint() ??
+            await app.locations.capture();
         if (gps.accuracy <= 0 ||
             gps.accuracy > 100 ||
             gps.capturedAt.difference(photo.capturedAt).inSeconds.abs() > 120) {
@@ -616,19 +897,164 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
         });
       } catch (e) {
         message =
-            'Foto conservada, GPS pendiente: ${explain(e)}. Captura otra evidencia con GPS; no se sustituye su ubicación.';
+            'No se obtuvo ubicación válida para esta foto. Se conserva y se reintentará automáticamente dentro de la ventana de captura.';
       }
     } finally {
+      await recoverPhotoGps();
       capturing = false;
       _notify();
     }
     if (actor == user) unawaited(synchronize());
   }
 
+  Future<void> recoverPhotoGps() async {
+    if (!allowed || _applyingGps) return;
+    _applyingGps = true;
+    final user = actor;
+    try {
+      for (final record in records) {
+        if (record.json['deletion'] != null) continue;
+        for (final photo in record.photos.where(
+          (p) =>
+              p['actor'] == actor &&
+              p['deleting'] != true &&
+              object(p['metadata'])['accuracy'] == null,
+        )) {
+          final captured = DateTime.tryParse(
+            '${object(photo['metadata'])['capturedAt']}',
+          );
+          if (captured == null) continue;
+          final fix = app.locations.bestFix(captured);
+          if (fix == null) continue;
+          if (!allowed || actor != user || store.read(record.id) == null) {
+            return;
+          }
+          await _edit(record.id, (r) {
+            if (!allowed || actor != user || r['deletion'] != null) return;
+            final photos = objects(r['photos']);
+            final p = photos.where((p) => p['id'] == photo['id']).firstOrNull;
+            if (p == null ||
+                p['deleting'] == true ||
+                object(p['metadata'])['accuracy'] != null) {
+              return;
+            }
+            p['metadata'] = {
+              ...object(p['metadata']),
+              ...gpsWire(fix.toGeoPoint()),
+            };
+            p['gpsCapturedAt'] = fix.timestamp.toIso8601String();
+            r['photos'] = photos;
+            final w = object(r['working']);
+            if (w['status'] == 'draft' &&
+                object(p['metadata'])['context'] == 'registration') {
+              final evidence = objects(w['registrationEvidence']);
+              if (!evidence.any((e) => e['photoId'] == p['id'])) {
+                evidence.add({'photoId': p['id'], 'confirmed': true});
+              }
+              w['registrationEvidence'] = evidence;
+              r['working'] = w;
+              r['dirty'] = true;
+              r['draftActor'] = actor;
+            }
+          });
+        }
+      }
+    } finally {
+      _applyingGps = false;
+    }
+  }
+
+  Future<void> deleteRegistrationPhoto(String id, String photoId) async {
+    _requireWritable(id);
+    if (syncing || capturing) {
+      throw StateError('Espera a que termine la operación actual.');
+    }
+    await _edit(id, (r) {
+      final record = CabinetRecord(r);
+      if (record.working['status'] != 'draft' ||
+          record.server['status'] != null &&
+              record.server['status'] != 'draft') {
+        throw StateError('Esta foto ya forma parte de un registro cerrado.');
+      }
+      if (record.pending.any((o) => jsonEncode(o['body']).contains(photoId))) {
+        throw StateError('La foto forma parte de una operación pendiente.');
+      }
+      final photos = objects(r['photos']);
+      final photo = photos.firstWhere((p) => p['id'] == photoId);
+      if (object(photo['metadata'])['context'] != 'registration') {
+        throw StateError('La fotografía no es de registro.');
+      }
+      photo['deleting'] = true;
+      photo['deleteActor'] = actor;
+      r['photos'] = photos;
+      final w = object(r['working']);
+      w['registrationEvidence'] = objects(
+        w['registrationEvidence'],
+      ).where((e) => e['photoId'] != photoId).toList();
+      r['working'] = w;
+      r['dirty'] = true;
+      r['draftActor'] = actor;
+    });
+    unawaited(synchronize());
+  }
+
+  Future<void> _finishPhotoDeletions(String id, String user) async {
+    final record = store.read(id)!;
+    for (final p in record.photos.where((p) => p['deleting'] == true)) {
+      if (!allowed || actor != user || p['deleteActor'] != user) {
+        throw StateError(
+          'Reconecta al residente que solicitó eliminar la foto.',
+        );
+      }
+      final photoId = '${p['id']}';
+      final result = await remote.deletePhoto(id, photoId);
+      if (result['deleted'] != true || result['photoId'] != photoId) {
+        throw StateError('No se confirmó la eliminación de la foto.');
+      }
+      if (!allowed || actor != user) return;
+      final journal = store.media.journal.find(photoId);
+      final root = await (await camera.supportDirectory())
+          .resolveSymbolicLinks();
+      for (final path in <String?>[
+        p['localPath'] as String?,
+        p['thumbnailPath'] as String?,
+        journal?.sourcePath,
+        journal?.uploadPath,
+        journal?.thumbnailPath,
+      ].whereType<String>().toSet()) {
+        final file = File(path);
+        final parent = await file.parent.resolveSymbolicLinks();
+        if (!parent.startsWith('$root/cabinets/$id/')) {
+          throw StateError('Ruta de foto fuera del expediente.');
+        }
+        if (await file.exists()) {
+          if (!(await file.resolveSymbolicLinks()).startsWith(
+            '$root/cabinets/$id/',
+          )) {
+            throw StateError('Ruta de foto no segura.');
+          }
+          await file.delete();
+        }
+      }
+      await store.media.journalBox.delete(photoId);
+      await store.media.photosBox.delete(photoId);
+      await _edit(id, (r) {
+        r['photos'] = objects(
+          r['photos'],
+        ).where((p) => p['id'] != photoId).toList();
+        r['deletedPhotos'] = {
+          ...(r['deletedPhotos'] as List? ?? []),
+          photoId,
+        }.toList();
+      });
+    }
+  }
+
   Future<void> _adoptPhoto(ConstructionPhoto photo, Json intent) async {
     await _edit(photo.surveyId, (r) {
       final photos = objects(r['photos']);
-      if (!photos.any((p) => p['id'] == photo.id)) {
+      if (!photos.any((p) => p['id'] == photo.id) &&
+          !(r['deletedPhotos'] as List? ?? []).contains(photo.id)) {
         photos.add({
           'id': photo.id,
           'actor': intent['actor'],
@@ -691,6 +1117,44 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
       // A failed dossier never blocks the remaining dossiers.
       for (final item in records) {
         if (!allowed || actor != user) break;
+        if (item.json['deletion'] != null) {
+          final d = object(item.json['deletion']);
+          if (d['code'] == 'VERSION_CONFLICT') continue;
+          if (!force &&
+              DateTime.tryParse(
+                    '${d['nextAttempt']}',
+                  )?.isAfter(DateTime.now()) ==
+                  true) {
+            continue;
+          }
+          try {
+            await _finishDeletion(item.id, user);
+          } catch (e) {
+            await _handleAccess(e, user);
+            await _edit(item.id, (value) {
+              final d = object(value['deletion']);
+              d['error'] = explain(e);
+              if (e is DioException) {
+                d['code'] = object(e.response?.data)['code'];
+              }
+              d['nextAttempt'] = DateTime.now()
+                  .add(const Duration(seconds: 30))
+                  .toIso8601String();
+              value['deletion'] = d;
+            });
+          }
+          continue;
+        }
+        if (store.read(item.id)!.server.isNotEmpty &&
+            store.read(item.id)!.photos.any((p) => p['deleting'] == true)) {
+          try {
+            await _finishPhotoDeletions(item.id, user);
+          } catch (e) {
+            await _handleAccess(e, user);
+            message = explain(e);
+            continue;
+          }
+        }
         while (true) {
           final r = store.read(item.id)!;
           final op = r.pending.firstOrNull;
@@ -705,6 +1169,10 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
             break;
           }
           final body = object(op['body']), operationId = body['operationId'];
+          if (body['type'] != 'register' &&
+              r.photos.any((p) => p['deleting'] == true)) {
+            break;
+          }
           try {
             Json? result;
             if (op['state'] == 'sending') {
@@ -786,6 +1254,7 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
         if (allowed && actor == user && latest.server.isNotEmpty) {
           for (final photo in latest.photos.where(
             (p) =>
+                p['deleting'] != true &&
                 p['verified'] != true &&
                 p['actor'] == user &&
                 object(p['metadata'])['accuracy'] != null,
@@ -827,11 +1296,16 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
       if (allowed &&
           records.any(
             (r) =>
+                object(r.json['deletion'])['actor'] == actor ||
+                r.photos.any(
+                  (p) => p['deleting'] == true && p['deleteActor'] == actor,
+                ) ||
                 r.pending.any(
                   (o) => o['actor'] == actor && o['state'] != 'conflict',
                 ) ||
                 r.photos.any(
                   (p) =>
+                      p['deleting'] != true &&
                       p['verified'] != true &&
                       p['actor'] == actor &&
                       object(p['metadata'])['accuracy'] != null,
@@ -1062,7 +1536,7 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> downloadEvidence(String id) async {
-    record(id);
+    _requireWritable(id);
     final user = actor;
     for (var page = 1; ; page++) {
       final rows = objects(
@@ -1074,8 +1548,19 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
       for (final row in rows) {
         if (!allowed || actor != user) return;
         final photoId = '${row['photo_id']}'.toLowerCase();
-        if (store.read(id)!.photos.any((p) => p['id'] == photoId)) continue;
+        if (store.read(id)!.photos.any((p) => p['id'] == photoId) ||
+            (store.read(id)!.json['deletedPhotos'] as List? ?? []).contains(
+              photoId,
+            )) {
+          continue;
+        }
         final bytes = await remote.content(id, photoId, thumbnail: false);
+        _requireWritable(id);
+        if ((store.read(id)!.json['deletedPhotos'] as List? ?? []).contains(
+          photoId,
+        )) {
+          continue;
+        }
         final dir = Directory(
           '${(await camera.supportDirectory()).path}/cabinets/$id/remote',
         );
@@ -1183,6 +1668,9 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
 
   static String explain(Object error) {
     if (error is DioException) {
+      if (error.response?.statusCode == 401) {
+        return 'La sesión no es válida para esta API. Reconecta tu sesión; las capturas siguen guardadas.';
+      }
       final data = object(error.response?.data);
       final pending = objects(data['blocking']).isNotEmpty
           ? objects(data['blocking'])
@@ -1208,6 +1696,7 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
     app.removeListener(_appChanged);
     WidgetsBinding.instance.removeObserver(this);
     _retry?.cancel();
+    unawaited(_cabinetFixes?.cancel());
     super.dispose();
   }
 }

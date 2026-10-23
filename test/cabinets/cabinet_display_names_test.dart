@@ -68,7 +68,13 @@ void main() {
     final h = Harness();
     await tester.runAsync(() => h.open(remote: FakeCabinetRemote()));
     try {
-      await tester.runAsync(() => h.store.saveCatalog(updated()));
+      final catalog = updated();
+      catalog.json['partsReviewPolicy'] = jsonDecode(
+        File(
+          'test/cabinets/fixtures/parts-review-policy.json',
+        ).readAsStringSync(),
+      );
+      await tester.runAsync(() => h.store.saveCatalog(catalog));
       final id = (await tester.runAsync(
         () => h.controller.scan('AQ26000017', 'A1', false),
       ))!;
@@ -85,8 +91,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.byType(ExpansionTile).first);
-      await tester.pumpAndSettle();
+
       expect(find.textContaining('FLUJOMETRO MUT7000'), findsWidgets);
       expect(find.textContaining('MEDIDOR ELECTROMAGNETICO'), findsNothing);
       await tester.pumpWidget(const SizedBox());
