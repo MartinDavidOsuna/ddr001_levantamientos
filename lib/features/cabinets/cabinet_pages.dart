@@ -583,7 +583,7 @@ class _CabinetScannerPageState extends State<CabinetScannerPage>
   }
 }
 
-class CabinetDetailPage extends StatelessWidget {
+class CabinetDetailPage extends StatefulWidget {
   const CabinetDetailPage({
     super.key,
     required this.id,
@@ -593,6 +593,26 @@ class CabinetDetailPage extends StatelessWidget {
   final String id;
   final int initialTab;
   final bool fieldWork;
+  @override
+  State<CabinetDetailPage> createState() => _CabinetDetailPageState();
+}
+
+class _CabinetDetailPageState extends State<CabinetDetailPage> {
+  String get id => widget.id;
+  int get initialTab => widget.initialTab;
+  bool get fieldWork => widget.fieldWork;
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final c = context.read<CabinetController>();
+      if (c.allowed && c.app.online) {
+        unawaited(c.downloadEvidence(id).catchError((Object _) {}));
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = context.watch<CabinetController>();
@@ -753,9 +773,26 @@ class CabinetRegistration extends StatelessWidget {
           CabinetBusyButton(
             onPressed: () => cabinetAction(context, () async {
               await c.flushDrafts();
-              final evidence = objects(
-                c.record(id).working['registrationEvidence'],
-              );
+              final current = c.record(id);
+              final evidence = objects(current.working['registrationEvidence']);
+              if (evidence.isEmpty) {
+                evidence.addAll(
+                  current.photos
+                      .where(
+                        (p) =>
+                            p['deleting'] != true &&
+                            object(p['metadata'])['context'] ==
+                                'registration' &&
+                            object(p['metadata'])['accuracy'] != null,
+                      )
+                      .map(
+                        (p) => <String, dynamic>{
+                          'photoId': p['id'],
+                          'confirmed': true,
+                        },
+                      ),
+                );
+              }
               if (evidence.isEmpty) {
                 throw StateError(
                   c
@@ -842,7 +879,15 @@ class CabinetRegistrationPhotos extends StatelessWidget {
           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
         ),
         const Text('Al menos una es obligatoria.'),
-        Text('${photos.length} ${photos.length == 1 ? 'foto' : 'fotos'}'),
+        Text(
+          record.server.isNotEmpty &&
+                  record.json['evidenceFetchedAt'] == null &&
+                  photos.isEmpty
+              ? 'Evidencia remota pendiente de consulta'
+              : '${photos.length} ${photos.length == 1 ? 'foto' : 'fotos'}',
+        ),
+        if (record.json['evidenceError'] != null)
+          Text('${record.json['evidenceError']}'),
         OutlinedButton.icon(
           onPressed: readOnly || c.capturing
               ? null
@@ -871,11 +916,11 @@ class CabinetRegistrationPhotos extends StatelessWidget {
           icon: const Icon(Icons.camera_alt),
           label: Text(c.capturing ? 'Guardando foto…' : 'Tomar fotografía'),
         ),
-        if (readOnly && photos.isEmpty)
+        if (record.server.isNotEmpty)
           TextButton(
             onPressed: () =>
                 cabinetAction(context, () => c.downloadEvidence(id)),
-            child: const Text('Ver fotos del gabinete'),
+            child: const Text('Actualizar fotos del gabinete'),
           ),
         for (var index = 0; index < photos.length; index++)
           Card(
@@ -2159,7 +2204,7 @@ class CabinetSyncPage extends StatelessWidget {
                   ListTile(
                     title: Text(displayUid(r.working['uid'])),
                     subtitle: Text(
-                      '${r.pending.length} operaciones · ${r.photos.where((p) => p['verified'] == true).length}/${r.photos.length} fotos verificadas\nÚltimo envío: ${r.json['lastSent'] ?? 'pendiente'}',
+                      '${r.pending.length} operaciones pendientes · ${r.photos.where((p) => p['remote'] != true && p['verified'] != true).length} fotos por enviar/verificar\n${r.json['lastSent'] == null ? 'Sin envíos desde este teléfono' : 'Último envío: ${r.json['lastSent']}'}${r.json['dirty'] == true ? '\nBorrador local pendiente de completar' : ''}',
                     ),
                     onTap: () => Navigator.push(
                       context,
@@ -2174,7 +2219,7 @@ class CabinetSyncPage extends StatelessWidget {
                         '${cabinetOperationLabels[object(o['body'])['type']]} · ${cabinetSyncLabels[o['state']]}',
                       ),
                       subtitle: Text(
-                        '${o['error'] ?? 'Pendiente'}${o['actor'] != c.actor ? '\nRequiere la sesión del residente que capturó' : ''}',
+                        '${o['error'] ?? 'Pendiente'}${o['actor'] != c.actor ? '\nRequiere la sesión del residente que capturó' : ''}${o['diagnostic'] == null ? '' : '\nHTTP: ${object(o['diagnostic'])['httpStatus'] ?? 'sin respuesta'} · Solicitud: ${object(o['diagnostic'])['requestId'] ?? '-'}'}',
                       ),
                     ),
                   if (r.pending.firstOrNull?['state'] == 'conflict')
@@ -2383,10 +2428,7 @@ class CabinetPhotoPage extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Evidencia del gabinete')),
       body: FutureBuilder(
-        future: c.photoBytes(id, {
-          ...photo,
-          'thumbnailPath': photo['localPath'],
-        }),
+        future: c.photoBytes(id, photo, original: true),
         builder: (context, snapshot) => snapshot.hasData
             ? InteractiveViewer(
                 minScale: 0.5,

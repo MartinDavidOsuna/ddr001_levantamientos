@@ -443,6 +443,11 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
     _requireWritable(id);
     await flushDrafts();
     final current = record(id);
+    if (current.working['status'] == 'draft') {
+      throw StateError(
+        'Completa primero el paso Registro con su fotografía. Las piezas capturadas se conservan.',
+      );
+    }
     final policy = object(catalogFor(current).json['partsReviewPolicy']);
     if (policy['version'] != 'ddr001-parts-20261019-v2') {
       throw StateError(
@@ -1210,6 +1215,8 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
               current['state'] = 'done';
               current['result'] = result;
               current.remove('error');
+              current.remove('diagnostic');
+              current.remove('problem');
               value['operations'] = ops;
               value['server'] = server;
               if (body['type'] == 'final_review' && value['dirty'] != true) {
@@ -1228,8 +1235,9 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
               final attempts = (o['attempts'] as int? ?? 0) + 1;
               o['attempts'] = attempts;
               o['error'] = explain(e);
+              if (e is DioException) o['diagnostic'] = diagnostic(e);
               if (e is DioException && e.response != null) {
-                o['problem'] = e.response!.data;
+                o['problem'] = problemData(e.response!.data);
               }
               if (status != null &&
                   status >= 400 &&
@@ -1238,7 +1246,7 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
                   status != 403 &&
                   status != 429 &&
                   !(e is DioException &&
-                      object(e.response?.data)['retryable'] == true)) {
+                      problemData(e.response?.data)['retryable'] == true)) {
                 o['state'] = 'conflict';
               }
               // Keep 'sending' after ambiguous failures; recover before retransmission.
@@ -1256,6 +1264,7 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
             (p) =>
                 p['deleting'] != true &&
                 p['verified'] != true &&
+                p['remote'] != true &&
                 p['actor'] == user &&
                 object(p['metadata'])['accuracy'] != null,
           )) {
@@ -1307,6 +1316,7 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
                   (p) =>
                       p['deleting'] != true &&
                       p['verified'] != true &&
+                      p['remote'] != true &&
                       p['actor'] == actor &&
                       object(p['metadata'])['accuracy'] != null,
                 ),
@@ -1347,7 +1357,9 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
           .photos
           .where((p) => p['id'] == id)
           .firstOrNull;
-      if (photo != null && photo['verified'] != true) {
+      if (photo != null &&
+          photo['remote'] != true &&
+          photo['verified'] != true) {
         if (photo['actor'] != user) {
           throw StateError(
             'Esta fotografía debe enviarla el residente que la capturó.',
@@ -1535,57 +1547,70 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
     });
   }
 
-  Future<void> downloadEvidence(String id) async {
-    _requireWritable(id);
-    final user = actor;
-    for (var page = 1; ; page++) {
-      final rows = objects(
-        (await remote.get('/$id/photos', {
-          'page': page,
-          'limit': 100,
-        }))['items'],
-      );
-      for (final row in rows) {
-        if (!allowed || actor != user) return;
-        final photoId = '${row['photo_id']}'.toLowerCase();
-        if (store.read(id)!.photos.any((p) => p['id'] == photoId) ||
-            (store.read(id)!.json['deletedPhotos'] as List? ?? []).contains(
-              photoId,
-            )) {
-          continue;
-        }
-        final bytes = await remote.content(id, photoId, thumbnail: false);
-        _requireWritable(id);
-        if ((store.read(id)!.json['deletedPhotos'] as List? ?? []).contains(
-          photoId,
-        )) {
-          continue;
-        }
-        final dir = Directory(
-          '${(await camera.supportDirectory()).path}/cabinets/$id/remote',
+  final Map<String, Future<void>> _evidenceLoads = {};
+
+  /// Reading shared evidence never requires ownership of unsent local edits.
+  /// Persist metadata first; the gallery fetches bytes only when displayed.
+  Future<void> downloadEvidence(String id) {
+    final key = '$actor:$id';
+    return _evidenceLoads.putIfAbsent(
+      key,
+      () => _loadEvidence(id).whenComplete(() {
+        _evidenceLoads.remove(key);
+      }),
+    );
+  }
+
+  Future<void> _loadEvidence(String id) async {
+    final current = record(id), user = actor;
+    if (current.server.isEmpty) return;
+    try {
+      for (var page = 1; ; page++) {
+        final rows = objects(
+          (await remote.get('/$id/photos', {
+            'page': page,
+            'limit': 100,
+          }))['items'],
         );
-        await dir.create(recursive: true);
-        final file = File('${dir.path}/$photoId.jpg');
-        await file.writeAsBytes(bytes, flush: true);
-        if (await sha256File(file) != row['server_sha256']) {
-          throw StateError('Hash remoto no coincide.');
-        }
-        await _edit(
-          id,
-          (r) => r['photos'] = [
-            ...objects(r['photos']),
-            {
+        await _edit(id, (r) {
+          if (!allowed || actor != user) throw StateError('La sesión cambió.');
+          final photos = objects(r['photos']);
+          for (final row in rows) {
+            final photoId = '${row['photo_id']}'.toLowerCase();
+            if ((r['deletedPhotos'] as List? ?? []).contains(photoId)) continue;
+            final index = photos.indexWhere(
+              (p) => '${p['id']}'.toLowerCase() == photoId,
+            );
+            final old = index < 0 ? <String, dynamic>{} : photos[index];
+            if (old['deleting'] == true) continue;
+            final next = {
+              ...old,
               'id': photoId,
               'actor': '${row['actor_user_id']}'.toLowerCase(),
-              'localPath': file.path,
-              'verified': true,
-              'remote': true,
-              'metadata': object(row['metadata']),
-            },
-          ],
-        );
+              'serverSha256': row['server_sha256'],
+              'metadata': {
+                ...object(row['metadata']),
+                ...object(old['metadata']),
+              },
+              if (index < 0) 'remote': true,
+            };
+            if (index < 0) {
+              photos.add(next);
+            } else {
+              photos[index] = next;
+            }
+          }
+          r['photos'] = photos;
+          r['evidenceFetchedAt'] = DateTime.now().toUtc().toIso8601String();
+          r.remove('evidenceError');
+        });
+        if (rows.length < 100) break;
       }
-      if (rows.length < 100) break;
+    } catch (e) {
+      if (allowed && actor == user) {
+        await _edit(id, (r) => r['evidenceError'] = explain(e));
+      }
+      rethrow;
     }
   }
 
@@ -1643,6 +1668,7 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
     return result;
   }
 
+  final Map<String, Future<Uint8List>> _photoLoads = {};
   Future<Uint8List> photoBytes(
     String id,
     Json photo, {
@@ -1650,20 +1676,84 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
   }) async {
     record(id);
     final user = actor;
-    final path = original
-        ? photo['localPath']
-        : photo['thumbnailPath'] ?? photo['localPath'];
-    final bytes = path != null && await File('$path').exists()
-        ? await File('$path').readAsBytes()
-        : await remote.content(
-            id,
-            '${photo['id'] ?? photo['photo_id']}',
-            thumbnail: !original,
-          );
+    final key = '$user:$id:${photo['id']}:$original';
+    final bytes = await _photoLoads.putIfAbsent(
+      key,
+      () => _readPhoto(id, photo, original: original, user: user).whenComplete(
+        () {
+          _photoLoads.remove(key);
+        },
+      ),
+    );
     if (!allowed || actor != user) {
       throw StateError('Sin permiso para ver fotografías.');
     }
     return bytes;
+  }
+
+  Future<Uint8List> _readPhoto(
+    String id,
+    Json photo, {
+    required bool original,
+    required String? user,
+  }) async {
+    final saved =
+        record(id).photos.where((p) => p['id'] == photo['id']).firstOrNull ??
+        photo;
+    final path = original
+        ? saved['localPath']
+        : saved['thumbnailPath'] ?? saved['localPath'];
+    if (path != null && await File('$path').exists()) {
+      return File('$path').readAsBytes();
+    }
+    final photoId = '${photo['id'] ?? photo['photo_id']}'.toLowerCase();
+    final bytes = await remote.content(id, photoId, thumbnail: !original);
+    if (!allowed || actor != user) {
+      throw StateError('Sin permiso para ver fotografías.');
+    }
+    final dir = Directory(
+      '${(await camera.supportDirectory()).path}/cabinets/$id/remote',
+    );
+    await dir.create(recursive: true);
+    final file = File('${dir.path}/$photoId.${original ? 'jpg' : 'webp'}');
+    await file.writeAsBytes(bytes, flush: true);
+    if (original &&
+        saved['serverSha256'] != null &&
+        await sha256File(file) != '${saved['serverSha256']}'.toLowerCase()) {
+      await file.delete();
+      throw StateError('Hash remoto no coincide. Reintenta la descarga.');
+    }
+    await _edit(id, (r) {
+      if (!allowed || actor != user) {
+        throw StateError('Sin permiso para ver fotografías.');
+      }
+      final photos = objects(r['photos']);
+      final index = photos.indexWhere((p) => p['id'] == photoId);
+      if (index >= 0 && photos[index]['deleting'] != true) {
+        photos[index][original ? 'localPath' : 'thumbnailPath'] = file.path;
+        r['photos'] = photos;
+      }
+    });
+    return bytes;
+  }
+
+  static Json diagnostic(DioException error) => {
+    'type': error.type.name,
+    'httpStatus': error.response?.statusCode,
+    'method': error.requestOptions.method,
+    'path': error.requestOptions.uri.path,
+    'requestId': error.requestOptions.headers['X-Request-ID'],
+    'at': DateTime.now().toUtc().toIso8601String(),
+  };
+
+  static Json problemData(Object? value) {
+    try {
+      if (value is List<int>) value = utf8.decode(value);
+      if (value is String) value = jsonDecode(value);
+      return object(value);
+    } on FormatException {
+      return {};
+    }
   }
 
   static String explain(Object error) {
@@ -1671,14 +1761,28 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
       if (error.response?.statusCode == 401) {
         return 'La sesión no es válida para esta API. Reconecta tu sesión; las capturas siguen guardadas.';
       }
-      final data = object(error.response?.data);
+      if (error.response == null) {
+        return switch (error.type) {
+          DioExceptionType.receiveTimeout =>
+            'Tiempo de respuesta agotado. Se comprobará si el servidor recibió la operación. Datos conservados.',
+          DioExceptionType.sendTimeout =>
+            'El envío no terminó a tiempo. Se reintentará conservando la operación y sus fotos.',
+          DioExceptionType.connectionTimeout ||
+          DioExceptionType.connectionError =>
+            'No se pudo establecer conexión con la API. Datos conservados; reintenta al recuperar conexión.',
+          DioExceptionType.cancel => 'Solicitud cancelada. Datos conservados.',
+          _ =>
+            'No se recibió confirmación de la API (${error.type.name}). Datos conservados.',
+        };
+      }
+      final data = problemData(error.response?.data);
       final pending = objects(data['blocking']).isNotEmpty
           ? objects(data['blocking'])
           : objects(data['pending']);
       final details = pending
           .map((p) => '${p['subject']}: ${p['reason']}')
           .join('\n');
-      return '${data['code'] ?? 'CONNECTION'}: ${data['detail'] ?? 'No se pudo comunicar con la API. Datos conservados.'}${details.isEmpty ? '' : '\n$details'}';
+      return '${data['code'] ?? 'HTTP ${error.response?.statusCode}'}: ${data['detail'] ?? 'El servidor devolvió una respuesta inesperada. Datos conservados.'}${details.isEmpty ? '' : '\n$details'}';
     }
     if (error is FileSystemException) {
       return error.osError?.errorCode == 28

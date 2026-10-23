@@ -17,10 +17,7 @@ void main() {
         object(fixture['identity'])['databaseName'],
         'DDR001_Hidrantes_TEST',
       );
-      expect(
-        '${fixture['apiCommit']}',
-        startsWith('46b0265b9c8698363f3eca73257bc47382c4d8f2'),
-      );
+      expect('${fixture['apiCommit']}', matches(RegExp(r'^[0-9a-f]{40}$')));
       final s = object(fixture['session']);
       final session = FieldSession(
         sessionId: s['sessionId'].toString().toLowerCase(),
@@ -38,7 +35,7 @@ void main() {
       try {
         final version = object((await h.client.dio.get('/version')).data);
         expect(version['environment'], 'test');
-        expect('${version['commit']}', startsWith('46b0265'));
+        expect(version['commit'], fixture['apiCommit']);
         final catalog = CabinetCatalog(
           await h.controller.remote.get('/catalog'),
         );
@@ -242,6 +239,7 @@ void main() {
           'approvalInvalidationAndNegativeReviewResolved': true,
           'allPhotosVerified': true,
         };
+        await Directory('.test-cabinets').create(recursive: true);
         await File('.test-cabinets/result.json').writeAsString(jsonEncode(log));
         // Retain the synthetic record and its references as TEST evidence, no deletion.
       } finally {

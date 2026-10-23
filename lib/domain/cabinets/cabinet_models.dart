@@ -217,7 +217,9 @@ class CabinetRecord {
   List<Json> get photos => objects(json['photos']);
   bool get synchronized =>
       pending.isEmpty &&
-      photos.every((p) => p['verified'] == true) &&
+      json['deletion'] == null &&
+      !photos.any((p) => p['deleting'] == true) &&
+      photos.every((p) => p['remote'] == true || p['verified'] == true) &&
       json['dirty'] != true;
 }
 
