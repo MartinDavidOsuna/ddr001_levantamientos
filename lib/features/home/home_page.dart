@@ -16,6 +16,9 @@ class HomePage extends StatelessWidget {
     final app = context.watch<AppController>(),
         reviewer = app.profile?.role.isReviewer ?? false;
     final cabinets = context.watch<CabinetController?>();
+    final cabinetPending =
+        cabinets?.records.where((r) => !r.synchronized).length ?? 0;
+    final allSyncing = app.syncing || (cabinets?.syncing ?? false);
     return Scaffold(
       appBar: AppBar(title: const BrandedAppBarTitle('DDR001 Levantamientos')),
       body: ListView(
@@ -56,7 +59,7 @@ class HomePage extends StatelessWidget {
                 key: const Key('register_cabinet_action'),
                 icon: Icons.add_business,
                 title: 'REGISTRAR GABINETE',
-                subtitle: 'Registro, piezas e instalación',
+                subtitle: 'Registro y revisión de piezas',
                 onTap: () => Navigator.push(
                   context,
                   MaterialPageRoute(builder: (_) => const CabinetsPage()),
@@ -77,14 +80,15 @@ class HomePage extends StatelessWidget {
             if (cabinets?.eligible == true) ...[
               const SizedBox(height: 12),
               _ActionCard(
-                key: const Key('review_cabinet_action'),
+                key: const Key('install_cabinet_action'),
                 icon: Icons.verified,
-                title: 'REVISIÓN DE HIDRANTE',
-                subtitle: 'Expediente, pruebas y dictamen final',
+                title: 'INSTALAR GABINETE',
+                subtitle: 'Instalación en campo y revisión final',
                 onTap: () => Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (_) => const CabinetsPage(finalReview: true),
+                    builder: (_) =>
+                        const CabinetRegisterPage(installation: true),
                   ),
                 ),
               ),
@@ -104,26 +108,28 @@ class HomePage extends StatelessWidget {
             ),
           Card(
             child: ListTile(
-              leading: _SyncStatusIcon(
-                syncing: app.syncing,
-                online: app.online,
-              ),
+              leading: _SyncStatusIcon(syncing: allSyncing, online: app.online),
               title: Text(
-                app.syncing
+                allSyncing
                     ? 'Sincronizando'
                     : app.online
-                    ? app.visibleQueue.isEmpty
+                    ? app.visibleQueue.isEmpty && cabinetPending == 0
                           ? 'Sincronizado'
                           : 'Información pendiente'
                     : 'Sin conexión',
               ),
               subtitle: Text(
-                '${app.visibleQueue.length} operaciones pendientes',
+                'Bases: ${app.visibleQueue.length} operaciones pendientes · Gabinetes: $cabinetPending expedientes pendientes',
               ),
               trailing: IconButton(
                 tooltip: 'Intentar sincronizar',
-                onPressed: app.session != null && !app.syncing
-                    ? () => app.synchronize(force: true)
+                onPressed: app.session != null && !allSyncing
+                    ? () async {
+                        await app.synchronize(force: true);
+                        if (cabinets?.allowed ?? false) {
+                          await cabinets!.synchronize(force: true);
+                        }
+                      }
                     : null,
                 icon: const Icon(Icons.sync),
               ),

@@ -23,6 +23,7 @@ class ConstructionJournalEntry {
     required this.surveyId,
     required this.createdAt,
     this.photoId,
+    this.photoCapturedAt,
     this.step,
     this.correctionId,
     this.purpose,
@@ -40,6 +41,7 @@ class ConstructionJournalEntry {
   final ConstructionJournalState state;
   final String surveyId;
   final DateTime createdAt;
+  final DateTime? photoCapturedAt;
   final String? photoId, correctionId, purpose;
   final int? step, fileSize;
   final String? sourcePath, uploadPath, thumbnailPath, sha256, lastError;
@@ -47,6 +49,7 @@ class ConstructionJournalEntry {
 
   ConstructionJournalEntry copyWith({
     ConstructionJournalState? state,
+    DateTime? photoCapturedAt,
     String? sourcePath,
     String? uploadPath,
     String? thumbnailPath,
@@ -60,6 +63,7 @@ class ConstructionJournalEntry {
     state: state ?? this.state,
     surveyId: surveyId,
     createdAt: createdAt,
+    photoCapturedAt: photoCapturedAt ?? this.photoCapturedAt,
     photoId: photoId,
     step: step,
     correctionId: correctionId,
@@ -79,6 +83,7 @@ class ConstructionJournalEntry {
     'state': state.name,
     'surveyId': surveyId,
     'photoId': photoId,
+    'photoCapturedAt': photoCapturedAt?.toUtc().toIso8601String(),
     'step': step,
     'correctionId': correctionId,
     'purpose': purpose,
@@ -101,6 +106,9 @@ class ConstructionJournalEntry {
         state: ConstructionJournalState.values.byName('${json['state']}'),
         surveyId: '${json['surveyId']}',
         photoId: json['photoId']?.toString(),
+        photoCapturedAt: DateTime.tryParse(
+          '${json['photoCapturedAt']}',
+        )?.toUtc(),
         step: (json['step'] as num?)?.toInt(),
         correctionId: json['correctionId']?.toString(),
         purpose: json['purpose']?.toString(),

@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
@@ -25,6 +26,25 @@ void main() {
     ],
     child: MaterialApp(home: child),
   );
+  testWidgets('permanent deletion requires acknowledgment and matching UID', (
+    tester,
+  ) async {
+    final id = (await tester.runAsync(
+      () => h.controller.scan('AQ26000017', 'A1', false),
+    ))!;
+    await tester.pumpWidget(host(CabinetDeleteDialog(id: id)));
+    expect(
+      tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
+      isNull,
+    );
+    await tester.tap(find.byType(CheckboxListTile));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextFormField), 'AQ26-00002-5');
+    await tester.tap(find.byType(FilledButton));
+    await tester.pumpAndSettle();
+    expect(find.text('Debe coincidir con el número mostrado.'), findsOneWidget);
+    expect(h.store.read(id)!.json['deletion'], isNull);
+  });
   testWidgets('history loads on entry and explains empty results', (
     tester,
   ) async {
@@ -79,10 +99,10 @@ void main() {
       await tester.pumpWidget(host(const HomePage()));
       expect(find.text('REGISTRAR GABINETE'), findsOneWidget);
       expect(find.text('REGISTRAR INSTALACIÓN'), findsNothing);
-      expect(find.text('REVISIÓN DE HIDRANTE'), findsOneWidget);
+      expect(find.text('INSTALAR GABINETE'), findsOneWidget);
       expect(
         tester.getTopLeft(find.text('REVISIÓN DE BASE')).dy,
-        lessThan(tester.getTopLeft(find.text('REVISIÓN DE HIDRANTE')).dy),
+        lessThan(tester.getTopLeft(find.text('INSTALAR GABINETE')).dy),
       );
       await tester.tap(find.text('REGISTRAR GABINETE'));
       await tester.pumpAndSettle();
@@ -103,9 +123,70 @@ void main() {
       expect(find.textContaining('Acceso exclusivo'), findsOneWidget);
       await tester.pumpWidget(host(const HomePage()));
       expect(find.text('REGISTRAR GABINETE'), findsNothing);
-      expect(find.text('REVISIÓN DE HIDRANTE'), findsNothing);
+      expect(find.text('INSTALAR GABINETE'), findsNothing);
     },
   );
+  testWidgets('install entry resolves local UID and opens only field stages', (
+    tester,
+  ) async {
+    final id = (await tester.runAsync(
+      () => h.controller.scan('AQ26000017', 'A1', true),
+    ))!;
+    await tester.pumpWidget(host(CabinetDetailPage(id: id, initialTab: 5)));
+    expect(
+      DefaultTabController.of(tester.element(find.byType(TabBar))).length,
+      4,
+    );
+    expect(find.text('Instalación'), findsNothing);
+    expect(find.text('Revisión final'), findsNothing);
+    await tester.pumpWidget(host(const HomePage()));
+    await tester.tap(find.text('INSTALAR GABINETE'));
+    await tester.pumpAndSettle();
+    expect(find.text('Modelo base'), findsNothing);
+    await tester.enterText(find.byType(TextField), 'AQ26-00001-7');
+    await tester.runAsync(() => tester.tap(find.text('Buscar gabinete')));
+    await tester.pumpAndSettle();
+    expect(find.text('Instalación'), findsOneWidget);
+    expect(find.text('Revisión final'), findsOneWidget);
+    expect(find.text('1 Registro'), findsNothing);
+    expect(
+      DefaultTabController.of(tester.element(find.byType(TabBar))).length,
+      2,
+    );
+    await tester.tap(find.text('Revisión final'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('La revisión final requiere instalación completada.'),
+      findsOneWidget,
+    );
+    h.setRole(ConstructionRole.contractor);
+    await tester.pumpWidget(host(CabinetDetailPage(id: id, fieldWork: true)));
+    expect(find.textContaining('Acceso exclusivo'), findsOneWidget);
+    expect(find.text('AQ26-00001-7'), findsNothing);
+  });
+
+  testWidgets('missing cabinet explains absence and prefills registration', (
+    tester,
+  ) async {
+    h.app.online = true;
+    await tester.pumpWidget(
+      host(const CabinetRegisterPage(installation: true)),
+    );
+    await tester.enterText(find.byType(TextField), 'AQ26-00001-7');
+    await tester.runAsync(() => tester.tap(find.text('Buscar gabinete')));
+    await tester.pumpAndSettle();
+    expect(find.text('Gabinete no encontrado'), findsOneWidget);
+    expect(h.controller.records, isEmpty);
+    await tester.runAsync(() => tester.tap(find.text('Registrar gabinete')));
+    await tester.pumpAndSettle();
+    expect(find.text('Modelo base'), findsOneWidget);
+    expect(
+      tester.widget<TextField>(find.byType(TextField)).controller!.text,
+      'AQ26-00001-7',
+    );
+    expect(h.controller.records, isEmpty);
+  });
+
   testWidgets('admin reviewer does not receive cabinet actions', (
     tester,
   ) async {
@@ -114,6 +195,55 @@ void main() {
     expect(find.text('REVISIÓN DE BASE'), findsOneWidget);
     expect(find.text('REGISTRAR GABINETE'), findsNothing);
   });
+  testWidgets(
+    'registration uses a photo count and Next closes locally then opens Parts',
+    (tester) async {
+      final id = (await tester.runAsync(
+        () => h.controller.scan('AQ26000017', 'A1', false),
+      ))!;
+      await tester.runAsync(() async {
+        final photo = await h.photo(
+          id,
+          'registration',
+          source: File('test/cabinets/fixtures/evidence.jpg'),
+        );
+        await h.controller.saveDraft(id, 'registrationEvidence', [
+          {'photoId': photo['id'], 'confirmed': true},
+        ]);
+      });
+      await tester.pumpWidget(host(CabinetDetailPage(id: id)));
+      await tester.pumpAndSettle();
+      expect(find.text('Foto(s) del gabinete'), findsOneWidget);
+      expect(find.text('1 foto'), findsOneWidget);
+      expect(find.textContaining('Catálogo:'), findsNothing);
+      expect(find.textContaining('Confirmado por servidor'), findsNothing);
+      await tester.ensureVisible(find.text('Siguiente'));
+      await tester.runAsync(() => tester.tap(find.text('Siguiente')));
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 30)),
+      );
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('Confirmar identificación'), findsNothing);
+      expect(find.text('Corresponde a este gabinete'), findsNothing);
+      for (var i = 0; i < 12; i++) {
+        await tester.pump(const Duration(milliseconds: 200));
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 50)),
+        );
+        if (DefaultTabController.of(
+              tester.element(find.byType(TabBar)),
+            ).index ==
+            1) {
+          break;
+        }
+      }
+      await tester.pump(const Duration(seconds: 1));
+      final context = tester.element(find.byType(TabBar));
+      expect(h.store.read(id)!.working['status'], 'registered');
+      expect(DefaultTabController.of(context).index, 1);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
   testWidgets('registration stays draft until identification evidence exists', (
     tester,
   ) async {
@@ -121,17 +251,19 @@ void main() {
       () => h.controller.scan('AQ26000017', 'A1', false),
     ))!;
     await tester.pumpWidget(host(CabinetDetailPage(id: id)));
-    await tester.tap(find.text('Completar registro local'));
+    await tester.tap(find.text('Siguiente'));
     await tester.runAsync(
       () => Future<void>.delayed(const Duration(milliseconds: 30)),
     );
     await tester.pumpAndSettle();
-    expect(find.textContaining('Falta fotografía'), findsOneWidget);
+    expect(find.textContaining('Agrega al menos una foto'), findsOneWidget);
     expect(h.store.read(id)!.working['status'], 'draft');
   });
   testWidgets(
     '84 checks rendered as applicable groups and physical answers stay pending',
     (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1000, 2400));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
       final id = (await tester.runAsync(
         () => h.controller.scan('AQ26000017', 'A1', false),
       ))!;
@@ -139,11 +271,41 @@ void main() {
       r['working']['status'] = 'validated';
       r['working']['partsValidated'] = true;
       await tester.runAsync(() => h.store.save(r));
-      await tester.pumpWidget(host(CabinetDetailPage(id: id, initialTab: 2)));
+      await tester.pumpWidget(host(CabinetDetailPage(id: id, fieldWork: true)));
       await tester.pumpAndSettle();
       expect(find.textContaining('bloqueos'), findsOneWidget);
-      expect(find.textContaining('GPS de instalación'), findsOneWidget);
+      expect(find.textContaining('GPS de instalación:'), findsOneWidget);
+      expect(
+        DefaultTabController.of(tester.element(find.byType(TabBar))).length,
+        2,
+      );
+      expect(find.text('4 Automatización'), findsNothing);
       expect(find.textContaining('Confirmar puntos revisados'), findsNothing);
+      await tester.ensureVisible(find.text('Siguiente'));
+      await tester.tap(find.text('Siguiente'));
+      await tester.pumpAndSettle();
+      expect(find.byType(ExpansionTile), findsNothing);
+      expect(find.text('Modelo del gabinete correcto'), findsOneWidget);
+      expect(find.text('Modelo · A1'), findsOneWidget);
+      expect(find.textContaining('Guardado en este teléfono'), findsNothing);
+      expect(find.textContaining('Los campos se guardan'), findsNothing);
+      await tester.binding.setSurfaceSize(const Size(1000, 1000));
+      await tester.pumpAndSettle();
+      final header = find.byKey(const ValueKey('installation_fixed_header'));
+      final headerPosition = tester.getTopLeft(header);
+      await tester.drag(find.byType(ListView).first, const Offset(0, -350));
+      await tester.pumpAndSettle();
+      expect(tester.getTopLeft(header), headerPosition);
+      expect(find.textContaining('Comprueba y responde'), findsOneWidget);
+
+      expect(find.text('Identificación del gabinete visible'), findsNothing);
+      expect(find.text('QR visible y legible'), findsNothing);
+      expect(find.text('Número de serie visible y legible'), findsNothing);
+      expect(find.textContaining('CI032'), findsNothing);
+      await tester.ensureVisible(find.text('Anterior'));
+      await tester.tap(find.text('Anterior'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('GPS de instalación:'), findsOneWidget);
     },
   );
 }

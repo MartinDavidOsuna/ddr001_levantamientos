@@ -27,6 +27,61 @@ void main() {
   );
 
   test(
+    'default serial visibility uses captured component codes required by API',
+    () {
+      final result = installationWithDefaults({}, [
+        {'code': 'FLOW:1', 'serial': '000A'},
+        {'code': 'FILTER:1', 'serial': ''},
+      ]);
+      expect(
+        objects(
+          result['answers'],
+        ).singleWhere((a) => a['code'] == 'CI031')['serialComponents'],
+        ['FLOW:1'],
+      );
+    },
+  );
+  test('installation requires strictly less than 50 meters', () {
+    expect(installationWithinBase(49.99), isTrue);
+    expect(installationWithinBase(50), isFalse);
+    expect(installationWithinBase(50.01), isFalse);
+    expect(installationWithinBase(double.nan), isFalse);
+    expect(installationWithinBase(distanceMeters(29, -110, 29, -110)), isTrue);
+    expect(
+      installationWithinBase(distanceMeters(29, -110, 29.001, -110)),
+      isFalse,
+    );
+  });
+  test(
+    'installation edits persist default identity answers without replacing prior failures',
+    () async {
+      final id = await h.controller.scan('AQ26000017', 'A1', false);
+      await h.controller.patchInstallation(id, 'answers', {
+        'code': 'CI029',
+        'answer': 'no',
+        'observations': 'Placa cubierta',
+        'evidence': <Json>[],
+      }, answerCode: 'CI029');
+      await h.controller.patchInstallation(
+        id,
+        'observations',
+        'Captura de campo',
+      );
+      final answers = objects(
+        object(h.controller.record(id).working['installation'])['answers'],
+      );
+      expect(answers.singleWhere((a) => a['code'] == 'CI029')['answer'], 'no');
+      expect(answers.singleWhere((a) => a['code'] == 'CI030')['answer'], 'yes');
+      expect(answers.singleWhere((a) => a['code'] == 'CI031')['answer'], 'yes');
+      expect(answers.where((a) => a['code'] == 'CI032'), isEmpty);
+      expect(
+        () => validateInstallationLocation(h.controller, id),
+        throwsStateError,
+      );
+    },
+  );
+
+  test(
     'dialog drafts are retained separately for each authorized resident',
     () async {
       final id = await h.controller.scan('AQ26000017', 'A1', false);

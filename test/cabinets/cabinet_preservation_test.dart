@@ -40,7 +40,7 @@ void main() {
         final photo = h.store.read(id)!.photos.single;
         expect(File(photo['localPath']).existsSync(), isTrue);
         expect(object(photo['metadata'])['accuracy'], isNull);
-        expect(h.controller.message, contains('GPS pendiente'));
+        expect(h.controller.message, contains('No se obtuvo ubicación válida'));
         expect(
           h.store.media.journal.find(photo['id'])!.state.name,
           'committed',
