@@ -33,5 +33,5 @@ for(let i=0;i<2;i++){
 }
 await pool.request().input('base',sql.UniqueIdentifier,baseId).input('owner',sql.UniqueIdentifier,sessions[0].userId).input('crew',sql.UniqueIdentifier,crew).query("INSERT construction.base_surveys(survey_id,contractor_user_id,display_identifier,status,crew_id) VALUES(@base,@owner,N'Auditoría gabinetes TEST','accepted',@crew)");
 const digits='26'+String(10000+Math.floor(Math.random()*70000));let p=10;for(const d of digits){let s=(p+Number(d))%10;if(!s)s=10;p=s*2%11;} const uid='AQ'+digits+((11-p)%10);
-await writeFile(output,JSON.stringify({identity,apiCommit:version.commit,session:sessions[0],otherSession:sessions[1],installationId:sessions[0].installationId,baseId,uid}),{mode:0o600});
+await writeFile(output,JSON.stringify({identity,apiCommit:version.commit,session:sessions[0],otherSession:sessions[1],installationId:sessions[0].installationId,crewId:crew,baseId,uid}),{mode:0o600});
 console.log(JSON.stringify({identity,uid,baseId}));await closeDb();

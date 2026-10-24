@@ -340,6 +340,12 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
       'catalogVersion': catalog.version,
       'closurePolicyVersion': catalog.policyVersion,
       'partDefinitions': catalog.parts(model, automated),
+      if (app.currentCrewId != null)
+        'registrationCompany': {
+          'id': app.currentCrewId,
+          'name': app.currentCrew,
+          'source': 'local_capture',
+        },
       'status': 'draft',
       'parts': <Json>[],
       'registrationEvidence': <Json>[],
@@ -350,6 +356,9 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
       'expectedVersion': 0,
       'capturedAt': DateTime.now().toUtc().toIso8601String(),
       'type': 'register',
+      if (object(catalog.json['capabilities'])['registrationCompany'] == true &&
+          app.currentCrewId != null)
+        'expectedCrewId': app.currentCrewId,
       'uid': uid,
       'model': model,
       'automated': automated,
@@ -1028,6 +1037,7 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
         journal?.thumbnailPath,
       ].whereType<String>().toSet()) {
         final file = File(path);
+        if (!await file.exists()) continue;
         final parent = await file.parent.resolveSymbolicLinks();
         if (!parent.startsWith('$root/cabinets/$id/')) {
           throw StateError('Ruta de foto fuera del expediente.');
@@ -1157,7 +1167,7 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
           } catch (e) {
             await _handleAccess(e, user);
             message = explain(e);
-            continue;
+            // Independent identity corrections must not be held by an unused-photo deletion.
           }
         }
         while (true) {
@@ -1174,7 +1184,7 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
             break;
           }
           final body = object(op['body']), operationId = body['operationId'];
-          if (body['type'] != 'register' &&
+          if (!['register', 'identity_correct'].contains(body['type']) &&
               r.photos.any((p) => p['deleting'] == true)) {
             break;
           }
@@ -1735,6 +1745,45 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
       }
     });
     return bytes;
+  }
+
+  Json syncDiagnostics(String id) {
+    final r = record(id);
+    return {
+      'schema': 1,
+      'cabinetId': id,
+      'uid': r.working['uid'],
+      'localModel': r.working['model'],
+      'serverModel': r.server['model'],
+      'localStatus': r.working['status'],
+      'serverStatus': r.server['status'],
+      'serverVersion': r.server['version'],
+      'dirty': r.json['dirty'] == true,
+      'photoCount': r.photos.length,
+      'photoDeletionsPending': r.photos
+          .where((p) => p['deleting'] == true)
+          .length,
+      'photosWithoutGps': r.photos
+          .where(
+            (p) =>
+                p['remote'] != true &&
+                object(p['metadata'])['accuracy'] == null,
+          )
+          .length,
+      'operations': [
+        for (final op in r.pending)
+          {
+            'operationId': object(op['body'])['operationId'],
+            'type': object(op['body'])['type'],
+            'expectedVersion': object(op['body'])['expectedVersion'],
+            'state': op['state'],
+            'attempts': op['attempts'],
+            'requiresOtherActor': op['actor'] != actor,
+            'error': op['error'],
+            'diagnostic': op['diagnostic'],
+          },
+      ],
+    };
   }
 
   static Json diagnostic(DioException error) => {

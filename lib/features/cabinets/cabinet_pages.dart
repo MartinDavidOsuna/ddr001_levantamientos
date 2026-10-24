@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
+import 'package:flutter/services.dart';
 import '../../core/security/session_store.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -760,6 +762,18 @@ class CabinetRegistration extends StatelessWidget {
             child: const Text(
               'Cancelar eliminación rechazada y actualizar expediente',
             ),
+          ),
+        if (object(r.working['registrationCompany'])['name'] != null)
+          Text('Empresa: ${object(r.working['registrationCompany'])['name']}')
+        else
+          const Text(
+            'Empresa de registro: sin atribución histórica confirmada',
+          ),
+        if (r.pending.any(
+          (op) => object(op['body'])['type'] == 'identity_correct',
+        ))
+          const Text(
+            'Cambio de modelo pendiente de confirmación del servidor. Consulta Sincronización si no se confirma.',
           ),
         const SizedBox(height: 12),
         EvidenceEditor(
@@ -2204,7 +2218,7 @@ class CabinetSyncPage extends StatelessWidget {
                   ListTile(
                     title: Text(displayUid(r.working['uid'])),
                     subtitle: Text(
-                      '${r.pending.length} operaciones pendientes · ${r.photos.where((p) => p['remote'] != true && p['verified'] != true).length} fotos por enviar/verificar\n${r.json['lastSent'] == null ? 'Sin envíos desde este teléfono' : 'Último envío: ${r.json['lastSent']}'}${r.json['dirty'] == true ? '\nBorrador local pendiente de completar' : ''}',
+                      'Teléfono: ${cabinetStatus(r.working['status'])} · Servidor: ${r.server.isEmpty ? 'sin registro confirmado' : cabinetStatus(r.server['status'])}\n${r.pending.length} operaciones pendientes · ${r.photos.where((p) => p['remote'] != true && p['verified'] != true).length} fotos por enviar/verificar\n${r.json['lastSent'] == null ? 'Sin envíos desde este teléfono' : 'Último envío: ${r.json['lastSent']}'}${r.json['dirty'] == true ? '\nBorrador local pendiente de completar' : ''}',
                     ),
                     onTap: () => Navigator.push(
                       context,
@@ -2212,6 +2226,28 @@ class CabinetSyncPage extends StatelessWidget {
                         builder: (_) => CabinetDetailPage(id: r.id),
                       ),
                     ),
+                  ),
+                  TextButton.icon(
+                    icon: const Icon(Icons.copy),
+                    label: const Text('Copiar diagnóstico de sincronización'),
+                    onPressed: () => cabinetAction(context, () async {
+                      await Clipboard.setData(
+                        ClipboardData(
+                          text: const JsonEncoder.withIndent(
+                            '  ',
+                          ).convert(c.syncDiagnostics(r.id)),
+                        ),
+                      );
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Diagnóstico copiado. No incluye fotos, respuestas ni credenciales.',
+                            ),
+                          ),
+                        );
+                      }
+                    }),
                   ),
                   for (final o in r.pending)
                     ListTile(

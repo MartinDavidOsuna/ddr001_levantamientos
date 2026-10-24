@@ -29,7 +29,8 @@ void main() {
         name: 'Mobile TEST',
         email: 'test@example.invalid',
         phone: '7777777777',
-        crew: '9',
+        crew: 'TEST',
+        crewId: fixture['crewId'] as String?,
       );
       final h = Harness();
       await h.open(session: session);
@@ -107,6 +108,13 @@ void main() {
           reason: '${h.store.read(id)!.pending}',
         );
         expect(h.store.read(id)!.server['status'], 'installed');
+        if (object(catalog.json['capabilities'])['registrationCompany'] ==
+            true) {
+          expect(
+            object(h.store.read(id)!.server['registrationCompany'])['id'],
+            fixture['crewId'],
+          );
+        }
         final finalPhoto = await h.photo(id, 'final_review', source: image);
         await h.controller.enqueue(id, 'final_review', {
           'fieldChecked': true,
