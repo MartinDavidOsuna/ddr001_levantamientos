@@ -2263,6 +2263,44 @@ class CabinetSyncPage extends StatelessWidget {
                       onPressed: () async {
                         await cabinetAction(context, () async {
                           final problem = object(r.pending.first['problem']);
+                          if (problem['code'] == 'COMPANY_CHANGED') {
+                            final user = c.actor;
+                            final profile = await c.app.remote.profile();
+                            if (c.actor != user ||
+                                profile.userId.toLowerCase() != user) {
+                              throw StateError('La sesión cambió.');
+                            }
+                            if (!context.mounted) return;
+                            final accepted = await showDialog<bool>(
+                              context: context,
+                              builder: (ctx) => AlertDialog(
+                                title: const Text(
+                                  'Confirmar empresa del registro',
+                                ),
+                                content: Text(
+                                  'Capturada: ${object(r.working['registrationCompany'])['name'] ?? 'sin empresa'}.\nEmpresa actual de la cuenta: ${profile.crew}.\n¿Registrar con la empresa actual? Se conservan las respuestas y fotografías.',
+                                ),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () => Navigator.pop(ctx, false),
+                                    child: const Text('Cancelar'),
+                                  ),
+                                  TextButton(
+                                    onPressed: () => Navigator.pop(ctx, true),
+                                    child: const Text('Confirmar empresa'),
+                                  ),
+                                ],
+                              ),
+                            );
+                            if (accepted == true && c.actor == user) {
+                              await c.reconcileRegistrationCompany(
+                                r.id,
+                                crewId: profile.crewId ?? '',
+                                crewName: profile.crew,
+                              );
+                            }
+                            return;
+                          }
                           if (problem['code'] == 'UID_CONFLICT') {
                             final ok = await showDialog<bool>(
                               context: context,

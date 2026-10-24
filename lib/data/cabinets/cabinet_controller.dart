@@ -1442,6 +1442,65 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
     r['operations'] = operations;
   });
 
+  /// The resident explicitly accepts the current profile company after a rejected
+  /// registration. The API checks that company again when the new attempt runs.
+  Future<void> reconcileRegistrationCompany(
+    String id, {
+    required String crewId,
+    required String crewName,
+  }) async {
+    final user = actor;
+    _requireWritable(id);
+    if (crewId.trim().isEmpty || crewName.trim().isEmpty) {
+      throw StateError('La cuenta necesita una empresa configurada.');
+    }
+    await _edit(id, (value) {
+      if (!allowed || actor != user) throw StateError('La sesión cambió.');
+      final current = CabinetRecord(value);
+      final first = current.pending.firstOrNull;
+      if (current.server.isNotEmpty ||
+          first == null ||
+          first['actor'] != user ||
+          first['state'] != 'conflict' ||
+          object(first['body'])['type'] != 'register' ||
+          object(first['problem'])['code'] != 'COMPANY_CHANGED') {
+        throw StateError(
+          'El conflicto de empresa ya cambió. Actualiza el expediente.',
+        );
+      }
+      final operations = current.operations;
+      final index = operations.indexWhere(
+        (op) =>
+            object(op['body'])['operationId'] ==
+            object(first['body'])['operationId'],
+      );
+      final original = operations[index];
+      original['state'] = 'superseded';
+      original['resolution'] =
+          'Empresa actual confirmada explícitamente: $crewName ($crewId)';
+      operations.insert(index + 1, {
+        'body': {
+          ...object(original['body']),
+          'operationId': const Uuid().v4(),
+          'expectedCrewId': crewId,
+        },
+        'actor': user,
+        'state': 'queued',
+        'attempts': 0,
+      });
+      value['operations'] = operations;
+      value['working'] = {
+        ...current.working,
+        'registrationCompany': {
+          'id': crewId,
+          'name': crewName,
+          'source': 'local_capture',
+        },
+      };
+    });
+    unawaited(synchronize());
+  }
+
   /// Explicit conflict resolution preserves the original command, result, photos and draft.
   Future<void> reconcile(
     String id, {

@@ -132,6 +132,60 @@ void main() {
     },
   );
   test(
+    'company conflict replacement preserves journal, dependent answers and photos',
+    () async {
+      final h = Harness();
+      await h.open(remote: ModelRemote());
+      try {
+        final id = await h.controller.scan('AQ26000017', 'A1', false);
+        final photo = await h.photo(id, 'registration');
+        await h.controller.enqueue(id, 'registration_close', {
+          'evidence': evidence(photo),
+        });
+        final r = clone(h.store.read(id)!.json);
+        final ops = objects(r['operations']);
+        final originalBody = jsonEncode(ops.first['body']);
+        final dependent = jsonEncode(ops.last);
+        ops.first['state'] = 'conflict';
+        ops.first['problem'] = {'code': 'COMPANY_CHANGED'};
+        r['operations'] = ops;
+        await h.store.save(r);
+        await h.controller.reconcileRegistrationCompany(
+          id,
+          crewId: '22222222-2222-4222-8222-222222222222',
+          crewName: 'EMPRESA ACTUAL',
+        );
+        final after = h.store.read(id)!;
+        expect(after.operations.first['state'], 'superseded');
+        expect(jsonEncode(after.operations.first['body']), originalBody);
+        expect(jsonEncode(after.operations.last), dependent);
+        expect(after.pending.map((op) => object(op['body'])['type']), [
+          'register',
+          'registration_close',
+        ]);
+        expect(
+          object(after.pending.first['body'])['operationId'],
+          isNot(object(ops.first['body'])['operationId']),
+        );
+        expect(
+          object(after.working['registrationCompany'])['name'],
+          'EMPRESA ACTUAL',
+        );
+        expect(File(photo['localPath']).existsSync(), true);
+        await expectLater(
+          h.controller.reconcileRegistrationCompany(
+            id,
+            crewId: '22222222-2222-4222-8222-222222222222',
+            crewName: 'OTRA',
+          ),
+          throwsStateError,
+        );
+      } finally {
+        await h.close();
+      }
+    },
+  );
+  test(
     'registration captures configured company only for an API declaring the capability',
     () async {
       final h = Harness();
