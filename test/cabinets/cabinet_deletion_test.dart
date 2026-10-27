@@ -64,6 +64,33 @@ void main() {
   });
   tearDown(() async => h.close());
   test(
+    'local deletion removes only matching dossier and media without API calls',
+    () async {
+      final id = await h.controller.scan('AQ26000017', 'A1', false);
+      final other = await h.controller.scan('AQ26000025', 'A2', false);
+      final folder = Directory('${h.directory.path}/cabinets/$id');
+      await folder.create(recursive: true);
+      final photo = File('${folder.path}/original.jpg');
+      await photo.writeAsString('local-only');
+      await h.store.media.metadataBox.put('target', '{"surveyId":"$id"}');
+      await h.store.media.metadataBox.put('other', '{"surveyId":"$other"}');
+      await expectLater(
+        h.controller.deleteLocalRegistration(id, 'AQ26000025'),
+        throwsStateError,
+      );
+      expect(h.store.read(id), isNotNull);
+      await h.controller.deleteLocalRegistration(id, 'AQ26000017');
+      expect(h.store.read(id), isNull);
+      expect(h.store.read(other), isNotNull);
+      expect(await photo.exists(), isFalse);
+      expect(h.store.media.metadataBox.get('target'), isNull);
+      expect(h.store.media.metadataBox.get('other'), isNotNull);
+      expect(remote.deletionCalls, isEmpty);
+      expect(remote.calls, isEmpty);
+    },
+  );
+
+  test(
     'permanent deletion clears only confirmed dossier, permits rescan with new UUID',
     () async {
       final id = await h.controller.scan('AQ26000017', 'A1', false);

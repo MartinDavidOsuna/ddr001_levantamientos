@@ -53,6 +53,7 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
   StreamSubscription<LocationFix>? _cabinetFixes;
   bool _applyingGps = false;
   bool syncing = false, refreshing = false, capturing = false;
+  bool _removingLocal = false;
   String? message;
   final Set<String> _submitting = {};
   bool submitting(String id) =>
@@ -169,7 +170,7 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> refresh() async {
-    if (!eligible || refreshing) return;
+    if (!eligible || refreshing || _removingLocal) return;
     final user = actor!;
     refreshing = true;
     var catalogAvailable = false;
@@ -643,6 +644,36 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
       );
     }
     if (!allowed || actor != user) return;
+    await _removeLocalDossier(id);
+    _notify();
+  }
+
+  Future<void> deleteLocalRegistration(String id, String uid) async {
+    _requireWritable(id);
+    if (syncing ||
+        refreshing ||
+        capturing ||
+        _removingLocal ||
+        _applyingGps ||
+        _photoLoads.isNotEmpty ||
+        _evidenceLoads.isNotEmpty ||
+        _submitting.isNotEmpty) {
+      throw StateError('Espera a que terminen las operaciones actuales.');
+    }
+    if (cabinetUid(uid) != record(id).working['uid']) {
+      throw StateError('El número no coincide.');
+    }
+    _removingLocal = true;
+    _retry?.cancel();
+    try {
+      await _removeLocalDossier(id);
+    } finally {
+      _removingLocal = false;
+      _notify();
+    }
+  }
+
+  Future<void> _removeLocalDossier(String id) async {
     await _serial(() async {
       // Only the confirmed dossier directory and its own Hive rows are removed.
       final root = await camera.supportDirectory();
@@ -681,7 +712,6 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
       await store.box.delete('cabinet:$id');
       await store.box.flush();
     });
-    _notify();
   }
 
   Future<void> enqueue(String id, String type, Json extra) async {
@@ -1115,7 +1145,8 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
     if (gps.altitude != null) 'altitude': gps.altitude,
   };
   Future<void> synchronize({bool force = false}) async {
-    if (!allowed || (!app.online && !force) || syncing) return;
+    if (!allowed || (!app.online && !force) || syncing || _removingLocal)
+      return;
     syncing = true;
     _retry?.cancel();
     final user = actor!;

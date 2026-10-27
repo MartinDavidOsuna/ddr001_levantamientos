@@ -1049,6 +1049,19 @@ class CabinetRegistration extends StatelessWidget {
                     if (context.mounted) Navigator.pop(context);
                   }),
           ),
+        OutlinedButton.icon(
+          icon: const Icon(Icons.phonelink_erase),
+          label: const Text('Eliminar sólo de este teléfono'),
+          onPressed: () => cabinetAction(context, () async {
+            final uid = await showDialog<String>(
+              context: context,
+              builder: (_) => CabinetDeleteDialog(id: id, localOnly: true),
+            );
+            if (uid == null) return;
+            await c.deleteLocalRegistration(id, uid);
+            if (context.mounted) Navigator.pop(context);
+          }),
+        ),
         if (r.working['status'] != 'draft')
           CabinetBusyButton(
             onPressed: () => cabinetAction(context, () async {
@@ -2829,8 +2842,13 @@ String cabinetCaptureDate(Object? value) {
 }
 
 class CabinetDeleteDialog extends StatefulWidget {
-  const CabinetDeleteDialog({super.key, required this.id});
+  const CabinetDeleteDialog({
+    super.key,
+    required this.id,
+    this.localOnly = false,
+  });
   final String id;
+  final bool localOnly;
   @override
   State<CabinetDeleteDialog> createState() => _CabinetDeleteDialogState();
 }
@@ -2855,7 +2873,11 @@ class _CabinetDeleteDialogState extends State<CabinetDeleteDialog> {
     }
     final r = c.record(widget.id);
     return AlertDialog(
-      title: const Text('Eliminar definitivamente'),
+      title: Text(
+        widget.localOnly
+            ? 'Eliminar sólo del teléfono'
+            : 'Eliminar definitivamente',
+      ),
       content: SingleChildScrollView(
         child: Form(
           key: form,
@@ -2863,7 +2885,9 @@ class _CabinetDeleteDialogState extends State<CabinetDeleteDialog> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                '${displayUid(r.working['uid'])}: se eliminarán el expediente, historial, fotografías y capturas pendientes de este teléfono y de la API. No se puede deshacer. Después podrás registrar el mismo número desde Escanear gabinete. Requiere conexión.',
+                widget.localOnly
+                    ? '${displayUid(r.working['uid'])}: se eliminarán sólo de este teléfono el expediente, fotos, respuestas y operaciones pendientes. La API no se modifica. Si existe en el servidor podrá volver a descargarse. No se puede deshacer.'
+                    : '${displayUid(r.working['uid'])}: se eliminarán el expediente, historial, fotografías y capturas pendientes de este teléfono y de la API. No se puede deshacer. Después podrás registrar el mismo número desde Escanear gabinete. Requiere conexión.',
               ),
               TextFormField(
                 controller: uid,
