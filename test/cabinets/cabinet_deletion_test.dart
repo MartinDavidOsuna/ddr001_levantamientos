@@ -91,6 +91,62 @@ void main() {
   );
 
   test(
+    'confirmed remote absence allows only the original actor to discard locally',
+    () async {
+      final id = await h.controller.scan('AQ26000017', 'A1', false);
+      final other = await h.controller.scan('AQ26000025', 'A2', false);
+      final preserved = clone(h.store.read(other)!.json);
+      final folder = Directory('${h.directory.path}/cabinets/$id');
+      await folder.create(recursive: true);
+      await File('${folder.path}/photo.jpg').writeAsString('pending photo');
+      final row = clone(h.store.read(id)!.json);
+      for (final code in [
+        'VERSION_CONFLICT',
+        'ARCHIVE_UNAVAILABLE',
+        'HTTP_404',
+        null,
+      ]) {
+        row['deletion'] = {'actor': h.controller.actor, 'code': code};
+        await h.store.save(row);
+        await expectLater(
+          h.controller.deleteLocalRegistration(id, 'AQ26000017'),
+          throwsStateError,
+        );
+        expect(h.store.read(id), isNotNull);
+        expect(await folder.exists(), isTrue);
+      }
+      row['deletion'] = {
+        'actor': 'another-resident',
+        'code': 'CABINET_NOT_FOUND',
+      };
+      await h.store.save(row);
+      await expectLater(
+        h.controller.deleteLocalRegistration(id, 'AQ26000017'),
+        throwsStateError,
+      );
+      row['deletion'] = {
+        'actor': h.controller.actor,
+        'code': 'CABINET_NOT_FOUND',
+      };
+      await h.store.save(row);
+      await expectLater(
+        h.controller.saveDraft(id, 'model', 'A3'),
+        throwsStateError,
+      );
+      await expectLater(
+        h.controller.deleteLocalRegistration(id, 'AQ26000025'),
+        throwsStateError,
+      );
+      await h.controller.deleteLocalRegistration(id, 'AQ26000017');
+      expect(h.store.read(id), isNull);
+      expect(await folder.exists(), isFalse);
+      expect(h.store.read(other)!.json, preserved);
+      expect(remote.deletionCalls, isEmpty);
+      expect(remote.calls, isEmpty);
+    },
+  );
+
+  test(
     'permanent deletion clears only confirmed dossier, permits rescan with new UUID',
     () async {
       final id = await h.controller.scan('AQ26000017', 'A1', false);

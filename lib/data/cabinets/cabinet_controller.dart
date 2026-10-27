@@ -91,9 +91,14 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
     return r;
   }
 
-  void _requireWritable(String id) {
+  void _requireWritable(String id, {bool discardMissingRemote = false}) {
     final r = record(id);
-    if (r.json['deletion'] != null) {
+    final deletion = object(r.json['deletion']);
+    final mayDiscard =
+        discardMissingRemote &&
+        deletion['code'] == 'CABINET_NOT_FOUND' &&
+        deletion['actor'] == actor;
+    if (r.json['deletion'] != null && !mayDiscard) {
       throw StateError(
         'Eliminación en curso. Reintenta la sincronización para terminar.',
       );
@@ -649,7 +654,7 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> deleteLocalRegistration(String id, String uid) async {
-    _requireWritable(id);
+    _requireWritable(id, discardMissingRemote: true);
     if (syncing ||
         refreshing ||
         capturing ||

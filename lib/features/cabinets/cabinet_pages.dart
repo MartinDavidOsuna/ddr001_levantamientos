@@ -955,7 +955,9 @@ class CabinetRegistration extends StatelessWidget {
       children: [
         if (r.json['deletion'] != null)
           Text(
-            'Eliminación pendiente: ${object(r.json['deletion'])['error'] ?? 'esperando confirmación del servidor'}. Reintenta desde Sincronización.',
+            object(r.json['deletion'])['code'] == 'CABINET_NOT_FOUND'
+                ? 'La API no encuentra este expediente. Puedes descartarlo con Eliminar sólo de este teléfono; los demás registros se conservan.'
+                : 'Eliminación pendiente: ${object(r.json['deletion'])['error'] ?? 'esperando confirmación del servidor'}. Reintenta desde Sincronización.',
           ),
         if (object(r.json['deletion'])['code'] == 'VERSION_CONFLICT')
           TextButton(
