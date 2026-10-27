@@ -459,17 +459,34 @@ class _CabinetRegisterPageState extends State<CabinetRegisterPage> {
             icon: const Icon(Icons.qr_code_scanner),
             label: const Text('Abrir cámara QR'),
           ),
+          const SizedBox(height: 28),
           TextField(
             controller: uid,
             onSubmitted: busy ? null : open,
             decoration: InputDecoration(
-              labelText: 'Número de hidrante',
-              hintText: 'Ejemplo: AQ26-00001-7',
+              labelText: widget.installation
+                  ? 'ej: AQ26-00000-0'
+                  : 'Número de hidrante',
+              hintText: widget.installation ? null : 'Ejemplo: AQ26-00001-7',
               suffixIcon: widget.installation
                   ? IconButton.filled(
                       tooltip: 'Buscar gabinete',
+                      style: IconButton.styleFrom(
+                        backgroundColor: Theme.of(context).colorScheme.primary,
+                        foregroundColor: Theme.of(
+                          context,
+                        ).colorScheme.onPrimary,
+                        fixedSize: const Size(48, 48),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
                       onPressed: busy ? null : () => open(uid.text),
-                      icon: const Icon(Icons.search),
+                      icon: Icon(
+                        Icons.search,
+                        size: 26,
+                        color: Theme.of(context).colorScheme.onPrimary,
+                      ),
                     )
                   : null,
               helperText:
@@ -513,7 +530,7 @@ class _CabinetRegisterPageState extends State<CabinetRegisterPage> {
                       ),
                     ),
               icon: const Icon(Icons.list_alt),
-              label: const Text('Ver gabinetes disponibles'),
+              label: const Text('Gabinetes disponibles'),
             ),
           if (!widget.installation)
             const Text(
