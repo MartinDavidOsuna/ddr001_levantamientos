@@ -26,6 +26,66 @@ void main() {
     ],
     child: MaterialApp(home: child),
   );
+  testWidgets(
+    'installation lookup orders QR before manual input and list returns back',
+    (tester) async {
+      await tester.pumpWidget(
+        host(const CabinetRegisterPage(installation: true)),
+      );
+      expect(
+        tester.getTopLeft(find.text('Abrir cámara QR')).dy,
+        lessThan(tester.getTopLeft(find.byType(TextField)).dy),
+      );
+      expect(find.text('Ejemplo: AQ26-00001-7'), findsOneWidget);
+      expect(find.byTooltip('Buscar gabinete'), findsOneWidget);
+      await tester.tap(find.text('Ver gabinetes disponibles'));
+      await tester.pumpAndSettle();
+      expect(find.text('Gabinetes disponibles'), findsOneWidget);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(find.text('Instalar gabinete'), findsOneWidget);
+    },
+  );
+  testWidgets(
+    'available table filters installed records and searches and sorts three columns',
+    (tester) async {
+      await tester.runAsync(() async {
+        for (final entry in [
+          ['one', 'AQ26000017', 'A3', 'validated', '2026-10-20'],
+          ['two', 'AQ26000025', 'A1', 'registered', '2026-10-21'],
+          ['three', 'AQ26000033', 'A2', 'installed', '2026-10-22'],
+          ['four', 'AQ26000041', 'A2', 'draft', '2026-10-22'],
+        ]) {
+          await h.store.save({
+            'id': entry[0],
+            'actor': h.controller.actor,
+            'working': {'uid': entry[1], 'model': entry[2], 'status': entry[3]},
+            'server': {},
+            'operations': [],
+            'photos': [],
+            'listing': {'createdAt': entry[4]},
+          });
+        }
+      });
+      await tester.pumpWidget(host(const AvailableCabinetsPage()));
+      final table = tester.widget<DataTable>(find.byType(DataTable));
+      expect(table.columns.length, 3);
+      expect(table.rows.length, 2);
+      expect(find.text('AQ26-00003-3'), findsNothing);
+      await tester.tap(find.text('Modelo'));
+      await tester.pumpAndSettle();
+      var rows = tester.widget<DataTable>(find.byType(DataTable)).rows;
+      expect((rows.first.cells.first.child as Text).data, 'AQ26-00002-5');
+      await tester.tap(find.text('Fecha de\nregistro'));
+      await tester.pumpAndSettle();
+      rows = tester.widget<DataTable>(find.byType(DataTable)).rows;
+      expect((rows.first.cells.first.child as Text).data, 'AQ26-00001-7');
+      await tester.enterText(find.byType(TextField), 'A1');
+      await tester.pumpAndSettle();
+      expect(tester.widget<DataTable>(find.byType(DataTable)).rows.length, 1);
+      expect(find.text('AQ26-00002-5'), findsOneWidget);
+    },
+  );
   testWidgets('permanent deletion requires acknowledgment and matching UID', (
     tester,
   ) async {
@@ -126,6 +186,27 @@ void main() {
       expect(find.text('INSTALAR GABINETE'), findsNothing);
     },
   );
+  testWidgets(
+    'selecting an available row opens installation and preserves return route',
+    (tester) async {
+      final id = (await tester.runAsync(
+        () => h.controller.scan('AQ26000017', 'A1', false),
+      ))!;
+      await tester.runAsync(() async {
+        final r = h.store.read(id)!.json;
+        r['working']['status'] = 'validated';
+        await h.store.save(r);
+      });
+      await tester.pumpWidget(host(const AvailableCabinetsPage()));
+      await tester.tap(find.text('AQ26-00001-7'));
+      await tester.pumpAndSettle();
+      expect(find.text('Instalación'), findsOneWidget);
+      expect(find.text('Revisión final'), findsOneWidget);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(find.text('Gabinetes disponibles'), findsOneWidget);
+    },
+  );
   testWidgets('install entry resolves local UID and opens only field stages', (
     tester,
   ) async {
@@ -144,7 +225,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Modelo base'), findsNothing);
     await tester.enterText(find.byType(TextField), 'AQ26-00001-7');
-    await tester.runAsync(() => tester.tap(find.text('Buscar gabinete')));
+    await tester.runAsync(() => tester.tap(find.byTooltip('Buscar gabinete')));
     await tester.pumpAndSettle();
     expect(find.text('Instalación'), findsOneWidget);
     expect(find.text('Revisión final'), findsOneWidget);
@@ -173,7 +254,7 @@ void main() {
       host(const CabinetRegisterPage(installation: true)),
     );
     await tester.enterText(find.byType(TextField), 'AQ26-00001-7');
-    await tester.runAsync(() => tester.tap(find.text('Buscar gabinete')));
+    await tester.runAsync(() => tester.tap(find.byTooltip('Buscar gabinete')));
     await tester.pumpAndSettle();
     expect(find.text('Gabinete no encontrado'), findsOneWidget);
     expect(h.controller.records, isEmpty);

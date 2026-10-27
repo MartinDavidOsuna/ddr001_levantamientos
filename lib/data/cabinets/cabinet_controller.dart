@@ -201,6 +201,13 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
         for (final row in rows) {
           if (!allowed || actor != user) return;
           await pull('${row['cabinet_id']}'.toLowerCase());
+          if (!allowed || actor != user) return;
+          await _edit('${row['cabinet_id']}'.toLowerCase(), (value) {
+            value['listing'] = {
+              'createdAt': row['created_at'],
+              'exclusiveBaseId': row['exclusive_base_id'],
+            };
+          });
         }
         if (page * 100 >= (data['total'] as num? ?? 0) || rows.isEmpty) break;
         page++;

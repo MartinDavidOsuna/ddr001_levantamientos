@@ -441,11 +441,37 @@ class _CabinetRegisterPageState extends State<CabinetRegisterPage> {
             'Escanea el QR o escribe el UID de la placa. Una lectura repetida abre el expediente existente.',
           ),
           const SizedBox(height: 16),
+          CabinetBusyButton.icon(
+            onPressed: busy
+                ? null
+                : () async {
+                    final raw = await Navigator.push<String>(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const CabinetScannerPage(),
+                      ),
+                    );
+                    if (raw != null && mounted) {
+                      uid.text = raw;
+                      await open(raw);
+                    }
+                  },
+            icon: const Icon(Icons.qr_code_scanner),
+            label: const Text('Abrir cámara QR'),
+          ),
           TextField(
             controller: uid,
-            decoration: const InputDecoration(
-              labelText: 'Número de hidrante / URL QR',
-              hintText: 'AQ26-00001-7',
+            onSubmitted: busy ? null : open,
+            decoration: InputDecoration(
+              labelText: 'Número de hidrante',
+              hintText: 'Ejemplo: AQ26-00001-7',
+              suffixIcon: widget.installation
+                  ? IconButton.filled(
+                      tooltip: 'Buscar gabinete',
+                      onPressed: busy ? null : () => open(uid.text),
+                      icon: const Icon(Icons.search),
+                    )
+                  : null,
               helperText:
                   'Lee la placa del gabinete. Un UID válido no garantiza que sea el gabinete correcto.',
               helperMaxLines: 3,
@@ -471,36 +497,195 @@ class _CabinetRegisterPageState extends State<CabinetRegisterPage> {
               onChanged: (v) => setState(() => automated = v),
             ),
           ],
-          CabinetBusyButton.icon(
-            onPressed: busy
-                ? null
-                : () async {
-                    final raw = await Navigator.push<String>(
+          if (!widget.installation)
+            TextButton(
+              onPressed: busy ? null : () => open(uid.text),
+              child: const Text('Continuar con UID escrito'),
+            ),
+          if (widget.installation)
+            CabinetBusyButton.icon(
+              onPressed: busy
+                  ? null
+                  : () => Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) => const CabinetScannerPage(),
+                        builder: (_) => const AvailableCabinetsPage(),
                       ),
-                    );
-                    if (raw != null && mounted) {
-                      uid.text = raw;
-                      await open(raw);
-                    }
-                  },
-            icon: const Icon(Icons.qr_code_scanner),
-            label: const Text('Abrir cámara QR'),
-          ),
-          TextButton(
-            onPressed: busy ? null : () => open(uid.text),
-            child: Text(
-              widget.installation
-                  ? 'Buscar gabinete'
-                  : 'Continuar con UID escrito',
+                    ),
+              icon: const Icon(Icons.list_alt),
+              label: const Text('Ver gabinetes disponibles'),
             ),
-          ),
           if (!widget.installation)
             const Text(
               'Sin conexión, la unicidad global se comprobará al sincronizar. Para completar el registro se requiere fotografía de identificación.',
             ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Available registration records; installation closure remains API-authoritative.
+class AvailableCabinetsPage extends StatefulWidget {
+  const AvailableCabinetsPage({super.key});
+  @override
+  State<AvailableCabinetsPage> createState() => _AvailableCabinetsPageState();
+}
+
+class _AvailableCabinetsPageState extends State<AvailableCabinetsPage> {
+  String search = '';
+  int sortColumn = 0;
+  bool ascending = true;
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final c = context.read<CabinetController>();
+      if (c.allowed && c.app.online) unawaited(c.refresh());
+    });
+  }
+
+  String model(CabinetRecord r) =>
+      '${r.working['model']}${r.working['automated'] == true ? '-A' : ''}';
+  DateTime? date(CabinetRecord r) {
+    final captured = r.operations
+        .where((op) => object(op['body'])['type'] == 'register')
+        .firstOrNull;
+    return DateTime.tryParse(
+      '${object(captured?['body'])['capturedAt'] ?? object(r.json['listing'])['createdAt']}',
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.watch<CabinetController>();
+    if (!c.allowed) return cabinetDenied(c);
+    final rows =
+        c.records.where((r) {
+          if (r.json['deletion'] != null ||
+              ![
+                'registered',
+                'incomplete',
+                'validated',
+              ].contains(r.working['status']) ||
+              ['installed', 'deliverable'].contains(r.server['status']) ||
+              object(r.json['listing'])['exclusiveBaseId'] != null) {
+            return false;
+          }
+          final d = date(r);
+          return '${displayUid(r.working['uid'])} ${r.working['uid']} ${model(r)} ${d == null ? '' : DateFormat('dd/MM/yyyy').format(d.toLocal())}'
+              .toLowerCase()
+              .contains(search.toLowerCase().trim());
+        }).toList()..sort((a, b) {
+          final comparison = switch (sortColumn) {
+            1 => model(a).compareTo(model(b)),
+            2 => (date(a)?.millisecondsSinceEpoch ?? 0).compareTo(
+              date(b)?.millisecondsSinceEpoch ?? 0,
+            ),
+            _ => '${a.working['uid']}'.compareTo('${b.working['uid']}'),
+          };
+          final value = comparison == 0 ? a.id.compareTo(b.id) : comparison;
+          return ascending ? value : -value;
+        });
+    void sort(int column, bool direction) => setState(() {
+      sortColumn = column;
+      ascending = direction;
+    });
+    Future<void> open(CabinetRecord r) => cabinetAction(context, () async {
+      if (c.app.online) await c.pull(r.id);
+      if (!context.mounted || !c.allowed) return;
+      if ([
+        'installed',
+        'deliverable',
+      ].contains(c.record(r.id).server['status'])) {
+        throw StateError(
+          'Este gabinete ya está instalado. Actualiza la lista.',
+        );
+      }
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => CabinetDetailPage(id: r.id, fieldWork: true),
+        ),
+      );
+    });
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Gabinetes disponibles'),
+        actions: [
+          IconButton(
+            tooltip: 'Actualizar',
+            onPressed: c.refreshing ? null : c.refresh,
+            icon: const Icon(Icons.refresh),
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          if (c.refreshing) const LinearProgressIndicator(),
+          if (!c.app.online)
+            const Text('Sin conexión: gabinetes descargados en este teléfono.'),
+          if (c.message != null) Text(c.message!),
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: TextField(
+              decoration: const InputDecoration(
+                labelText: 'Buscar número, modelo o fecha',
+                prefixIcon: Icon(Icons.search),
+              ),
+              onChanged: (value) => setState(() => search = value),
+            ),
+          ),
+          Expanded(
+            child: rows.isEmpty
+                ? const Center(
+                    child: Text(
+                      'No hay gabinetes disponibles con esta búsqueda.',
+                    ),
+                  )
+                : SingleChildScrollView(
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: DataTable(
+                        showCheckboxColumn: false,
+                        columnSpacing: 16,
+                        horizontalMargin: 12,
+                        sortColumnIndex: sortColumn,
+                        sortAscending: ascending,
+                        columns: [
+                          DataColumn(label: const Text('Número'), onSort: sort),
+                          DataColumn(label: const Text('Modelo'), onSort: sort),
+                          DataColumn(
+                            label: const Text('Fecha de\nregistro'),
+                            onSort: sort,
+                          ),
+                        ],
+                        rows: rows
+                            .map(
+                              (r) => DataRow(
+                                key: ValueKey(r.id),
+                                onSelectChanged: (_) => open(r),
+                                cells: [
+                                  DataCell(Text(displayUid(r.working['uid']))),
+                                  DataCell(Text(model(r))),
+                                  DataCell(
+                                    Text(
+                                      date(r) == null
+                                          ? 'Sin fecha'
+                                          : DateFormat(
+                                              'dd/MM/yyyy',
+                                            ).format(date(r)!.toLocal()),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            )
+                            .toList(),
+                      ),
+                    ),
+                  ),
+          ),
         ],
       ),
     );
