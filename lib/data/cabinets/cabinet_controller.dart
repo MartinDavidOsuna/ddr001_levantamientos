@@ -1145,8 +1145,9 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
     if (gps.altitude != null) 'altitude': gps.altitude,
   };
   Future<void> synchronize({bool force = false}) async {
-    if (!allowed || (!app.online && !force) || syncing || _removingLocal)
+    if (!allowed || (!app.online && !force) || syncing || _removingLocal) {
       return;
+    }
     syncing = true;
     _retry?.cancel();
     final user = actor!;
