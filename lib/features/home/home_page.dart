@@ -7,6 +7,8 @@ import '../surveys/new_survey_page.dart';
 import '../../data/cabinets/cabinet_controller.dart';
 import '../cabinets/cabinet_pages.dart';
 import '../resident/resident_review_page.dart';
+import '../hydrostatic/hydrostatic_controller.dart';
+import '../hydrostatic/hydrostatic_pages.dart';
 
 class HomePage extends StatelessWidget {
   const HomePage({super.key, this.onSurveysTap});
@@ -16,6 +18,7 @@ class HomePage extends StatelessWidget {
     final app = context.watch<AppController>(),
         reviewer = app.profile?.role.isReviewer ?? false;
     final cabinets = context.watch<CabinetController?>();
+    final hydrostatic = context.watch<HydrostaticController?>();
     final cabinetPending =
         cabinets?.records.where((r) => !r.synchronized).length ?? 0;
     final allSyncing = app.syncing || (cabinets?.syncing ?? false);
@@ -93,6 +96,19 @@ class HomePage extends StatelessWidget {
                 ),
               ),
             ],
+          ],
+          if (hydrostatic?.allowed == true) ...[
+            const SizedBox(height: 12),
+            _ActionCard(
+              key: const Key('hydrostatic_action'),
+              icon: Icons.speed,
+              title: 'PRUEBAS HIDROSTÁTICAS',
+              subtitle: 'Preparación e historial local de pruebas',
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const HydrostaticListPage()),
+              ),
+            ),
           ],
           const SizedBox(height: 20),
           if (app.unownedPendingCount > 0 && !reviewer)

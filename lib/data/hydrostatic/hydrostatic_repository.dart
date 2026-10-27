@@ -195,46 +195,59 @@ class HydrostaticRepository {
     required String operationId,
     required String testId,
     required HydrostaticCabinetSnapshot cabinet,
-  }) => _command(operationId, testId, 'prepare', cabinet.toJson(), (
-    before,
-    now,
-  ) async {
-    hydroRequire(before == null, 'ALREADY_EXISTS', 'UUID ya utilizado.');
-    final actor = access().actor;
-    return {
-      'id': testId,
-      'schemaVersion': 1,
-      'revision': 0,
-      'cabinet': cabinet.toJson(),
-      'actor': actor.toJson(),
-      'catalogVersion': HydrostaticJoint.version,
-      'state': 'PREPARATION',
-      'result': 'PENDING',
-      'attemptNumber': null,
-      'createdAt': now.utc.toUtc().toIso8601String(),
-      'updatedAt': now.utc.toUtc().toIso8601String(),
-      'startedAt': null,
-      'endedAt': null,
-      'closedAt': null,
-      'durationMs': null,
-      'location': null,
-      'startClock': null,
-      'endClock': null,
-      'targetMilliBar': 5000,
-      'finalMilliBar': 4000,
-      'leaks': <HydroJson>[],
-      'evidence': <HydroJson>[],
-      'video': const HydrostaticVideoDeclaration(
-        HydrostaticVideoState.notApplicable,
-      ).toJson(),
-      'hadLeaks': null,
-      'timeState': 'CONSISTENT',
-      'recoveryState': 'CLEAN',
-      'syncState': 'LOCAL_ONLY',
-      'deletionState': 'NONE',
-      'anomalies': <String>[],
-    };
-  });
+  }) {
+    // Bind the initiating identity before entering the serialized writer. A
+    // queued preparation must never migrate to a newly signed-in user.
+    final origin = access().actor;
+    return _command(operationId, testId, 'prepare', cabinet.toJson(), (
+      before,
+      now,
+    ) async {
+      hydroRequire(before == null, 'ALREADY_EXISTS', 'UUID ya utilizado.');
+      final actor = access().actor;
+      hydroRequire(
+        actor.userId == origin.userId &&
+            actor.sessionId == origin.sessionId &&
+            actor.deviceInstallationId == origin.deviceInstallationId,
+        'ACTOR_CHANGED',
+        'La sesión cambió mientras esperaba el guardado.',
+      );
+      return {
+        'id': testId,
+        'schemaVersion': 1,
+        'revision': 0,
+        'cabinet': cabinet.toJson(),
+        'actor': actor.toJson(),
+        'catalogVersion': HydrostaticJoint.version,
+        'state': 'PREPARATION',
+        'result': 'PENDING',
+        'attemptNumber': null,
+        'createdAt': now.utc.toUtc().toIso8601String(),
+        'updatedAt': now.utc.toUtc().toIso8601String(),
+        'startedAt': null,
+        'endedAt': null,
+        'closedAt': null,
+        'durationMs': null,
+        'location': null,
+        'startClock': null,
+        'endClock': null,
+        'targetMilliBar': 5000,
+        'finalMilliBar': 4000,
+        'leaks': <HydroJson>[],
+        'evidence': <HydroJson>[],
+        'video': const HydrostaticVideoDeclaration(
+          HydrostaticVideoState.notApplicable,
+        ).toJson(),
+        'hadLeaks': null,
+        'timeState': 'CONSISTENT',
+        'recoveryState': 'CLEAN',
+        'syncState': 'LOCAL_ONLY',
+        'deletionState': 'NONE',
+        'anomalies': <String>[],
+      };
+    });
+  }
+
   Future<HydrostaticTest> addEvidence(
     String id,
     String op,
