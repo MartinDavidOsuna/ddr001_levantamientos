@@ -28,7 +28,7 @@ void main() {
   });
   tearDown(() async => h.close());
   widgets.localWidgetTest(
-    'capture initial, GPS start, capture 5 bar and finish pending with disabled answers',
+    'capture initial, GPS start, capture 5 bar and finish pending with enabled answers',
     (tester) async {
       await widgets.open(tester, h);
       await widgets.manual(tester);
@@ -74,7 +74,7 @@ void main() {
           tester
               .widget<FilledButton>(find.widgetWithText(FilledButton, answer))
               .onPressed,
-          isNull,
+          isNotNull,
         );
       }
       expect(h.repo.get(id)!.state, HydrostaticTestState.endedPendingResult);

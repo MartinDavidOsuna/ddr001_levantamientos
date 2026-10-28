@@ -56,10 +56,19 @@ class DurableHydrostaticPhotos implements HydrostaticPhotoCoordinator {
     repository.access().requireUser(intent.actorId);
     final test = repository.get(intent.testId)!;
     hydroRequire(
+      !repository.resultExpired(test),
+      'RESULT_EXPIRED',
+      'Prueba descartada por plazo vencido.',
+    );
+    hydroRequire(
       (intent.role == HydrostaticEvidenceRole.initialSetup &&
               test.state == HydrostaticTestState.preparation) ||
           (intent.role == HydrostaticEvidenceRole.manometer5Bar &&
-              test.state == HydrostaticTestState.active),
+              test.state == HydrostaticTestState.active) ||
+          (intent.role == HydrostaticEvidenceRole.final4Bar &&
+              test.state == HydrostaticTestState.approvalEvidencePending) ||
+          (intent.role == HydrostaticEvidenceRole.leakEvidence &&
+              test.state == HydrostaticTestState.leakDetailsPending),
       'INVALID_STATE',
       'La captura no corresponde a la etapa actual.',
     );
@@ -139,7 +148,9 @@ class DurableHydrostaticPhotos implements HydrostaticPhotoCoordinator {
       // File time is an estimate, not EXIF shutter time or camera launch time.
       final at = knownTime ? modified : returned;
       HydrostaticLocation? gps;
-      if (role == HydrostaticEvidenceRole.manometer5Bar && allowGps) {
+      if ((role == HydrostaticEvidenceRole.manometer5Bar ||
+              role == HydrostaticEvidenceRole.final4Bar) &&
+          allowGps) {
         try {
           final candidate = await locations.capture();
           if (candidate.validAt(at, photo: true)) gps = candidate;
@@ -147,11 +158,14 @@ class DurableHydrostaticPhotos implements HydrostaticPhotoCoordinator {
           /* Preserve image pending GPS. */
         }
       }
-      final inInterval =
-          role != HydrostaticEvidenceRole.manometer5Bar ||
-          (test.startedAt != null &&
-              !at.isBefore(test.startedAt!) &&
-              (test.endedAt == null || !at.isAfter(test.endedAt!)));
+      final inInterval = role == HydrostaticEvidenceRole.final4Bar
+          ? test.endedAt != null &&
+                repository.approvalPolicy.maximumFinalDelay != null &&
+                repository.approvalPolicy.accepts(test.endedAt!, at)
+          : role != HydrostaticEvidenceRole.manometer5Bar ||
+                (test.startedAt != null &&
+                    !at.isBefore(test.startedAt!) &&
+                    (test.endedAt == null || !at.isAfter(test.endedAt!)));
       final decoded = await decode(file);
       evidence = HydrostaticEvidence(
         id: id,

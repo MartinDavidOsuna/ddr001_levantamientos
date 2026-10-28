@@ -6,6 +6,7 @@ import '../../domain/hydrostatic/hydrostatic_models.dart';
 import '../../domain/cabinets/cabinet_models.dart';
 import 'hydrostatic_controller.dart';
 import 'hydrostatic_pages.dart';
+import 'hydrostatic_result_pages.dart';
 
 Future<void> hydroAction(
   BuildContext context,
@@ -35,13 +36,14 @@ class HydrostaticEvidencePanel extends StatelessWidget {
     super.key,
     required this.id,
     required this.role,
+    this.readOnly = false,
   });
   final String id;
   final HydrostaticEvidenceRole role;
+  final bool readOnly;
   @override
   Widget build(BuildContext context) {
     final c = context.watch<HydrostaticController>(), t = c.document(id);
-    final initial = role == HydrostaticEvidenceRole.initialSetup;
     final photos = t.evidence.where((e) => e.role == role).toList();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -50,15 +52,22 @@ class HydrostaticEvidencePanel extends StatelessWidget {
           Text(
             '${c.pendingCaptures(id)} captura(s) pendientes de recuperación. Los archivos se conservan; no cuentan como evidencia válida.',
           ),
-        Text(
-          initial ? 'FOTOGRAFÍA INICIAL' : 'FOTOGRAFÍA A 5 BAR',
-          style: Theme.of(context).textTheme.titleMedium,
-        ),
-        Text(
-          initial
-              ? 'Toma una fotografía donde se vea el gabinete completo conectado al banco de pruebas.'
-              : 'Cuando el manómetro indique 5 bar, toma una fotografía clara en la que se vea la lectura de presión.',
-        ),
+        Text(switch (role) {
+          HydrostaticEvidenceRole.initialSetup => 'FOTOGRAFÍA INICIAL',
+          HydrostaticEvidenceRole.manometer5Bar => 'FOTOGRAFÍA A 5 BAR',
+          HydrostaticEvidenceRole.final4Bar => 'FOTOGRAFÍA FINAL A 4 BAR',
+          HydrostaticEvidenceRole.leakEvidence => 'FOTOGRAFÍAS DE FUGA',
+        }, style: Theme.of(context).textTheme.titleMedium),
+        Text(switch (role) {
+          HydrostaticEvidenceRole.initialSetup =>
+            'Toma una fotografía donde se vea el gabinete completo conectado al banco de pruebas.',
+          HydrostaticEvidenceRole.manometer5Bar =>
+            'Cuando el manómetro indique 5 bar, toma una fotografía clara en la que se vea la lectura de presión.',
+          HydrostaticEvidenceRole.final4Bar =>
+            'DEJA EL GABINETE PRESURIZADO A 4 BAR Y TOMA UNA FOTOGRAFÍA DEL MANÓMETRO.',
+          HydrostaticEvidenceRole.leakEvidence =>
+            'Toma una o más fotografías de las uniones con fuga.',
+        }),
         for (final e in photos)
           Card(
             child: Padding(
@@ -66,12 +75,20 @@ class HydrostaticEvidencePanel extends StatelessWidget {
               child: Column(
                 children: [
                   if (c.evidencePath != null)
-                    Image.file(
-                      File(c.evidencePath!(e)),
-                      height: 160,
-                      cacheWidth: 600,
-                      errorBuilder: (_, error, stack) => const Text(
-                        'Archivo no disponible. Se conserva el registro.',
+                    GestureDetector(
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              HydrostaticPhotoPage(id: id, evidenceId: e.id),
+                        ),
+                      ),
+                      child: Image.file(
+                        File(c.evidencePath!(e)),
+                        height: 160,
+                        cacheWidth: 600,
+                        errorBuilder: (_, error, stack) => const Text(
+                          'Archivo no disponible. Se conserva el registro.',
+                        ),
                       ),
                     ),
                   Text(
@@ -91,7 +108,19 @@ class HydrostaticEvidencePanel extends StatelessWidget {
                           : 'EVIDENCIA PENDIENTE O ARCHIVO NO DISPONIBLE',
                     ),
                   ),
-                  if (!initial && e.location == null)
+                  if (e.location != null)
+                    Text(
+                      'GPS: ${e.location!.latitude}, ${e.location!.longitude} · precisión ${e.location!.accuracy} m',
+                    ),
+                  if (e.location != null)
+                    Text('Fix GPS: ${hydroDateLabel(e.location!.fixAt)}'),
+                  if (e.jointCodes.isNotEmpty)
+                    Text(
+                      'Uniones: ${e.jointCodes.map((code) => HydrostaticJoint.catalog.firstWhere((j) => j.code == code).name).join(', ')}',
+                    ),
+                  Text('Integridad: ${hydroWire(e.integrity)}'),
+                  if (role == HydrostaticEvidenceRole.manometer5Bar &&
+                      e.location == null)
                     const Text(
                       'GPS pendiente. La imagen se conserva; toma otra fotografía con ubicación válida.',
                     ),
@@ -99,13 +128,20 @@ class HydrostaticEvidencePanel extends StatelessWidget {
               ),
             ),
           ),
-        FilledButton.icon(
-          onPressed: c.busy || c.photos == null || c.cameraRecoveryError != null
-              ? null
-              : () => hydroAction(context, () => c.capturePhoto(id, role)),
-          icon: const Icon(Icons.camera_alt),
-          label: Text(initial ? 'TOMAR FOTO' : 'TOMAR FOTO A 5 BAR'),
-        ),
+        if (!readOnly)
+          FilledButton.icon(
+            onPressed:
+                c.busy || c.photos == null || c.cameraRecoveryError != null
+                ? null
+                : () => hydroAction(context, () => c.capturePhoto(id, role)),
+            icon: const Icon(Icons.camera_alt),
+            label: Text(switch (role) {
+              HydrostaticEvidenceRole.initialSetup => 'TOMAR FOTO',
+              HydrostaticEvidenceRole.manometer5Bar => 'TOMAR FOTO A 5 BAR',
+              HydrostaticEvidenceRole.final4Bar => 'TOMAR FOTO A 4 BAR',
+              HydrostaticEvidenceRole.leakEvidence => 'TOMAR FOTO DE FUGA',
+            }),
+          ),
         if (photos.isNotEmpty)
           const Text(
             'Puedes tomar otra fotografía. Los originales anteriores se conservan.',
@@ -296,46 +332,38 @@ class HydrostaticPendingResultPage extends StatelessWidget {
   const HydrostaticPendingResultPage({super.key, required this.id});
   final String id;
   @override
+  Widget build(BuildContext context) => HydrostaticResultPage(id: id);
+}
+
+class HydrostaticPhotoPage extends StatelessWidget {
+  const HydrostaticPhotoPage({
+    super.key,
+    required this.id,
+    required this.evidenceId,
+  });
+  final String id, evidenceId;
+  @override
   Widget build(BuildContext context) => HydrostaticFrame(
-    title: 'RESULTADO PENDIENTE',
+    title: 'EVIDENCIA FOTOGRÁFICA',
     builder: (context, c) {
-      final t = c.document(id);
-      if (t.state != HydrostaticTestState.endedPendingResult) {
-        return const Center(
-          child: Text(
-            'Este intento no está pendiente de resultado. Consulta su detalle.',
-          ),
-        );
+      final e = c
+          .document(id)
+          .evidence
+          .where((e) => e.id == evidenceId)
+          .firstOrNull;
+      if (e == null || c.evidencePath == null) {
+        return const Text('Archivo no disponible');
       }
-      return ListView(
-        padding: const EdgeInsets.all(20),
-        children: [
-          Text(displayUid(t.cabinet.uid)),
-          Text('Prueba #${t.attemptNumber}'),
-          Text('Inicio: ${hydroDateLabel(t.startedAt)}'),
-          Text('Fin: ${hydroDateLabel(t.endedAt)}'),
-          Text('Duración: ${hydroDuration(t)}'),
-          if (t.timeState == HydrostaticTimeState.needsReview)
-            const Text('Duración pendiente de revisión por anomalía temporal.'),
-          const Text('¿SE REGISTRARON FUGAS?'),
-          const Wrap(
-            spacing: 16,
-            children: [
-              FilledButton(onPressed: null, child: Text('SÍ')),
-              FilledButton(onPressed: null, child: Text('NO')),
-            ],
+      return InteractiveViewer(
+        minScale: 0.5,
+        maxScale: 5,
+        child: Center(
+          child: Image.file(
+            File(c.evidencePath!(e)),
+            errorBuilder: (_, error, stack) =>
+                const Text('Archivo no disponible'),
           ),
-          const Text(
-            'El registro de resultados se habilitará en la siguiente macroetapa. La finalización ya está guardada.',
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).popUntil(
-              (route) =>
-                  route.settings.name == 'hydrostatic-list' || route.isFirst,
-            ),
-            child: const Text('VOLVER A LA LISTA'),
-          ),
-        ],
+        ),
       );
     },
   );

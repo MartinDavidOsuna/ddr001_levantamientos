@@ -7,16 +7,20 @@ import 'hydrostatic_controller.dart';
 import 'hydrostatic_scanner.dart';
 import 'hydrostatic_execution_pages.dart';
 
-String hydroStatus(HydrostaticTest t) => switch (t.state) {
-  HydrostaticTestState.preparation => 'PREPARACIÓN',
-  HydrostaticTestState.starting => 'PREPARACIÓN PENDIENTE',
-  HydrostaticTestState.active => 'EN PROCESO',
-  HydrostaticTestState.endedPendingResult => 'RESULTADO PENDIENTE',
-  HydrostaticTestState.leakDetailsPending ||
-  HydrostaticTestState.approvalEvidencePending => 'EVIDENCIAS PENDIENTES',
-  HydrostaticTestState.failed => 'FUGA',
-  HydrostaticTestState.passed => 'APROBADO',
-};
+String hydroStatus(HydrostaticTest t) => t.isDiscarded
+    ? 'DESCARTADA — PLAZO VENCIDO'
+    : switch (t.state) {
+        HydrostaticTestState.preparation => 'PREPARACIÓN',
+        HydrostaticTestState.starting => 'PREPARACIÓN PENDIENTE',
+        HydrostaticTestState.active => 'EN PROCESO',
+        HydrostaticTestState.endedPendingResult => 'RESULTADO PENDIENTE',
+        HydrostaticTestState.leakDetailsPending =>
+          'REGISTRO DE FUGAS PENDIENTE',
+        HydrostaticTestState.approvalEvidencePending =>
+          'EVIDENCIAS DE APROBACIÓN PENDIENTES',
+        HydrostaticTestState.failed => 'FUGA',
+        HydrostaticTestState.passed => 'APROBADO',
+      };
 String hydroDateLabel(DateTime? date) =>
     date == null ? 'Pendiente' : date.toLocal().toString().split('.').first;
 String hydroDuration(HydrostaticTest t) => t.durationMs == null
@@ -194,13 +198,20 @@ class HydrostaticListPage extends StatelessWidget {
             ),
           for (final t in c.started.where(
             (t) =>
-                t.state == HydrostaticTestState.active ||
-                t.state == HydrostaticTestState.endedPendingResult,
+                !t.isDiscarded &&
+                (t.state == HydrostaticTestState.active ||
+                    t.state == HydrostaticTestState.endedPendingResult ||
+                    t.state == HydrostaticTestState.leakDetailsPending ||
+                    t.state == HydrostaticTestState.approvalEvidencePending ||
+                    (t.state == HydrostaticTestState.passed &&
+                        t.video.state == HydrostaticVideoState.pending)),
           ))
             ListTile(
               title: Text(
                 t.state == HydrostaticTestState.active
                     ? 'PRUEBA EN CURSO — REANUDAR'
+                    : t.state == HydrostaticTestState.passed
+                    ? 'CONFIRMAR VIDEO ENVIADO'
                     : 'COMPLETAR RESULTADO',
               ),
               subtitle: Text(
@@ -492,8 +503,7 @@ class HydrostaticHistoryPage extends StatelessWidget {
                   Text(
                     'Inicio: ${hydroDateLabel(t.startedAt)}\nFin: ${hydroDateLabel(t.endedAt)}\nDuración: ${hydroDuration(t)}',
                   ),
-                  if (t.state == HydrostaticTestState.passed)
-                    Text(hydroVideo(t)),
+                  Text(hydroVideo(t)),
                 ],
               ),
               trailing: TextButton(
@@ -549,11 +559,31 @@ class HydrostaticDetailPage extends StatelessWidget {
               '${HydrostaticJoint.catalog.firstWhere((v) => v.code == leak.jointCode).name}: ${leak.pressureMilliBar / 1000} bar ${leak.description}',
             ),
           const SizedBox(height: 16),
+          if (j['leakDraft'] != null)
+            Text('Observación de fugas: ${j['leakDraft']['observation']}'),
+          if (t.isDiscarded)
+            Text(
+              'Descarte por plazo vencido: ${hydroDateLabel(t.discardedAt)}. Originales e historial conservados.',
+            ),
           const Text('EVIDENCIAS'),
           if (t.evidence.isEmpty) const Text('Pendiente'),
           for (final e in t.evidence)
             Text(
               '${hydroWire(e.role)} · ${hydroWire(e.state)} · ${hydroWire(e.integrity)}',
+            ),
+          for (final role in HydrostaticEvidenceRole.values)
+            if (t.evidence.any((e) => e.role == role))
+              HydrostaticEvidencePanel(id: id, role: role, readOnly: true),
+          if ([
+            HydrostaticTestState.endedPendingResult,
+            HydrostaticTestState.leakDetailsPending,
+            HydrostaticTestState.approvalEvidencePending,
+            HydrostaticTestState.passed,
+          ].contains(t.state))
+            TextButton(
+              onPressed: () =>
+                  _push(context, HydrostaticPendingResultPage(id: id)),
+              child: const Text('CONTINUAR RESULTADO / VIDEO'),
             ),
           Text(hydroVideo(t)),
           if (t.video.declaredAt != null)

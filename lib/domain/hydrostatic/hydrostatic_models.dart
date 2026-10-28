@@ -551,6 +551,19 @@ class HydrostaticTest {
         'Respuesta incompatible.',
       );
     }
+    if (j['discardedAt'] != null) {
+      hydroDate(j['discardedAt']);
+      hydroRequire(
+        ended &&
+            j['closedAt'] == null &&
+            j['discardReason'] == 'RESULT_DEADLINE_EXCEEDED',
+        'INVALID_DOCUMENT',
+        'Descarte incompatible.',
+      );
+    }
+    if (j['leakDraft'] != null) {
+      validateHydroLeakDraft(hydroObject(j['leakDraft']));
+    }
     (j['anomalies'] as List).cast<String>();
     return HydrostaticTest._(j);
   }
@@ -575,6 +588,9 @@ class HydrostaticTest {
   DateTime? get closedAt =>
       _json['closedAt'] == null ? null : hydroDate(_json['closedAt']);
   int? get durationMs => _json['durationMs'];
+  bool get isDiscarded => _json['discardedAt'] != null;
+  DateTime? get discardedAt =>
+      _json['discardedAt'] == null ? null : hydroDate(_json['discardedAt']);
   bool? get hadLeaks => _json['hadLeaks'];
   List<HydrostaticEvidence> get evidence => List.unmodifiable(
     (_json['evidence'] as List).map(
@@ -602,8 +618,14 @@ class HydrostaticStateMachine {
       HydrostaticTestState.leakDetailsPending,
       HydrostaticTestState.approvalEvidencePending,
     },
-    HydrostaticTestState.leakDetailsPending: {HydrostaticTestState.failed},
-    HydrostaticTestState.approvalEvidencePending: {HydrostaticTestState.passed},
+    HydrostaticTestState.leakDetailsPending: {
+      HydrostaticTestState.failed,
+      HydrostaticTestState.approvalEvidencePending,
+    },
+    HydrostaticTestState.approvalEvidencePending: {
+      HydrostaticTestState.passed,
+      HydrostaticTestState.leakDetailsPending,
+    },
   };
   static void requireTransition(
     HydrostaticTestState from,
@@ -613,4 +635,26 @@ class HydrostaticStateMachine {
     'INVALID_STATE',
     'Transición no permitida: ${hydroWire(from)} → ${hydroWire(to)}.',
   );
+}
+
+/// Versioned raw editor input; invalid pressures are intentionally preservable.
+void validateHydroLeakDraft(HydroJson draft) {
+  hydroRequire(
+    draft['version'] == 1 &&
+        draft['observation'] is String &&
+        draft['joints'] is Map,
+    'INVALID_DRAFT',
+    'Borrador inválido.',
+  );
+  for (final entry in hydroObject(draft['joints']).entries) {
+    final row = hydroObject(entry.value);
+    hydroRequire(
+      HydrostaticJoint.catalog.any((j) => j.code == entry.key) &&
+          row['selected'] is bool &&
+          row['pressure'] is String &&
+          row['description'] is String,
+      'INVALID_DRAFT',
+      'Unión de borrador inválida.',
+    );
+  }
 }

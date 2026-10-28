@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:uuid/uuid.dart';
+import 'package:ddr001_levantamientos/domain/hydrostatic/hydrostatic_approval_policy.dart';
 import 'package:ddr001_levantamientos/core/hydrostatic/hydrostatic_contracts.dart';
 import 'package:ddr001_levantamientos/data/hydrostatic/hydrostatic_repository.dart';
 import 'package:ddr001_levantamientos/data/hydrostatic/hydrostatic_store.dart';
@@ -53,6 +54,11 @@ class Harness {
     enabled: true,
     syntheticData: true,
   );
+  // Synthetic test procedure only; not a production default.
+  HydrostaticApprovalPolicy approvalPolicy = const HydrostaticApprovalPolicy(
+    version: 'synthetic-test-only',
+    maximumFinalDelay: Duration(minutes: 10),
+  );
   bool capturing = false;
   Future<void> open() async {
     previousNetwork = HttpOverrides.current;
@@ -82,6 +88,7 @@ class Harness {
       files: files,
       development: policy,
       isCapturing: (_) => capturing,
+      approvalPolicy: approvalPolicy,
     );
   }
 

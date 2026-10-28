@@ -11,6 +11,7 @@ class SyntheticPicker implements ConstructionImagePicker {
   SyntheticPicker(this.h);
   final UiHarness h;
   bool cancel = false, corrupt = false, empty = false, throwAfter = false;
+  bool distinctBytes = false;
   int captures = 0, retrievals = 0;
   Future<void> Function()? beforeReturn;
   List<XFile> lost = [];
@@ -28,7 +29,12 @@ class SyntheticPicker implements ConstructionImagePicker {
           ? []
           : corrupt
           ? [1, 2, 3]
-          : await File('test/cabinets/fixtures/evidence.jpg').readAsBytes(),
+          : [
+              ...await File(
+                'test/cabinets/fixtures/evidence.jpg',
+              ).readAsBytes(),
+              if (distinctBytes) ...'synthetic-capture-$captures'.codeUnits,
+            ],
       flush: true,
     );
     h.clock.advance(1000);

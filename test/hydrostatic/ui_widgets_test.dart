@@ -357,13 +357,23 @@ void main() {
       final other = await h.prepare();
       await open(tester, h, page: HydrostaticDetailPage(id: id));
       final delete = find.text('ELIMINAR PRUEBA LOCAL');
+      await tester.scrollUntilVisible(
+        delete,
+        300,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await settle(tester);
       await tester.ensureVisible(delete);
+      await settle(tester);
       await tester.tap(delete);
       await settle(tester);
       expect(find.textContaining('UUID: $id'), findsOneWidget);
       await tester.tap(find.text('CANCELAR'));
       await settle(tester);
       expect(h.repo.get(id), isNotNull);
+      await settle(tester);
+      await tester.ensureVisible(delete);
+      await settle(tester);
       await tester.tap(delete);
       await settle(tester);
       await tester.tap(find.text('ELIMINAR'));
@@ -410,7 +420,14 @@ void main() {
   ) async {
     final id = await h.passed();
     await open(tester, h, page: HydrostaticDetailPage(id: id));
+    await tester.scrollUntilVisible(
+      find.text('ELIMINAR PRUEBA LOCAL'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await settle(tester);
     await tester.ensureVisible(find.text('ELIMINAR PRUEBA LOCAL'));
+    await settle(tester);
     await tester.tap(find.text('ELIMINAR PRUEBA LOCAL'));
     await settle(tester);
     h.access = HydrostaticAccess(

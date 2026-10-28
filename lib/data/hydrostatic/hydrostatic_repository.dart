@@ -1,7 +1,9 @@
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
+import 'package:uuid/uuid.dart';
 import '../../core/hydrostatic/hydrostatic_contracts.dart';
 import '../../domain/hydrostatic/hydrostatic_models.dart';
+import '../../domain/hydrostatic/hydrostatic_approval_policy.dart';
 import 'hydrostatic_store.dart';
 
 class HydrostaticRepository {
@@ -12,8 +14,10 @@ class HydrostaticRepository {
     required this.files,
     this.development = const HydrostaticDevelopmentPolicy(),
     this.isCapturing = _notCapturing,
+    this.approvalPolicy = HydrostaticApprovalPolicy.approved,
   });
   static bool _notCapturing(String _) => false;
+  final HydrostaticApprovalPolicy approvalPolicy;
   final HydrostaticStore store;
   final HydrostaticClock clock;
   final HydrostaticAccess Function() access;
@@ -69,6 +73,66 @@ class HydrostaticRepository {
     );
   }
 
+  HydrostaticElapsed _sinceEnd(HydrostaticTest t) => HydrostaticElapsed.between(
+    HydrostaticClockReading.fromJson(hydroObject(t.toJson()['endClock'])),
+    clock.now(),
+  );
+  bool requiresTimeReview(HydrostaticTest t) =>
+      t.endedAt != null &&
+      t.closedAt == null &&
+      !t.isDiscarded &&
+      (t.timeState == HydrostaticTimeState.needsReview ||
+          _sinceEnd(t).state == HydrostaticTimeState.needsReview);
+
+  Future<HydrostaticTest> reviewClock(String id, String op) =>
+      _command(op, id, 'reviewClock', {}, (t, now) async {
+        hydroRequire(
+          t != null && requiresTimeReview(t),
+          'INVALID_STATE',
+          'Sin anomalía temporal.',
+        );
+        if (t!.toJson()['temporalReview'] != null) return t.toJson();
+        return _update(t, now, {
+          'executionTimeState': hydroWire(t.timeState),
+          'timeState': 'NEEDS_REVIEW',
+          'temporalReview': {
+            'reason': 'CLOCK_INCONSISTENT',
+            'observedAt': now.utc.toIso8601String(),
+          },
+          'anomalies': [
+            ...List<String>.from(t.toJson()['anomalies']),
+            'CLOSURE_CLOCK_INCONSISTENT',
+          ],
+        });
+      });
+
+  bool resultExpired(HydrostaticTest t) =>
+      t.isDiscarded ||
+      (t.endedAt != null &&
+          t.closedAt == null &&
+          !requiresTimeReview(t) &&
+          approvalPolicy.maximumFinalDelay != null &&
+          _sinceEnd(t).milliseconds >
+              approvalPolicy.maximumFinalDelay!.inMilliseconds);
+
+  Future<HydrostaticTest> discardExpired(String id, String op) =>
+      _command(op, id, 'discardExpired', {}, (t, now) async {
+        hydroRequire(
+          t != null && resultExpired(t),
+          'INVALID_STATE',
+          'El intento no ha vencido.',
+        );
+        if (t!.isDiscarded) return t.toJson();
+        return _update(t, now, {
+          'discardedAt': t.endedAt!
+              .add(approvalPolicy.maximumFinalDelay!)
+              .toUtc()
+              .toIso8601String(),
+          'discardReason': 'RESULT_DEADLINE_EXCEEDED',
+          'discardPolicy': approvalPolicy.toJson(),
+        });
+      });
+
   Future<HydrostaticTest> _command(
     String op,
     String id,
@@ -122,6 +186,11 @@ class HydrostaticRepository {
           'La operación ya tiene otro contenido/actor.',
         );
         if (previous['phase'] == 'APPLIED') {
+          hydroRequire(
+            previous['type'] != 'timeReview',
+            'CLOCK_REVIEW_REQUIRED',
+            'El compromiso requiere revisión temporal.',
+          );
           return HydrostaticTest.fromJson(hydroObject(previous['after']));
         }
       }
@@ -132,6 +201,14 @@ class HydrostaticRepository {
           expectedRevision == null || expectedRevision == before.revision,
           'REVISION_CONFLICT',
           'Documento modificado.',
+        );
+      }
+      if (before != null &&
+          ['answer', 'changeAnswer', 'closeLeak', 'closePass'].contains(type)) {
+        hydroRequire(
+          !resultExpired(before),
+          'RESULT_EXPIRED',
+          'Prueba descartada: venció el plazo para finalizar. Historial y fotos conservados. Inicia un nuevo intento.',
         );
       }
       final stamp = clock.now();
@@ -172,10 +249,63 @@ class HydrostaticRepository {
           'ACTOR_CHANGED',
           'La sesión cambió.',
         );
-        entry['phase'] = 'APPLY_READY';
-        await journal.save(entry, 'ready');
+        if (type == 'closePass' || type == 'closeLeak') {
+          // A candidate alone is not a certified close. Observe time only after
+          // its payload has flushed, then persist that witness for exact replay.
+          entry['phase'] = 'CLOSE_PENDING_TIME';
+          await journal.save(entry, 'ready');
+          final observed = clock.now();
+          final elapsed = HydrostaticElapsed.between(
+            HydrostaticClockReading.fromJson(
+              hydroObject(before!.toJson()['endClock']),
+            ),
+            observed,
+          );
+          final identity = access();
+          identity.requireUser(session.actor.userId);
+          hydroRequire(
+            identity.actor.sessionId == session.actor.sessionId,
+            'ACTOR_CHANGED',
+            'La sesión cambió.',
+          );
+          if (elapsed.state == HydrostaticTimeState.needsReview) {
+            await _uncertainClose(entry, 'CLOCK_INCONSISTENT');
+            throw const HydrostaticException(
+              'CLOCK_REVIEW_REQUIRED',
+              'Cierre pendiente de revisión temporal.',
+            );
+          }
+          if (elapsed.milliseconds >
+              approvalPolicy.maximumFinalDelay!.inMilliseconds) {
+            await journal.save({
+              ...entry,
+              'phase': 'ERROR',
+              'error': 'CLOSE_COMMIT_EXPIRED',
+            }, 'closeRejected');
+            throw const HydrostaticException(
+              'RESULT_EXPIRED',
+              'El compromiso de cierre excedió el plazo.',
+            );
+          }
+          entry['closeWitness'] = {
+            'observedClock': observed.toJson(),
+            'elapsedMs': elapsed.milliseconds,
+            'maximumMs': approvalPolicy.maximumFinalDelay!.inMilliseconds,
+            'policy': approvalPolicy.toJson(),
+          };
+          entry['after'] = {
+            ...after.toJson(),
+            'closedAt': observed.utc.toIso8601String(),
+            'closeWitness': entry['closeWitness'],
+          };
+          entry['phase'] = 'APPLY_READY';
+          await journal.save(entry, 'closeWitness');
+        } else {
+          entry['phase'] = 'APPLY_READY';
+          await journal.save(entry, 'ready');
+        }
         await _apply(entry);
-        return after;
+        return HydrostaticTest.fromJson(hydroObject(entry['after']));
       } catch (_) {
         store.recoveryRequired = true;
         rethrow;
@@ -435,6 +565,110 @@ class HydrostaticRepository {
         _transition(t!, state);
         return _update(t, now, {'state': hydroWire(state), 'hadLeaks': yes});
       });
+  Future<HydrostaticTest> changeAnswer(
+    String id,
+    String op,
+    bool yes, {
+    required bool confirmed,
+  }) => _command(op, id, 'changeAnswer', {'yes': yes, 'confirmed': confirmed}, (
+    t,
+    now,
+  ) async {
+    hydroRequire(
+      confirmed,
+      'CONFIRMATION_REQUIRED',
+      'Confirma el cambio de respuesta.',
+    );
+    hydroRequire(
+      t != null &&
+          [
+            HydrostaticTestState.leakDetailsPending,
+            HydrostaticTestState.approvalEvidencePending,
+          ].contains(t.state),
+      'INVALID_STATE',
+      'Resultado cerrado o todavía sin respuesta.',
+    );
+    if (t!.hadLeaks == yes) return t.toJson();
+    final next = yes
+        ? HydrostaticTestState.leakDetailsPending
+        : HydrostaticTestState.approvalEvidencePending;
+    _transition(t, next);
+    return _update(t, now, {'state': hydroWire(next), 'hadLeaks': yes});
+  });
+
+  /// Raw, incomplete input is durable; canonical leaks are derived only when valid.
+  Future<HydrostaticTest> saveLeakDraft(String id, String op, HydroJson draft) {
+    final snapshot = hydroObject(jsonDecode(jsonEncode(draft)));
+    validateHydroLeakDraft(snapshot);
+    return _command(op, id, 'leakDraft', {'draft': snapshot}, (t, now) async {
+      _state(t, HydrostaticTestState.leakDetailsPending);
+      final leaks = <HydrostaticLeak>[];
+      final leakIds = hydroObject(t!.toJson()['leakIds'] ?? {});
+      for (final entry in hydroObject(snapshot['joints']).entries) {
+        final row = hydroObject(entry.value);
+        if (row['selected'] != true) continue;
+        try {
+          leaks.add(
+            HydrostaticLeak(
+              id: leakIds.putIfAbsent(entry.key, () => const Uuid().v4()),
+              jointCode: entry.key,
+              pressureMilliBar: parseHydrostaticBar(row['pressure']),
+              description: row['description'],
+            ),
+          );
+        } on HydrostaticException catch (e) {
+          if (e.code != 'INVALID_PRESSURE') rethrow;
+        }
+      }
+      return _update(t, now, {
+        'leakIds': leakIds,
+        'leakDraft': snapshot,
+        'leaks': leaks.map((e) => e.toJson()).toList(),
+      });
+    });
+  }
+
+  Future<HydrostaticTest> linkLeakEvidence(
+    String id,
+    String op,
+    String evidenceId,
+    List<String> codes,
+  ) => _command(
+    op,
+    id,
+    'linkLeakEvidence',
+    {'evidenceId': evidenceId, 'codes': codes},
+    (t, now) async {
+      _state(t, HydrostaticTestState.leakDetailsPending);
+      hydroRequire(
+        codes.toSet().length == codes.length &&
+            codes.every(
+              (c) => HydrostaticJoint.catalog.any((j) => j.code == c),
+            ),
+        'INVALID_JOINT',
+        'Unión inválida.',
+      );
+      hydroRequire(
+        t!.evidence.any(
+          (e) =>
+              e.id == evidenceId &&
+              e.role == HydrostaticEvidenceRole.leakEvidence,
+        ),
+        'INVALID_EVIDENCE',
+        'Fotografía de fuga no encontrada.',
+      );
+      return _update(t, now, {
+        'evidence': t.evidence
+            .map(
+              (e) => e.id == evidenceId
+                  ? {...e.toJson(), 'jointCodes': codes}
+                  : e.toJson(),
+            )
+            .toList(),
+      });
+    },
+  );
+
   Future<HydrostaticTest> saveLeaks(
     String id,
     String op,
@@ -460,16 +694,13 @@ class HydrostaticRepository {
       _command(op, id, 'closeLeak', {}, (t, now) async {
         if (t?.state == HydrostaticTestState.failed) return t!.toJson();
         _state(t, HydrostaticTestState.leakDetailsPending);
-        _validTime(t!);
+        await validateLeak(t!);
         hydroRequire(
-          t.hadLeaks == true &&
-              t.leaks.isNotEmpty &&
-              t.leaks.every((e) => e.complete),
-          'LEAK_INCOMPLETE',
-          'Faltan uniones, presión o descripción de Otro.',
+          !resultExpired(t),
+          'RESULT_EXPIRED',
+          'Venció el plazo durante la validación.',
         );
-        await _role(t, HydrostaticEvidenceRole.initialSetup);
-        await _role(t, HydrostaticEvidenceRole.leakEvidence);
+        now = clock.now();
         _transition(t, HydrostaticTestState.failed);
         return _update(t, now, {
           'state': 'FAILED',
@@ -477,67 +708,150 @@ class HydrostaticRepository {
           'closedAt': now.utc.toUtc().toIso8601String(),
         });
       });
+  void _closureReady(String id) {
+    hydroRequire(
+      !store.recoveryRequired &&
+          !isCapturing(id) &&
+          !store.metadata.keys
+              .where((key) => '$key'.startsWith('capture:'))
+              .map((key) => store.read(store.metadata, '$key')!)
+              .any(
+                (r) =>
+                    r['testId'] == id &&
+                    !['LINKED', 'CANCELLED'].contains(r['state']),
+              ),
+      'RECOVERY_PENDING',
+      'Hay capturas u operaciones pendientes de recuperación.',
+    );
+  }
+
+  Future<void> validateLeak(HydrostaticTest t) async {
+    access().requireUser(t.actor.userId);
+    _closureReady(t.id);
+    hydroRequire(
+      !resultExpired(t),
+      'RESULT_EXPIRED',
+      'Prueba descartada: plazo de cierre vencido.',
+    );
+    _state(t, HydrostaticTestState.leakDetailsPending);
+    if (t.toJson()['leakDraft'] != null) {
+      final rows = hydroObject(
+        hydroObject(t.toJson()['leakDraft'])['joints'],
+      ).values.map(hydroObject).where((r) => r['selected'] == true).toList();
+      hydroRequire(
+        rows.length == t.leaks.length && rows.isNotEmpty,
+        'LEAK_INCOMPLETE',
+        'Completa la presión de cada unión seleccionada.',
+      );
+      for (final entry in hydroObject(
+        hydroObject(t.toJson()['leakDraft'])['joints'],
+      ).entries) {
+        final row = hydroObject(entry.value);
+        if (row['selected'] != true) continue;
+        final leak = t.leaks.where((l) => l.jointCode == entry.key).firstOrNull;
+        hydroRequire(
+          leak != null &&
+              leak.pressureMilliBar == parseHydrostaticBar(row['pressure']) &&
+              leak.description == row['description'],
+          'LEAK_INCOMPLETE',
+          'El borrador y las uniones no coinciden.',
+        );
+      }
+    }
+    _validTime(t);
+    hydroRequire(
+      t.hadLeaks == true &&
+          t.leaks.isNotEmpty &&
+          t.leaks.every((e) => e.complete),
+      'LEAK_INCOMPLETE',
+      'Faltan uniones, presión o descripción de Otro.',
+    );
+    await _role(t, HydrostaticEvidenceRole.initialSetup);
+    await _role(t, HydrostaticEvidenceRole.leakEvidence);
+  }
+
   void _validTime(HydrostaticTest t) => hydroRequire(
     t.endedAt != null &&
         t.durationMs != null &&
         t.durationMs! >= 0 &&
-        t.timeState != HydrostaticTimeState.needsReview,
+        t.timeState != HydrostaticTimeState.needsReview &&
+        _sinceEnd(t).state != HydrostaticTimeState.needsReview,
     'CLOCK_REVIEW_REQUIRED',
     'Duración pendiente de revisión.',
   );
+  Future<void> validatePass(HydrostaticTest t) async {
+    access().requireUser(t.actor.userId);
+    _closureReady(t.id);
+    hydroRequire(
+      !resultExpired(t),
+      'RESULT_EXPIRED',
+      'Prueba descartada: plazo de cierre vencido.',
+    );
+    _state(t, HydrostaticTestState.approvalEvidencePending);
+    approvalPolicy.requireConfigured();
+    _validTime(t);
+    for (final role in [
+      HydrostaticEvidenceRole.initialSetup,
+      HydrostaticEvidenceRole.manometer5Bar,
+      HydrostaticEvidenceRole.final4Bar,
+    ]) {
+      await _role(t, role);
+    }
+    final valid = <HydrostaticEvidence>[];
+    for (final e in t.evidence) {
+      if (e.ready && await files.verify(e)) valid.add(e);
+    }
+    final initials = valid.where(
+      (e) =>
+          e.role == HydrostaticEvidenceRole.initialSetup &&
+          !e.capturedAt.isAfter(t.startedAt!),
+    );
+    final fives = valid.where(
+      (e) =>
+          e.role == HydrostaticEvidenceRole.manometer5Bar &&
+          !e.capturedAt.isBefore(t.startedAt!) &&
+          !e.capturedAt.isAfter(t.endedAt!) &&
+          e.location?.validAt(e.capturedAt, photo: true) == true,
+    );
+    final finals = valid.where(
+      (e) =>
+          e.role == HydrostaticEvidenceRole.final4Bar &&
+          approvalPolicy.accepts(t.endedAt!, e.capturedAt),
+    );
+    final coherent = initials.any(
+      (initial) => fives.any(
+        (five) => finals.any(
+          (last) =>
+              five.captureIntentId != last.captureIntentId &&
+              five.originalPath != last.originalPath &&
+              five.sha256 != last.sha256 &&
+              initial.captureIntentId != five.captureIntentId &&
+              !last.capturedAt.isBefore(five.capturedAt),
+        ),
+      ),
+    );
+    hydroRequire(
+      coherent,
+      'EVIDENCE_CHRONOLOGY',
+      'Secuencia inicial/5 bar/4 bar, capturas distintas y GPS requeridos.',
+    );
+  }
+
   Future<HydrostaticTest> closePass(String id, String op) =>
       _command(op, id, 'closePass', {}, (t, now) async {
         if (t?.state == HydrostaticTestState.passed) return t!.toJson();
         _state(t, HydrostaticTestState.approvalEvidencePending);
-        _validTime(t!);
-        for (final role in [
-          HydrostaticEvidenceRole.initialSetup,
-          HydrostaticEvidenceRole.manometer5Bar,
-          HydrostaticEvidenceRole.final4Bar,
-        ]) {
-          await _role(t, role);
-        }
-        final valid = <HydrostaticEvidence>[];
-        for (final e in t.evidence) {
-          if (e.ready && await files.verify(e)) valid.add(e);
-        }
-        final initials = valid.where(
-          (e) =>
-              e.role == HydrostaticEvidenceRole.initialSetup &&
-              !e.capturedAt.isAfter(t.startedAt!),
-        );
-        final fives = valid.where(
-          (e) =>
-              e.role == HydrostaticEvidenceRole.manometer5Bar &&
-              !e.capturedAt.isBefore(t.startedAt!) &&
-              !e.capturedAt.isAfter(t.endedAt!) &&
-              e.location?.validAt(e.capturedAt, photo: true) == true,
-        );
-        final finals = valid.where(
-          (e) =>
-              e.role == HydrostaticEvidenceRole.final4Bar &&
-              !e.capturedAt.isBefore(t.endedAt!),
-        );
-        final coherent = initials.any(
-          (initial) => fives.any(
-            (five) => finals.any(
-              (last) =>
-                  five.captureIntentId != last.captureIntentId &&
-                  five.originalPath != last.originalPath &&
-                  five.sha256 != last.sha256 &&
-                  initial.captureIntentId != five.captureIntentId &&
-                  !last.capturedAt.isBefore(five.capturedAt),
-            ),
-          ),
-        );
+        await validatePass(t!);
         hydroRequire(
-          coherent,
-          'EVIDENCE_CHRONOLOGY',
-          'Secuencia inicial/5 bar/4 bar, capturas distintas y GPS requeridos.',
+          !resultExpired(t),
+          'RESULT_EXPIRED',
+          'Venció el plazo durante la validación.',
         );
+        now = clock.now();
         _transition(t, HydrostaticTestState.passed);
         return _update(t, now, {
           'state': 'PASSED',
+          'approvalPolicy': approvalPolicy.toJson(),
           'result': 'PASS',
           'closedAt': now.utc.toUtc().toIso8601String(),
           'video': const HydrostaticVideoDeclaration(
@@ -560,6 +874,27 @@ class HydrostaticRepository {
           ).toJson(),
         });
       });
+
+  Future<void> _uncertainClose(HydroJson entry, String reason) async {
+    final current = store.test(entry['testId'])!;
+    final after = _update(current, clock.now(), {
+      'executionTimeState': hydroWire(current.timeState),
+      'timeState': 'NEEDS_REVIEW',
+      'temporalReview': {'reason': reason, 'operationId': entry['operationId']},
+      'anomalies': [
+        ...List<String>.from(current.toJson()['anomalies']),
+        reason,
+      ],
+    });
+    final review = {
+      ...entry,
+      'type': 'timeReview',
+      'phase': 'RECOVERABLE',
+      'after': after,
+    };
+    await journal.save(review, 'reviewReady');
+    await _apply(review);
+  }
 
   Future<void> _apply(HydroJson entry) async {
     if (entry['type'] == 'delete') {
@@ -618,6 +953,8 @@ class HydrostaticRepository {
             'phase': 'ERROR',
             'error': 'INTERRUPTED_BEFORE_COMMIT',
           }, 'abandoned');
+        } else if (entry['phase'] == 'CLOSE_PENDING_TIME') {
+          await _uncertainClose(entry, 'CLOSE_COMMIT_TIME_UNKNOWN');
         } else if (['APPLY_READY', 'RECOVERABLE'].contains(entry['phase'])) {
           await _apply(entry);
         } else {
