@@ -5,6 +5,7 @@ import '../../domain/cabinets/cabinet_models.dart';
 import '../../domain/hydrostatic/hydrostatic_models.dart';
 import 'hydrostatic_controller.dart';
 import 'hydrostatic_scanner.dart';
+import 'hydrostatic_execution_pages.dart';
 
 String hydroStatus(HydrostaticTest t) => switch (t.state) {
   HydrostaticTestState.preparation => 'PREPARACIÓN',
@@ -38,8 +39,12 @@ class HydrostaticFrame extends StatefulWidget {
     super.key,
     required this.title,
     required this.builder,
+    this.canPop = true,
+    this.onBackBlocked,
   });
   final String title;
+  final bool canPop;
+  final VoidCallback? onBackBlocked;
   final Widget Function(BuildContext, HydrostaticController) builder;
   @override
   State<HydrostaticFrame> createState() => _HydrostaticFrameState();
@@ -111,12 +116,16 @@ class _HydrostaticFrameState extends State<HydrostaticFrame>
       );
     } else if (loading) {
       body = const Center(child: CircularProgressIndicator());
-    } else if (error != null) {
+    } else if (error != null || !c.ready) {
       body = Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(error!, textAlign: TextAlign.center),
+            Text(
+              error ??
+                  'Recuperación pendiente. Reintenta para resolver el journal antes de continuar.',
+              textAlign: TextAlign.center,
+            ),
             FilledButton(
               onPressed: () {
                 setState(() => loading = true);
@@ -134,8 +143,26 @@ class _HydrostaticFrameState extends State<HydrostaticFrame>
         body = Center(child: Text('$e'));
       }
     }
+    if (authorized && !loading && c.cameraRecoveryError != null) {
+      body = Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Text(c.cameraRecoveryError!),
+          ),
+          TextButton(
+            onPressed: () => hydroAction(context, _load),
+            child: const Text('REINTENTAR RECUPERACIÓN DE CÁMARA'),
+          ),
+          Expanded(child: body),
+        ],
+      );
+    }
     return PopScope(
-      canPop: !c.busy || !authorized,
+      canPop: !authorized || (!c.busy && widget.canPop),
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && !c.busy) widget.onBackBlocked?.call();
+      },
       child: Scaffold(
         appBar: AppBar(title: Text(widget.title)),
         body: body,
@@ -164,6 +191,27 @@ class HydrostaticListPage extends StatelessWidget {
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 24),
               child: Text('Aún no hay pruebas hidrostáticas registradas.'),
+            ),
+          for (final t in c.started.where(
+            (t) =>
+                t.state == HydrostaticTestState.active ||
+                t.state == HydrostaticTestState.endedPendingResult,
+          ))
+            ListTile(
+              title: Text(
+                t.state == HydrostaticTestState.active
+                    ? 'PRUEBA EN CURSO — REANUDAR'
+                    : 'COMPLETAR RESULTADO',
+              ),
+              subtitle: Text(
+                '${displayUid(t.cabinet.uid)} · Prueba #${t.attemptNumber}',
+              ),
+              onTap: () => _push(
+                context,
+                t.state == HydrostaticTestState.active
+                    ? HydrostaticExecutionPage(id: t.id)
+                    : HydrostaticPendingResultPage(id: t.id),
+              ),
             ),
           for (final uid in uids)
             Card(
@@ -196,7 +244,7 @@ class HydrostaticListPage extends StatelessWidget {
                 child: ListTile(
                   key: ValueKey('preparation_${t.id}'),
                   title: Text(displayUid(t.cabinet.uid)),
-                  subtitle: Text('${hydroModel(t)} · ${hydroStatus(t)}'),
+                  subtitle: Text('${hydroModel(t)} · REANUDAR PREPARACIÓN'),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () =>
                       _push(context, HydrostaticPreparationPage(id: t.id)),
@@ -315,10 +363,16 @@ class HydrostaticPreparationPage extends StatelessWidget {
     builder: (context, c) {
       final t = c.document(id);
       if (t.startedAt != null) {
-        return const Center(
-          child: Text(
-            'Esta prueba ya fue iniciada. Consulta su detalle en el historial.',
+        return TextButton(
+          onPressed: () => Navigator.pushReplacement(
+            context,
+            MaterialPageRoute<void>(
+              builder: (_) => t.state == HydrostaticTestState.active
+                  ? HydrostaticExecutionPage(id: id)
+                  : HydrostaticPendingResultPage(id: id),
+            ),
           ),
+          child: const Text('REANUDAR PRUEBA'),
         );
       }
       return ListView(
@@ -344,13 +398,46 @@ class HydrostaticPreparationPage extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 24),
-          const FilledButton(
-            key: Key('hydro_start'),
-            onPressed: null,
-            child: Text('INICIAR PRUEBA'),
+          HydrostaticEvidencePanel(
+            id: id,
+            role: HydrostaticEvidenceRole.initialSetup,
           ),
-          const Text(
-            'Para iniciar una prueba será necesario tomar la fotografía inicial del gabinete y registrar la ubicación GPS. Esta función se habilitará próximamente.',
+          FutureBuilder<bool>(
+            future: c.startAvailable(id),
+            builder: (context, snapshot) => FilledButton(
+              key: const Key('hydro_start'),
+              onPressed: snapshot.data == true && !c.busy
+                  ? () => hydroAction(context, () async {
+                      await c.start(id);
+                      if (context.mounted &&
+                          c.document(id).state == HydrostaticTestState.active) {
+                        Navigator.pushReplacement(
+                          context,
+                          MaterialPageRoute<void>(
+                            builder: (_) => HydrostaticExecutionPage(id: id),
+                          ),
+                        );
+                      }
+                    })
+                  : null,
+              child: const Text('INICIAR PRUEBA'),
+            ),
+          ),
+          Text(
+            c.photos == null
+                ? 'Para iniciar una prueba será necesario tomar la fotografía inicial del gabinete y registrar la ubicación GPS. Esta función se habilitará próximamente.'
+                : 'Se requiere una foto inicial íntegra. Al iniciar se solicitará GPS reciente con precisión de hasta 100 m.',
+          ),
+          TextButton(
+            onPressed: c.busy
+                ? null
+                : () => Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute<void>(
+                      builder: (_) => const HydrostaticIdentifyPage(),
+                    ),
+                  ),
+            child: const Text('VOLVER A IDENTIFICAR GABINETE'),
           ),
           const SizedBox(height: 24),
           OutlinedButton(
@@ -408,6 +495,11 @@ class HydrostaticHistoryPage extends StatelessWidget {
                   if (t.state == HydrostaticTestState.passed)
                     Text(hydroVideo(t)),
                 ],
+              ),
+              trailing: TextButton(
+                onPressed: () =>
+                    _push(context, HydrostaticDetailPage(id: t.id)),
+                child: const Text('VER DETALLE'),
               ),
               onTap: () => _push(context, HydrostaticDetailPage(id: t.id)),
             ),

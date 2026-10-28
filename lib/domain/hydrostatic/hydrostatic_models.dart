@@ -145,6 +145,7 @@ class HydrostaticCabinetSnapshot {
     required this.automated,
     this.cabinetId,
     this.sourceVersion,
+    this.knownStatus,
   }) {
     hydroRequire(
       cabinetUid(uid) == uid,
@@ -162,12 +163,14 @@ class HydrostaticCabinetSnapshot {
   final bool automated;
   final String? cabinetId;
   final int? sourceVersion;
+  final String? knownStatus;
   HydroJson toJson() => {
     'uid': uid,
     'model': model,
     'automated': automated,
     'cabinetId': cabinetId,
     'sourceVersion': sourceVersion,
+    'knownStatus': knownStatus,
   };
   factory HydrostaticCabinetSnapshot.fromJson(HydroJson j) =>
       HydrostaticCabinetSnapshot(
@@ -176,6 +179,7 @@ class HydrostaticCabinetSnapshot {
         automated: j['automated'],
         cabinetId: j['cabinetId'],
         sourceVersion: j['sourceVersion'],
+        knownStatus: j['knownStatus'],
       );
 }
 
@@ -305,6 +309,8 @@ class HydrostaticEvidence {
     required this.byteLength,
     required this.capturedAt,
     required this.timeSource,
+    this.returnedAt,
+    this.recovered = false,
     this.location,
     this.state = HydrostaticEvidenceState.expected,
     this.integrity = HydrostaticIntegrity.unknown,
@@ -341,6 +347,8 @@ class HydrostaticEvidence {
   final String id, testId, captureIntentId, actorId, originalPath, sha256;
   final int byteLength;
   final DateTime capturedAt;
+  final DateTime? returnedAt;
+  final bool recovered;
   final HydrostaticEvidenceRole role;
   final HydrostaticCaptureTimeSource timeSource;
   final HydrostaticLocation? location;
@@ -361,6 +369,8 @@ class HydrostaticEvidence {
     'sha256': sha256,
     'byteLength': byteLength,
     'capturedAt': capturedAt.toIso8601String(),
+    'returnedAt': returnedAt?.toUtc().toIso8601String(),
+    'recovered': recovered,
     'timeSource': hydroWire(timeSource),
     'location': location?.toJson(),
     'state': hydroWire(state),
@@ -377,6 +387,8 @@ class HydrostaticEvidence {
     sha256: j['sha256'],
     byteLength: j['byteLength'],
     capturedAt: hydroDate(j['capturedAt']),
+    returnedAt: j['returnedAt'] == null ? null : hydroDate(j['returnedAt']),
+    recovered: j['recovered'] == true,
     timeSource: hydroEnum(HydrostaticCaptureTimeSource.values, j['timeSource']),
     location: j['location'] == null
         ? null

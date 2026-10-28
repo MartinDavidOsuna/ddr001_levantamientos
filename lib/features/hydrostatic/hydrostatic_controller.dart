@@ -13,6 +13,9 @@ class HydrostaticController extends ChangeNotifier {
     required this.verifySession,
     required this.sessionChanges,
     required this.lookup,
+    this.photos,
+    this.locations,
+    this.evidencePath,
   }) {
     sessionChanges.addListener(_sessionChanged);
   }
@@ -21,11 +24,18 @@ class HydrostaticController extends ChangeNotifier {
   final Future<void> Function() verifySession;
   final Listenable sessionChanges;
   final HydrostaticCabinetLookup lookup;
+  HydrostaticPhotoCoordinator? photos;
+  HydrostaticLocationProvider? locations;
+  String Function(HydrostaticEvidence)? evidencePath;
+  final Map<String, String> _operations = {};
+  String _operation(String key) =>
+      _operations.putIfAbsent(key, () => const Uuid().v4());
   HydrostaticRepository? _repo;
   Future<void>? _initializing;
   Future<String>? _preparing;
   bool _disposed = false;
   String? error;
+  String? cameraRecoveryError;
   bool busy = false;
   String? get identity {
     try {
@@ -64,6 +74,24 @@ class HydrostaticController extends ChangeNotifier {
     requireIdentity(key);
     if (_repo!.store.recoveryRequired) await _repo!.recover();
     requireIdentity(key);
+    if (!busy) {
+      try {
+        await photos?.recover(access());
+        cameraRecoveryError = null;
+      } catch (e) {
+        cameraRecoveryError =
+            'Recuperación de cámara pendiente. Los archivos y registros se conservan; reintenta la recuperación.';
+      }
+      requireIdentity(key);
+      for (final t in _repo!.forUser().where(
+        (t) => t.state == HydrostaticTestState.starting,
+      )) {
+        await _repo!.cancelStart(
+          t.id,
+          _operation('recoverStarting:${t.id}:${t.revision}'),
+        );
+      }
+    }
     error = null;
     _notify();
   }
@@ -118,7 +146,12 @@ class HydrostaticController extends ChangeNotifier {
         'Este gabinete no está disponible en este dispositivo. Consulta el módulo de Gabinetes y vuelve a intentarlo.',
       );
       final existing = preparations.where((t) => t.cabinet.uid == uid).toList();
-      if (existing.isNotEmpty) return existing.first.id;
+      final same = existing.where(
+        (t) =>
+            canonicalHydroJson(t.cabinet.toJson()) ==
+            canonicalHydroJson(cabinet!.toJson()),
+      );
+      if (same.isNotEmpty) return same.first.id;
       await verifySession();
       requireIdentity(key);
       final latest = await lookup.findLocal(uid, access());
@@ -154,6 +187,158 @@ class HydrostaticController extends ChangeNotifier {
       return 'El gabinete cambió o ya no está disponible. Se conserva el snapshot original; revisa Gabinetes antes de continuar.';
     }
     return null;
+  }
+
+  Future<void> validateCabinet(String id) async {
+    final warning = await preparationWarning(id);
+    hydroRequire(
+      warning == null,
+      'CABINET_CHANGED',
+      warning ?? 'Gabinete cambiado.',
+    );
+  }
+
+  Future<bool> startAvailable(String id) async {
+    if (busy ||
+        photos == null ||
+        cameraRecoveryError != null ||
+        locations == null ||
+        !ready) {
+      return false;
+    }
+    try {
+      await validateCabinet(id);
+      return await _repo!.canStart(id);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  int pendingCaptures(String id) {
+    final t = document(id);
+    return _repo!.store.metadata.keys
+        .where((key) => '$key'.startsWith('capture:'))
+        .map((key) => _repo!.store.read(_repo!.store.metadata, '$key')!)
+        .where(
+          (r) =>
+              r['testId'] == id &&
+              r['actorId'] == t.actor.userId &&
+              !['LINKED', 'CANCELLED'].contains(r['state']),
+        )
+        .length;
+  }
+
+  Future<bool> evidenceValid(HydrostaticEvidence e) async =>
+      e.ready && await _repo!.files.verify(e);
+  HydrostaticElapsed elapsed(String id) => _repo!.elapsed(id);
+  Future<void> capturePhoto(String id, HydrostaticEvidenceRole role) async {
+    if (busy) return;
+    final key = identity;
+    requireIdentity(key);
+    hydroRequire(
+      photos != null && cameraRecoveryError == null,
+      'CAMERA_NOT_READY',
+      'La captura segura no está disponible.',
+    );
+    busy = true;
+    error = null;
+    _notify();
+    try {
+      await verifySession();
+      requireIdentity(key);
+      final t = document(id);
+      await photos!.capture(
+        HydrostaticCaptureIntent(
+          id: const Uuid().v4(),
+          testId: id,
+          actorId: t.actor.userId,
+          role: role,
+          requestedAt: _repo!.clock.now().utc,
+        ),
+      );
+      requireIdentity(key);
+    } finally {
+      busy = false;
+      _notify();
+    }
+  }
+
+  Future<void> start(String id) async {
+    if (busy) return;
+    final key = identity;
+    requireIdentity(key);
+    hydroRequire(
+      await startAvailable(id),
+      'START_NOT_READY',
+      'Revisa foto inicial, gabinete y pruebas en curso.',
+    );
+    requireIdentity(key);
+    if (busy) return;
+    busy = true;
+    error = null;
+    _notify();
+    try {
+      await verifySession();
+      requireIdentity(key);
+      await validateCabinet(id);
+      final gps = await locations!.capture();
+      requireIdentity(key);
+      await verifySession();
+      requireIdentity(key);
+      await validateCabinet(id);
+      hydroRequire(
+        gps.validAt(_repo!.clock.now().utc),
+        'GPS_REQUIRED',
+        'GPS antiguo, posterior o fuera de precisión.',
+      );
+      await _repo!.requestStart(
+        id,
+        _operation('request:$id:${document(id).revision}'),
+      );
+      await _repo!.start(
+        id,
+        _operation('start:$id:${document(id).revision}'),
+        gps,
+        validateCabinet: () => validateCabinet(id),
+      );
+      requireIdentity(key);
+    } catch (_) {
+      if (ready &&
+          identity == key &&
+          document(id).state == HydrostaticTestState.starting) {
+        await _repo!.cancelStart(
+          id,
+          _operation('cancel:$id:${document(id).revision}'),
+        );
+      }
+      rethrow;
+    } finally {
+      busy = false;
+      _notify();
+    }
+  }
+
+  Future<void> finish(String id) async {
+    if (busy) return;
+    final key = identity;
+    requireIdentity(key);
+    busy = true;
+    error = null;
+    _notify();
+    try {
+      await verifySession();
+      requireIdentity(key);
+      hydroRequire(
+        photos?.isCapturing(id) != true,
+        'CAMERA_BUSY',
+        'Finaliza la captura antes de terminar.',
+      );
+      await _repo!.finish(id, _operation('finish:$id'));
+      requireIdentity(key);
+    } finally {
+      busy = false;
+      _notify();
+    }
   }
 
   bool canDelete(String id) {

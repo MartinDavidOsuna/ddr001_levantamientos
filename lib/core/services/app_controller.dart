@@ -696,6 +696,7 @@ class AppController extends ChangeNotifier {
       );
     }
     final pending = await camera.capture(
+      actorId: session?.userId,
       surveyId: surveyId,
       step: step,
       purpose: purpose,
@@ -1185,6 +1186,7 @@ class AppController extends ChangeNotifier {
       throw StateError('La corrección está cerrada.');
     }
     final pending = await camera.capture(
+      actorId: session?.userId,
       surveyId: surveyId,
       correctionId: correctionId,
     );

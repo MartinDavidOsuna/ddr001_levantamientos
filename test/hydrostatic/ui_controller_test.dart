@@ -143,7 +143,10 @@ void main() {
     h.records = [h.record(id: h.records.single.id, model: 'A3')];
     expect(await h.controller.preparationWarning(id), contains('cambió'));
     expect(h.controller.document(id).cabinet.model, 'A1');
-    expect(await h.controller.identify('AQ26000017'), id);
+    final fresh = await h.controller.identify('AQ26000017');
+    expect(fresh, isNot(id));
+    expect(h.controller.document(id).cabinet.model, 'A1');
+    expect(h.controller.document(fresh).cabinet.model, 'A3');
   });
   test('changed user cannot read or edit original preparation', () async {
     final id = await h.controller.identify('AQ26000017');

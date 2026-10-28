@@ -3,12 +3,14 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../domain/construction/construction_models.dart';
+import 'camera_capture_broker.dart';
+export 'camera_capture_broker.dart'
+    show ConstructionImagePicker, ImagePickerAdapter;
 import '../identity/uuid_identity.dart';
 import '../persistence/construction_operation_journal.dart';
 import '../persistence/local_store.dart';
@@ -16,43 +18,31 @@ import '../persistence/local_store.dart';
 Future<String> sha256File(File file) async =>
     (await sha256.bind(file.openRead()).first).toString();
 
-abstract interface class ConstructionImagePicker {
-  Future<XFile?> takePhoto();
-  Future<LostDataResponse> retrieveLostData();
-}
-
-class ImagePickerAdapter implements ConstructionImagePicker {
-  ImagePickerAdapter([ImagePicker? picker]) : _picker = picker ?? ImagePicker();
-  final ImagePicker _picker;
-
-  @override
-  Future<XFile?> takePhoto() => _picker.pickImage(
-    source: ImageSource.camera,
-    imageQuality: 100,
-    requestFullMetadata: true,
-  );
-
-  @override
-  Future<LostDataResponse> retrieveLostData() => _picker.retrieveLostData();
-}
-
 class PhotoCaptureService {
   PhotoCaptureService({
     required this.local,
     ConstructionImagePicker? picker,
+    CameraCaptureBroker? broker,
     Future<Directory> Function()? supportDirectory,
     Future<Directory> Function()? temporaryDirectory,
     this.representationBuilder,
     this.directoryName = 'construction',
     this.preserveOriginalUpload = false,
-  }) : picker = picker ?? ImagePickerAdapter(),
+  }) : broker =
+           broker ??
+           (picker == null
+               ? CameraCaptureBroker.shared
+               : CameraCaptureBroker(
+                   picker: picker,
+                   supportDirectory: supportDirectory,
+                 )),
        supportDirectory = supportDirectory ?? getApplicationSupportDirectory,
        temporaryDirectory = temporaryDirectory ?? getTemporaryDirectory;
 
   final String directoryName;
   final bool preserveOriginalUpload;
   final LocalStore local;
-  final ConstructionImagePicker picker;
+  final CameraCaptureBroker broker;
   final Future<Directory> Function() supportDirectory;
   final Future<Directory> Function() temporaryDirectory;
   final Future<bool> Function(File source, File upload, File thumbnail)?
@@ -60,6 +50,7 @@ class PhotoCaptureService {
 
   Future<ConstructionPhoto?> capture({
     required String surveyId,
+    String? actorId,
     int? step,
     String? correctionId,
     PhotoPurpose? purpose,
@@ -72,26 +63,33 @@ class PhotoCaptureService {
       purpose: purpose,
     );
     try {
-      final picked = await picker.takePhoto();
+      final picked = await broker.capture(
+        id: entry.id,
+        module: directoryName,
+        entityId: entry.surveyId,
+        actorId: actorId ?? 'legacy-unattributed',
+        role: purpose?.name ?? correctionId ?? '$step',
+        requestedAt: entry.createdAt,
+      );
       if (picked == null) {
         await local.journal.save(
           entry.copyWith(state: ConstructionJournalState.committed),
         );
         return null;
       }
-      var captured = entry;
-      if (directoryName == 'cabinets') {
-        final now = DateTime.now().toUtc();
-        final modified = (await picked.lastModified()).toUtc();
-        captured = entry.copyWith(
-          photoCapturedAt:
-              !modified.isBefore(entry.createdAt) && !modified.isAfter(now)
-              ? modified
-              : now,
-        );
-        await local.journal.save(captured);
-      }
-      return _makeDurable(captured, File(picked.path));
+      final modified = DateTime.parse(picked['fileModifiedAt']);
+      final returned = DateTime.parse(picked['returnedAt']);
+      final captured = directoryName == 'cabinets'
+          ? entry.copyWith(
+              photoCapturedAt:
+                  !modified.isBefore(entry.createdAt) &&
+                      !modified.isAfter(returned)
+                  ? modified
+                  : returned,
+            )
+          : entry;
+      await local.journal.save(captured);
+      return _makeDurable(captured, File(picked['originalPath']));
     } on Object catch (error) {
       await local.journal.save(
         entry.copyWith(
@@ -128,27 +126,21 @@ class PhotoCaptureService {
         }
       }
     }
-    XFile? lostFile;
     try {
-      final lost = await picker.retrieveLostData();
-      lostFile = lost.files?.firstOrNull ?? lost.file;
-    } on Object {
-      // Journal and staging remain available for the next bootstrap.
-    }
-    final prepared = pending
-        .where((entry) => entry.state == ConstructionJournalState.prepared)
-        .firstOrNull;
-    if (prepared != null) {
-      var restored = false;
-      if (lostFile != null) {
-        restored = await _tryRecoverCandidate(prepared, File(lostFile.path));
+      await broker.recover();
+      try {
+        await broker.preserveUnownedCache(await temporaryDirectory());
+      } on Object {
+        /* Preserve pending files; retry without blocking owned results. */
       }
-      if (!restored) {
-        final cacheCandidate = await _recentPickerCacheCandidate(prepared);
-        if (cacheCandidate != null) {
-          await _tryRecoverCandidate(prepared, cacheCandidate);
+      for (final entry in pending) {
+        final result = await broker.result(directoryName, entry.id);
+        if (result != null && result['entityId'] == entry.surveyId) {
+          await _tryRecoverCandidate(entry, File(result['originalPath']));
         }
       }
+    } on Object {
+      // Preserve originals and both journals. Never guess ownership from age.
     }
     final recovered = <ConstructionPhoto>[];
     for (final entry in local.journal.pending().where(
@@ -187,45 +179,6 @@ class PhotoCaptureService {
       // Keep both the picker cache file and journal for later recovery.
       return false;
     }
-  }
-
-  Future<File?> _recentPickerCacheCandidate(
-    ConstructionJournalEntry prepared,
-  ) async {
-    final cache = await temporaryDirectory();
-    if (!cache.existsSync()) {
-      if (kDebugMode) debugPrint('[CAMERA_RECOVERY] cache_missing');
-      return null;
-    }
-    final threshold = prepared.createdAt.subtract(const Duration(minutes: 5));
-    final ceiling = prepared.createdAt.add(const Duration(minutes: 5));
-    final candidates = <(File, DateTime)>[];
-    await for (final entity in cache.list()) {
-      if (entity is! File ||
-          !const {
-            '.jpg',
-            '.jpeg',
-          }.contains(p.extension(entity.path).toLowerCase())) {
-        continue;
-      }
-      final modified = (await entity.stat()).modified.toUtc();
-      if (kDebugMode) {
-        debugPrint(
-          '[CAMERA_RECOVERY] cache_jpeg modified=${modified.toIso8601String()} '
-          'window=${threshold.toIso8601String()}..${ceiling.toIso8601String()}',
-        );
-      }
-      if (!modified.isBefore(threshold) &&
-          !modified.isAfter(ceiling) &&
-          await entity.length() > 0) {
-        candidates.add((entity, modified));
-      }
-    }
-    candidates.sort((a, b) => b.$2.compareTo(a.$2));
-    if (kDebugMode) {
-      debugPrint('[CAMERA_RECOVERY] cache_candidates=${candidates.length}');
-    }
-    return candidates.firstOrNull?.$1;
   }
 
   Future<void> _recordOrphanFiles() async {

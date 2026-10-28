@@ -931,7 +931,7 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
         (_) => unawaited(recoverPhotoGps()),
       );
       await _edit(id, (r) => r['captureIntent'] = intent);
-      final photo = await camera.capture(surveyId: id);
+      final photo = await camera.capture(surveyId: id, actorId: actor);
       if (photo == null) return;
       // Persist before GPS/network; a failed GPS never discards the photo.
       await _adoptPhoto(photo, intent);

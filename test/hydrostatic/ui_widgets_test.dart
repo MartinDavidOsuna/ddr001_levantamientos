@@ -43,7 +43,14 @@ Widget host(UiHarness h, {Widget page = const HydrostaticListPage()}) =>
             body: TextButton(
               onPressed: () => Navigator.push(
                 context,
-                MaterialPageRoute<void>(builder: (_) => page),
+                MaterialPageRoute<void>(
+                  settings: RouteSettings(
+                    name: page is HydrostaticListPage
+                        ? 'hydrostatic-list'
+                        : null,
+                  ),
+                  builder: (_) => page,
+                ),
               ),
               child: const Text('OPEN'),
             ),
@@ -98,6 +105,8 @@ void main() {
         findsOneWidget,
       );
       final id = h.controller.preparations.single.id;
+      await tester.ensureVisible(find.text('CANCELAR'));
+      await settle(tester);
       await tester.tap(find.text('CANCELAR'));
       await settle(tester);
       expect(find.text('PREPARACIONES GUARDADAS'), findsOneWidget);

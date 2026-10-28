@@ -52,6 +52,7 @@ class LocalHydrostaticCabinetLookup implements HydrostaticCabinetLookup {
       uid: uid,
       cabinetId: r.id,
       model: w['model'],
+      knownStatus: w['status'],
       automated: w['automated'] == true,
       sourceVersion: (r.server['version'] as num?)?.toInt(),
     );

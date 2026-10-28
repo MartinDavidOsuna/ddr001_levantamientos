@@ -77,102 +77,112 @@ class HydrostaticRepository {
     Future<HydroJson> Function(HydrostaticTest?, HydrostaticClockReading)
     reduce, {
     int? expectedRevision,
-  }) => store.serial(() async {
-    hydroUuid(op);
-    hydroUuid(id);
-    final session = access();
-    session.requireUser(session.actor.userId);
-    hydroRequire(
-      !store.recoveryRequired,
-      'RECOVERY_REQUIRED',
-      'Recupera el journal antes de continuar.',
-    );
-    hydroRequire(
-      store.read(store.metadata, 'delete:$id') == null,
-      'DELETED',
-      'Expediente descartado.',
-    );
-    final hash = sha256
-        .convert(
-          utf8.encode(
-            canonicalHydroJson({
-              'id': id,
-              'type': type,
-              'input': input,
-              'actor': session.actor.userId,
-              'expectedRevision': expectedRevision,
-            }),
-          ),
-        )
-        .toString();
-    final previous = journal.get(op);
-    if (previous != null) {
+  }) async {
+    final origin = access().actor;
+    return store.serial(() async {
+      hydroUuid(op);
+      hydroUuid(id);
+      final session = access();
+      session.requireUser(origin.userId);
       hydroRequire(
-        previous['fingerprint'] == hash &&
-            previous['actor'] == session.actor.userId,
-        'IDEMPOTENCY_CONFLICT',
-        'La operación ya tiene otro contenido/actor.',
-      );
-      if (previous['phase'] == 'APPLIED') {
-        return HydrostaticTest.fromJson(hydroObject(previous['after']));
-      }
-    }
-    final before = store.test(id);
-    if (before != null) {
-      session.requireUser(before.actor.userId);
-      hydroRequire(
-        expectedRevision == null || expectedRevision == before.revision,
-        'REVISION_CONFLICT',
-        'Documento modificado.',
-      );
-    }
-    final stamp = clock.now();
-    // Business validation before recording a prepared operation.
-    final after = HydrostaticTest.fromJson(await reduce(before, stamp));
-    final current = access();
-    current.requireUser(session.actor.userId);
-    hydroRequire(
-      current.actor.sessionId == session.actor.sessionId,
-      'ACTOR_CHANGED',
-      'La sesión cambió durante la operación.',
-    );
-    if (before != null &&
-        canonicalHydroJson(after.toJson()) ==
-            canonicalHydroJson(before.toJson())) {
-      return before;
-    }
-    final entry = <String, dynamic>{
-      'operationId': op,
-      'testId': id,
-      'actor': session.actor.userId,
-      'fingerprint': hash,
-      'type': type,
-      'phase': 'PREPARED',
-      'after': after.toJson(),
-      'beforeRevision': before?.revision,
-      'sequence': type == 'start'
-          ? {'uid': after.cabinet.uid, 'number': after.attemptNumber}
-          : null,
-    };
-    try {
-      await journal.save(entry, 'prepared');
-      // Recheck identity after asynchronous durable preparation, before commitment.
-      final a = access();
-      a.requireUser(session.actor.userId);
-      hydroRequire(
-        a.actor.sessionId == session.actor.sessionId,
+        session.actor.sessionId == origin.sessionId &&
+            session.actor.deviceInstallationId == origin.deviceInstallationId,
         'ACTOR_CHANGED',
-        'La sesión cambió.',
+        'La sesión cambió antes de ejecutar la operación.',
       );
-      entry['phase'] = 'APPLY_READY';
-      await journal.save(entry, 'ready');
-      await _apply(entry);
-      return after;
-    } catch (_) {
-      store.recoveryRequired = true;
-      rethrow;
-    }
-  });
+      hydroRequire(
+        !store.recoveryRequired,
+        'RECOVERY_REQUIRED',
+        'Recupera el journal antes de continuar.',
+      );
+      hydroRequire(
+        store.read(store.metadata, 'delete:$id') == null,
+        'DELETED',
+        'Expediente descartado.',
+      );
+      final hash = sha256
+          .convert(
+            utf8.encode(
+              canonicalHydroJson({
+                'id': id,
+                'type': type,
+                'input': input,
+                'actor': session.actor.userId,
+                'expectedRevision': expectedRevision,
+              }),
+            ),
+          )
+          .toString();
+      final previous = journal.get(op);
+      if (previous != null) {
+        hydroRequire(
+          previous['fingerprint'] == hash &&
+              previous['actor'] == session.actor.userId,
+          'IDEMPOTENCY_CONFLICT',
+          'La operación ya tiene otro contenido/actor.',
+        );
+        if (previous['phase'] == 'APPLIED') {
+          return HydrostaticTest.fromJson(hydroObject(previous['after']));
+        }
+      }
+      final before = store.test(id);
+      if (before != null) {
+        session.requireUser(before.actor.userId);
+        hydroRequire(
+          expectedRevision == null || expectedRevision == before.revision,
+          'REVISION_CONFLICT',
+          'Documento modificado.',
+        );
+      }
+      final stamp = clock.now();
+      // Business validation before recording a prepared operation.
+      final after = HydrostaticTest.fromJson(await reduce(before, stamp));
+      final current = access();
+      current.requireUser(session.actor.userId);
+      hydroRequire(
+        current.actor.sessionId == session.actor.sessionId,
+        'ACTOR_CHANGED',
+        'La sesión cambió durante la operación.',
+      );
+      if (before != null &&
+          canonicalHydroJson(after.toJson()) ==
+              canonicalHydroJson(before.toJson())) {
+        return before;
+      }
+      final entry = <String, dynamic>{
+        'operationId': op,
+        'testId': id,
+        'actor': session.actor.userId,
+        'fingerprint': hash,
+        'type': type,
+        'phase': 'PREPARED',
+        'after': after.toJson(),
+        'beforeRevision': before?.revision,
+        'sequence': type == 'start'
+            ? {'uid': after.cabinet.uid, 'number': after.attemptNumber}
+            : null,
+      };
+      try {
+        await journal.save(entry, 'prepared');
+        // Recheck identity after asynchronous durable preparation, before commitment.
+        final a = access();
+        a.requireUser(session.actor.userId);
+        hydroRequire(
+          a.actor.sessionId == session.actor.sessionId,
+          'ACTOR_CHANGED',
+          'La sesión cambió.',
+        );
+        entry['phase'] = 'APPLY_READY';
+        await journal.save(entry, 'ready');
+        await _apply(entry);
+        return after;
+      } catch (_) {
+        store.recoveryRequired = true;
+        rethrow;
+      }
+    });
+  }
+
   HydroJson _update(
     HydrostaticTest t,
     HydrostaticClockReading now,
@@ -310,6 +320,30 @@ class HydrostaticRepository {
     );
   }
 
+  Future<bool> canStart(String id) async {
+    try {
+      final t = get(id);
+      if (t == null ||
+          t.state != HydrostaticTestState.preparation ||
+          store.recoveryRequired ||
+          isCapturing(id)) {
+        return false;
+      }
+      if (store.all().any(
+        (other) =>
+            other.state == HydrostaticTestState.active &&
+            (other.actor.userId == t.actor.userId ||
+                other.cabinet.uid == t.cabinet.uid),
+      )) {
+        return false;
+      }
+      await _role(t, HydrostaticEvidenceRole.initialSetup);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<HydrostaticTest> requestStart(String id, String op) =>
       _command(op, id, 'requestStart', {}, (t, now) async {
         if (t?.state == HydrostaticTestState.starting) return t!.toJson();
@@ -327,8 +361,9 @@ class HydrostaticRepository {
   Future<HydrostaticTest> start(
     String id,
     String op,
-    HydrostaticLocation location,
-  ) => _command(op, id, 'start', location.toJson(), (t, now) async {
+    HydrostaticLocation location, {
+    Future<void> Function()? validateCabinet,
+  }) => _command(op, id, 'start', location.toJson(), (t, now) async {
     if (t?.startedAt != null) return t!.toJson();
     _state(t, HydrostaticTestState.starting);
     hydroRequire(
@@ -349,6 +384,7 @@ class HydrostaticRepository {
       'Hay una prueba activa para este actor o gabinete.',
     );
     _transition(t, HydrostaticTestState.active);
+    await validateCabinet?.call();
     now = clock.now();
     hydroRequire(
       location.validAt(now.utc),

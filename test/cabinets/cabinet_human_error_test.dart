@@ -40,6 +40,7 @@ class FullStorageCamera extends PhotoCaptureService {
   @override
   Future<ConstructionPhoto?> capture({
     required String surveyId,
+    String? actorId,
     int? step,
     String? correctionId,
     PhotoPurpose? purpose,

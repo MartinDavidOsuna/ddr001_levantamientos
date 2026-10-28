@@ -3,6 +3,7 @@ import 'package:hive_ce_flutter/hive_ce_flutter.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 import 'app/app.dart';
+import 'core/media/camera_capture_broker.dart';
 import 'core/hydrostatic/hydrostatic_bootstrap.dart';
 import 'data/hydrostatic/hydrostatic_access_adapter.dart';
 import 'data/hydrostatic/hydrostatic_cabinet_lookup.dart';
@@ -21,6 +22,13 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final config = AppConfig.fromEnvironment();
   await Hive.initFlutter();
+  try {
+    await CameraCaptureBroker.shared.recover();
+  } on Object catch (error) {
+    // Preserve the dispatch receipt and originals; never block legacy startup
+    // or fall back to assigning by cache timestamp.
+    debugPrint('[CAMERA_RECOVERY] pending ${error.runtimeType}');
+  }
   final local = await LocalStore.open();
   final sessions = SecureSessionStore();
   await seedDeviceCertificationFixture(local, sessions);

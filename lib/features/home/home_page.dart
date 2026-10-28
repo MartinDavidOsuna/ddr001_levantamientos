@@ -106,7 +106,10 @@ class HomePage extends StatelessWidget {
               subtitle: 'Preparación e historial local de pruebas',
               onTap: () => Navigator.push(
                 context,
-                MaterialPageRoute(builder: (_) => const HydrostaticListPage()),
+                MaterialPageRoute(
+                  settings: const RouteSettings(name: 'hydrostatic-list'),
+                  builder: (_) => const HydrostaticListPage(),
+                ),
               ),
             ),
           ],
