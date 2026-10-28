@@ -349,20 +349,31 @@ class HydrostaticController extends ChangeNotifier {
   }
 
   bool _expiring = false;
+  HydrostaticElapsed resultRemaining(String id) => _repo!.resultRemaining(id);
+  bool requiresTimeReview(String id) => _repo!.requiresTimeReview(document(id));
   bool resultExpired(String id) => _repo!.resultExpired(document(id));
   Future<void> expireResults() async {
     if (_expiring || busy || !ready || !allowed) return;
     final key = identity;
     _expiring = true;
     try {
-      for (final t in _repo!.forUser().where(
-        (t) => !t.isDiscarded && _repo!.resultExpired(t),
-      )) {
+      for (final t in _repo!.forUser()) {
         requireIdentity(key);
-        if (photos?.isCapturing(t.id) == true) continue;
-        await _repo!.discardExpired(t.id, _operation('expire:${t.id}'));
-        requireIdentity(key);
-        _notify();
+        if (t.isDiscarded ||
+            t.closedAt != null ||
+            photos?.isCapturing(t.id) == true) {
+          continue;
+        }
+        if (_repo!.requiresTimeReview(t) &&
+            t.toJson()['temporalReview'] == null) {
+          await _repo!.reviewClock(t.id, _operation('clockReview:${t.id}'));
+          requireIdentity(key);
+          _notify();
+        } else if (_repo!.resultExpired(t)) {
+          await _repo!.discardExpired(t.id, _operation('expire:${t.id}'));
+          requireIdentity(key);
+          _notify();
+        }
       }
     } finally {
       _expiring = false;

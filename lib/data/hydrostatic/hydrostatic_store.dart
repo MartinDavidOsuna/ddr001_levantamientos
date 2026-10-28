@@ -7,6 +7,7 @@ import '../../domain/hydrostatic/hydrostatic_models.dart';
 enum HydrostaticOperationPhase {
   prepared,
   applyReady,
+  closePendingTime,
   applied,
   recoverable,
   error,

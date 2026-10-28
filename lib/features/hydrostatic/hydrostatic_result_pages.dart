@@ -24,9 +24,14 @@ class _HydrostaticResultPageState extends State<HydrostaticResultPage> {
     super.initState();
     expiryTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) {
-        c.expireResults().catchError((Object e) {
-          if (mounted) setState(() {});
-        });
+        c
+            .expireResults()
+            .whenComplete(() {
+              if (mounted) setState(() {});
+            })
+            .catchError((Object e) {
+              /* Frame exposes recovery failure; no false success. */
+            });
       }
     });
   }
@@ -140,7 +145,8 @@ class _HydrostaticResultPageState extends State<HydrostaticResultPage> {
     onBackBlocked: leave,
     builder: (context, controller) {
       final t = controller.document(widget.id);
-      final expired = t.isDiscarded || controller.resultExpired(t.id);
+      final review = controller.requiresTimeReview(t.id);
+      final expired = t.isDiscarded || controller.resultExpired(t.id) || review;
       final leak =
           !expired && t.state == HydrostaticTestState.leakDetailsPending;
       final approval =
@@ -166,9 +172,36 @@ class _HydrostaticResultPageState extends State<HydrostaticResultPage> {
                   : null,
             ),
           ),
-          if (expired)
+          if (t.endedAt != null && t.closedAt == null && !t.isDiscarded)
+            HydrostaticResultCountdown(id: t.id),
+          if (t.isDiscarded)
             const Text(
-              'DESCARTADA: venció el plazo de 30 minutos desde el fin. Datos y fotos conservados. Inicia una nueva prueba.',
+              'El intento, sus datos y fotografías se conservan. No tiene resultado hidráulico definitivo.',
+            ),
+          if (!t.isDiscarded && controller.resultExpired(t.id))
+            const Text('TIEMPO AGOTADO — DESCARTE PENDIENTE DE GUARDAR'),
+          if (review)
+            const Text(
+              'REVISIÓN TEMPORAL REQUERIDA. No se puede determinar un cierre válido. Datos conservados; no se aprueba ni descarta automáticamente.',
+            ),
+          if (t.isDiscarded || review)
+            FilledButton.icon(
+              onPressed: c.busy
+                  ? null
+                  : () => hydroAction(context, () async {
+                      await c.flushDrafts();
+                      final newId = await c.identify(t.cabinet.uid);
+                      if (context.mounted) {
+                        Navigator.of(context).pushReplacement(
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                HydrostaticPreparationPage(id: newId),
+                          ),
+                        );
+                      }
+                    }),
+              icon: const Icon(Icons.add),
+              label: const Text('INICIAR NUEVO INTENTO'),
             ),
           if (!expired &&
               t.state == HydrostaticTestState.endedPendingResult) ...[
@@ -356,4 +389,40 @@ class _HydrostaticResultPageState extends State<HydrostaticResultPage> {
       );
     },
   );
+}
+
+/// Informational only; every close is independently checked by the repository.
+class HydrostaticResultCountdown extends StatelessWidget {
+  const HydrostaticResultCountdown({super.key, required this.id});
+  final String id;
+  @override
+  Widget build(BuildContext context) {
+    final remaining = context.read<HydrostaticController>().resultRemaining(id);
+    final review = remaining.state == HydrostaticTimeState.needsReview;
+    final seconds = (remaining.milliseconds / 1000).ceil();
+    final label = review
+        ? '--:--'
+        : '${(seconds ~/ 60).toString().padLeft(2, '0')}:${(seconds % 60).toString().padLeft(2, '0')}';
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            const Text('TIEMPO RESTANTE PARA REGISTRAR RESULTADO'),
+            Text(
+              label,
+              key: const Key('hydro_result_countdown'),
+              style: Theme.of(context).textTheme.headlineMedium,
+            ),
+            if (!review && seconds <= 300)
+              const Text(
+                'El plazo está por terminar. Guarda el resultado antes del vencimiento.',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+            if (review) const Text('Tiempo pendiente de revisión.'),
+          ],
+        ),
+      ),
+    );
+  }
 }

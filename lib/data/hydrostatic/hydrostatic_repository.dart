@@ -77,6 +77,18 @@ class HydrostaticRepository {
     HydrostaticClockReading.fromJson(hydroObject(t.toJson()['endClock'])),
     clock.now(),
   );
+  HydrostaticElapsed resultRemaining(String id) {
+    final t = get(id)!;
+    hydroRequire(t.endedAt != null, 'INVALID_STATE', 'Sin fin registrado.');
+    final elapsed = _sinceEnd(t);
+    final maximum = approvalPolicy.maximumFinalDelay!.inMilliseconds;
+    return HydrostaticElapsed(
+      (maximum - elapsed.milliseconds).clamp(0, maximum).toInt(),
+      requiresTimeReview(t) ? HydrostaticTimeState.needsReview : elapsed.state,
+      elapsed.anomalies,
+    );
+  }
+
   bool requiresTimeReview(HydrostaticTest t) =>
       t.endedAt != null &&
       t.closedAt == null &&
@@ -128,6 +140,8 @@ class HydrostaticRepository {
               .add(approvalPolicy.maximumFinalDelay!)
               .toUtc()
               .toIso8601String(),
+          'discardDetectedAt': now.utc.toIso8601String(),
+          'discardedFromState': hydroWire(t.state),
           'discardReason': 'RESULT_DEADLINE_EXCEEDED',
           'discardPolicy': approvalPolicy.toJson(),
         });
@@ -889,6 +903,10 @@ class HydrostaticRepository {
     final review = {
       ...entry,
       'type': 'timeReview',
+      'uncertainCloseCandidate': {
+        'type': entry['type'],
+        'after': entry['after'],
+      },
       'phase': 'RECOVERABLE',
       'after': after,
     };
@@ -956,7 +974,13 @@ class HydrostaticRepository {
         } else if (entry['phase'] == 'CLOSE_PENDING_TIME') {
           await _uncertainClose(entry, 'CLOSE_COMMIT_TIME_UNKNOWN');
         } else if (['APPLY_READY', 'RECOVERABLE'].contains(entry['phase'])) {
-          await _apply(entry);
+          if (['closePass', 'closeLeak'].contains(entry['type']) &&
+              entry['closeWitness'] == null &&
+              store.test(entry['testId'])?.closedAt == null) {
+            await _uncertainClose(entry, 'LEGACY_CLOSE_TIME_UNVERIFIABLE');
+          } else {
+            await _apply(entry);
+          }
         } else {
           throw const HydrostaticException(
             'CORRUPT_JOURNAL',

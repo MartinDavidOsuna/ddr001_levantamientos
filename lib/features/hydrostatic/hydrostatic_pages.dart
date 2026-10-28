@@ -8,7 +8,11 @@ import 'hydrostatic_scanner.dart';
 import 'hydrostatic_execution_pages.dart';
 
 String hydroStatus(HydrostaticTest t) => t.isDiscarded
-    ? 'DESCARTADA — PLAZO VENCIDO'
+    ? 'DESCARTADA — TIEMPO DE REGISTRO AGOTADO'
+    : t.endedAt != null &&
+          t.closedAt == null &&
+          t.timeState == HydrostaticTimeState.needsReview
+    ? 'REVISIÓN TEMPORAL REQUERIDA'
     : switch (t.state) {
         HydrostaticTestState.preparation => 'PREPARACIÓN',
         HydrostaticTestState.starting => 'PREPARACIÓN PENDIENTE',
