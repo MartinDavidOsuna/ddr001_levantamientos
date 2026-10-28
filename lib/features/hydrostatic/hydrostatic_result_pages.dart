@@ -112,31 +112,53 @@ class _HydrostaticResultPageState extends State<HydrostaticResultPage> {
     hydroAction(context, () => save);
   }
 
-  Widget closure(HydrostaticTest t, bool leak) => FutureBuilder<String?>(
-    future: c.closureIssue(t.id),
-    builder: (context, snapshot) => Column(
-      children: [
-        if (snapshot.data != null) Text(snapshot.data!),
-        FilledButton(
-          onPressed:
-              snapshot.connectionState != ConnectionState.done ||
-                  snapshot.data != null ||
-                  c.busy
-              ? null
-              : () => hydroAction(context, () async {
-                  await c.resultAction(t.id, leak ? 'leak' : 'pass');
-                  if (!mounted) return;
-                  if (leak) {
-                    await leave();
-                  } else {
-                    setState(() {});
-                  }
-                }),
-          child: Text(leak ? 'GUARDAR RESULTADO' : 'GUARDAR APROBACIÓN'),
-        ),
-      ],
-    ),
-  );
+  Object? _closureKey;
+  Future<String?>? _closureFuture;
+
+  Widget closure(HydrostaticTest t, bool leak) {
+    // The countdown must not restart hashing full camera originals every second.
+    // Commands still revalidate files and the deadline immediately before commit.
+    final key = (
+      t.id,
+      t.revision,
+      c.identity,
+      c.busy,
+      c.draftPending,
+      c.pendingCaptures(t.id),
+      c.cameraRecoveryError,
+      c.resultExpired(t.id),
+      c.resultRemaining(t.id).state,
+    );
+    if (_closureKey != key) {
+      _closureKey = key;
+      _closureFuture = c.closureIssue(t.id);
+    }
+    return FutureBuilder<String?>(
+      future: _closureFuture,
+      builder: (context, snapshot) => Column(
+        children: [
+          if (snapshot.data != null) Text(snapshot.data!),
+          FilledButton(
+            onPressed:
+                snapshot.connectionState != ConnectionState.done ||
+                    snapshot.data != null ||
+                    c.busy
+                ? null
+                : () => hydroAction(context, () async {
+                    await c.resultAction(t.id, leak ? 'leak' : 'pass');
+                    if (!mounted) return;
+                    if (leak) {
+                      await leave();
+                    } else {
+                      setState(() {});
+                    }
+                  }),
+            child: Text(leak ? 'GUARDAR RESULTADO' : 'GUARDAR APROBACIÓN'),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) => HydrostaticFrame(

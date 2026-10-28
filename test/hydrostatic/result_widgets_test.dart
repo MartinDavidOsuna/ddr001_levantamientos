@@ -96,6 +96,17 @@ void main() {
             .onPressed,
         isNotNull,
       );
+      // A countdown tick must not put an unchanged, completed validation back
+      // into waiting. Real multi-megabyte camera originals can exceed a tick.
+      await tester.pump(const Duration(seconds: 1));
+      expect(
+        tester
+            .widget<FilledButton>(
+              find.widgetWithText(FilledButton, 'GUARDAR APROBACIÓN'),
+            )
+            .onPressed,
+        isNotNull,
+      );
       await tester.tap(find.text('GUARDAR APROBACIÓN'));
       await widgets.settle(tester);
       expect(h.repo.get(id)!.state, HydrostaticTestState.passed);
