@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import '../../data/hydrostatic/hydrostatic_access_adapter.dart';
@@ -9,11 +10,31 @@ import '../media/camera_capture_broker.dart';
 import 'hydrostatic_contracts.dart';
 import 'hydrostatic_location.dart';
 import 'hydrostatic_photos.dart';
+import '../network/api_client.dart';
+import '../config/app_config.dart';
+import '../../data/hydrostatic/hydrostatic_sync.dart';
+import '../../data/hydrostatic/hydrostatic_sync_api.dart';
+import '../../data/hydrostatic/hydrostatic_sync_store.dart';
+import 'hydrostatic_sync_runner.dart';
+
+bool hydrostaticSyncEnabled(AppConfig? config, {required bool requested}) =>
+    requested &&
+    config?.environment == 'test' &&
+    config?.apiBaseUrl.host != 'cifra.aquafim.com';
 
 HydrostaticController createHydrostaticController({
   required HydrostaticAccessAdapter authorization,
   required HydrostaticCabinetLookup lookup,
+  ApiClient? api,
+  AppConfig? config,
+  bool Function()? online,
 }) {
+  final syncEnabled =
+      hydrostaticSyncEnabled(
+        config,
+        requested: const bool.fromEnvironment('HYDROSTATIC_SYNC_ENABLED'),
+      ) &&
+      api != null;
   late HydrostaticController controller;
   controller = HydrostaticController(
     access: authorization.current,
@@ -44,8 +65,50 @@ HydrostaticController createHydrostaticController({
       controller.photos = photos;
       controller.locations = gps;
       controller.evidencePath = (e) => '${support.path}/${e.originalPath}';
+      if (syncEnabled) {
+        controller.initializeSync = () async {
+          final outbox = await HydrostaticSyncStore.open(
+            Directory('${support.path}/hydrostatic/db'),
+          );
+          final sync = HydrostaticSync(
+            repository: repository,
+            store: outbox,
+            remote: HydrostaticSyncApi(api),
+            enabled: true,
+            identity: () {
+              try {
+                final a = authorization.current().actor;
+                return HydrostaticSyncIdentity(
+                  a.userId,
+                  a.sessionId,
+                  a.deviceInstallationId,
+                );
+              } catch (_) {
+                return null;
+              }
+            },
+            verifySession: authorization.verify,
+            online: online ?? () => true,
+          );
+          controller.attachSync(sync);
+          final runner = HydrostaticSyncRunner(sync)..start();
+          controller.disposeSyncRunner = runner.dispose;
+        };
+      }
       return repository;
     },
   );
+  controller.syncOnStartup = syncEnabled;
+  if (syncEnabled && authorization.allowed) {
+    unawaited(
+      Future<void>.microtask(() async {
+        try {
+          await controller.initialize();
+        } catch (_) {
+          /* Recover on next authorized access. */
+        }
+      }),
+    );
+  }
   return controller;
 }

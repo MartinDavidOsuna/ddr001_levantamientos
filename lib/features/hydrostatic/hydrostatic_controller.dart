@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import '../../core/hydrostatic/hydrostatic_contracts.dart';
 import '../../data/hydrostatic/hydrostatic_repository.dart';
+import '../../data/hydrostatic/hydrostatic_sync.dart';
 import '../../domain/cabinets/cabinet_models.dart';
 import '../../domain/hydrostatic/hydrostatic_models.dart';
 
@@ -32,9 +34,44 @@ class HydrostaticController extends ChangeNotifier {
   String _operation(String key) =>
       _operations.putIfAbsent(key, () => const Uuid().v4());
   HydrostaticRepository? _repo;
+  HydrostaticSync? sync;
+  Future<void> Function()? initializeSync;
+  String? syncSetupError;
+  void Function()? disposeSyncRunner;
+  bool syncOnStartup = false;
+  String? _syncIdentity;
+  void attachSync(HydrostaticSync value) {
+    sync = value;
+    value.addListener(_notify);
+  }
+
+  String syncLabel(String id) =>
+      syncSetupError ??
+      sync?.label(document(id)) ??
+      'Sólo local · sincronización no habilitada';
+  Future<void> retrySync() async {
+    await _setupSync();
+    await sync?.run(manual: true);
+    _notify();
+  }
+
   Future<void>? _initializing;
   Future<String>? _preparing;
   bool _disposed = false;
+  Future<void>? _syncOpening;
+  Future<void> _setupSync() =>
+      _syncOpening ??= _openSync().whenComplete(() => _syncOpening = null);
+  Future<void> _openSync() async {
+    if (sync != null || initializeSync == null) return;
+    try {
+      await initializeSync!();
+      syncSetupError = null;
+    } catch (_) {
+      syncSetupError =
+          'Outbox no disponible; captura local conservada. Reintenta sincronización.';
+    }
+  }
+
   String? error;
   String? cameraRecoveryError;
   bool busy = false;
@@ -73,6 +110,10 @@ class HydrostaticController extends ChangeNotifier {
     _evidenceValidationRevision++;
     _evidenceChecks.clear();
     error = null;
+    if (syncOnStartup && identity != null && _syncIdentity != identity) {
+      _syncIdentity = identity;
+      unawaited(initialize().catchError((Object _) {}));
+    }
     _notify();
   }
 
@@ -108,6 +149,8 @@ class HydrostaticController extends ChangeNotifier {
       }
     }
     await expireResults();
+    await _setupSync();
+    unawaited(sync?.run());
     error = null;
     _notify();
   }
@@ -584,7 +627,8 @@ class HydrostaticController extends ChangeNotifier {
             HydrostaticTestState.active,
             HydrostaticTestState.starting,
           ].contains(t.state) &&
-          !_repo!.isCapturing(id);
+          !_repo!.isCapturing(id) &&
+          _repo!.store.read(_repo!.store.metadata, 'syncProtected:$id') == null;
     } catch (_) {
       return false;
     }
@@ -612,6 +656,9 @@ class HydrostaticController extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    disposeSyncRunner?.call();
+    sync?.removeListener(_notify);
+    sync?.dispose();
     sessionChanges.removeListener(_sessionChanged);
     super.dispose();
   }

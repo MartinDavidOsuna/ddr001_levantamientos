@@ -1011,6 +1011,11 @@ class HydrostaticRepository {
       'CONFIRMATION_REQUIRED',
       'Confirma el UUID exacto.',
     );
+    hydroRequire(
+      store.read(store.metadata, 'syncProtected:$id') == null,
+      'SYNC_PROTECTED',
+      'El expediente tiene entrega pendiente o recibos remotos; no puede eliminarse localmente.',
+    );
     final old = store.read(store.metadata, 'delete:$id');
     if (old != null) {
       a.requireUser(old['actorId']);

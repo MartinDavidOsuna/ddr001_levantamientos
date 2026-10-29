@@ -195,6 +195,15 @@ class HydrostaticListPage extends StatelessWidget {
             icon: const Icon(Icons.add),
             label: const Text('NUEVA PRUEBA'),
           ),
+          if (c.sync != null || c.syncSetupError != null) ...[
+            if (c.syncSetupError != null) Text(c.syncSetupError!),
+            if (c.sync?.error != null) Text(c.sync!.error!),
+            TextButton.icon(
+              onPressed: c.sync?.busy == true ? null : c.retrySync,
+              icon: const Icon(Icons.sync),
+              label: const Text('REINTENTAR SINCRONIZACIÓN'),
+            ),
+          ],
           if (uids.isEmpty)
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 24),
@@ -239,6 +248,7 @@ class HydrostaticListPage extends StatelessWidget {
                       '${c.history(uid).length} intento(s) · Prueba #${c.history(uid).first.attemptNumber}',
                     ),
                     HydrostaticStatusLabel(test: c.history(uid).first),
+                    Text(c.syncLabel(c.history(uid).first.id)),
                     Text(
                       '${hydroDateLabel(c.history(uid).first.startedAt)} · ${hydroDuration(c.history(uid).first)}',
                     ),
@@ -259,7 +269,13 @@ class HydrostaticListPage extends StatelessWidget {
                 child: ListTile(
                   key: ValueKey('preparation_${t.id}'),
                   title: Text(displayUid(t.cabinet.uid)),
-                  subtitle: Text('${hydroModel(t)} · REANUDAR PREPARACIÓN'),
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('${hydroModel(t)} · REANUDAR PREPARACIÓN'),
+                      Text(c.syncLabel(t.id)),
+                    ],
+                  ),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () =>
                       _push(context, HydrostaticPreparationPage(id: t.id)),
@@ -503,6 +519,7 @@ class HydrostaticHistoryPage extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   HydrostaticStatusLabel(test: t),
+                  Text(c.syncLabel(t.id)),
                   Text(t.actor.name),
                   Text(
                     'Inicio: ${hydroDateLabel(t.startedAt)}\nFin: ${hydroDateLabel(t.endedAt)}\nDuración: ${hydroDuration(t)}',
@@ -539,6 +556,25 @@ class HydrostaticDetailPage extends StatelessWidget {
           Text('Técnico: ${t.actor.name}'),
           Text('Prueba #${t.attemptNumber ?? 'provisional'}'),
           HydrostaticStatusLabel(test: t),
+          Text(c.syncLabel(id)),
+          if (c.sync == null && c.syncSetupError != null)
+            TextButton(
+              onPressed: c.retrySync,
+              child: const Text('REINTENTAR SINCRONIZACIÓN'),
+            ),
+          if (c.sync != null) ...[
+            if (c.sync!.error != null) Text(c.sync!.error!),
+            if (c.sync!.view(id)?['lastCommitAt'] != null)
+              Text('Último recibo: ${c.sync!.view(id)!['lastCommitAt']}'),
+            if (c.sync!.view(id)?['active']?['remoteStatus'] != null)
+              Text(
+                'Conflicto: versión remota ${c.sync!.view(id)!['active']['remoteStatus']['serverVersion']}. Se conserva la revisión local; no se sobrescribe el servidor.',
+              ),
+            TextButton(
+              onPressed: c.sync!.busy ? null : c.retrySync,
+              child: const Text('REINTENTAR / RECUPERAR RECIBO'),
+            ),
+          ],
           Text('Inicio: ${hydroDateLabel(t.startedAt)}'),
           Text('Fin: ${hydroDateLabel(t.endedAt)}'),
           Text('Duración: ${hydroDuration(t)}'),

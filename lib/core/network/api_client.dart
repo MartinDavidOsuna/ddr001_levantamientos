@@ -46,6 +46,20 @@ class ApiClient {
         );
         return;
       }
+      final expectedSession = options.extra['expectedSessionId'];
+      final expectedInstallation = options.extra['expectedInstallationId'];
+      if ((expectedSession != null &&
+              session?.sessionId.toLowerCase() != expectedSession) ||
+          (expectedInstallation != null &&
+              session?.installationId.toLowerCase() != expectedInstallation)) {
+        handler.reject(
+          DioException(
+            requestOptions: options,
+            error: 'La sesión o instalación cambió; operación conservada.',
+          ),
+        );
+        return;
+      }
       if (session != null) {
         options.headers['Authorization'] = 'Bearer ${session.accessToken}';
       }

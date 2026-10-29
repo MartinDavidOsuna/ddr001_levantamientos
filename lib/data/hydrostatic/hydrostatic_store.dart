@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:hive_ce/hive.dart';
@@ -21,6 +22,8 @@ class HydrostaticStore {
   HydrostaticWriteFault? fault;
   Future<void> _tail = Future.value();
   bool recoveryRequired = false;
+  final _changes = StreamController<void>.broadcast();
+  Stream<void> get changes => _changes.stream;
   static bool _opening = false;
   static const names = [
     'hydrostatic_documents_v1',
@@ -116,6 +119,7 @@ class HydrostaticStore {
     );
     await box.flush();
     await fault?.call('after:$boundary');
+    if (box == documents) _changes.add(null);
   }
 
   Future<void> remove(Box<String> box, String key, String boundary) async {
@@ -136,6 +140,7 @@ class HydrostaticStore {
       .toList();
   Future<void> close() async {
     await _tail;
+    await _changes.close();
     await documents.close();
     await journal.close();
     await metadata.close();

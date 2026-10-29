@@ -62,6 +62,9 @@ Future<void> main() async {
         ChangeNotifierProvider<HydrostaticController>(
           create: (_) => createHydrostaticController(
             authorization: hydrostaticAccess,
+            api: api,
+            config: config,
+            online: () => controller.online,
             lookup: LocalHydrostaticCabinetLookup.fromStore(cabinets.store),
           ),
         ),
