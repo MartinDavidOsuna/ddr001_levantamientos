@@ -36,7 +36,7 @@ void main() {
         tester.getTopLeft(find.text('Abrir cámara QR')).dy,
         lessThan(tester.getTopLeft(find.byType(TextField)).dy),
       );
-      expect(find.text('ej: AQ26-00000-0'), findsOneWidget);
+      expect(find.text('Ej. AQ26-00000-0'), findsOneWidget);
       expect(find.byTooltip('Buscar gabinete'), findsOneWidget);
       await tester.tap(find.text('Gabinetes disponibles'));
       await tester.pumpAndSettle();

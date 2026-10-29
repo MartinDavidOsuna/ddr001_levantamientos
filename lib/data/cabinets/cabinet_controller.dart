@@ -344,6 +344,17 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
     }
     final catalog =
         store.catalog() ?? (throw StateError('Falta descargar el catálogo.'));
+    if (object(catalog.json['capabilities'])['registrationCompany'] == true &&
+        app.currentCrewId == null) {
+      throw StateError(
+        'Falta la empresa de tu sesión. Actualiza el perfil o inicia sesión de nuevo antes de registrar el gabinete.',
+      );
+    }
+    if (!['A1', 'A2', 'A3', 'A4'].contains(model)) {
+      throw StateError(
+        'Selecciona el modelo base antes de registrar el gabinete.',
+      );
+    }
     final id = const Uuid().v4();
     final working = <String, dynamic>{
       'cabinetId': id,

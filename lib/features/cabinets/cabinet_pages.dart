@@ -355,7 +355,8 @@ class CabinetRegisterPage extends StatefulWidget {
 
 class _CabinetRegisterPageState extends State<CabinetRegisterPage> {
   late final uid = TextEditingController(text: widget.initialUid);
-  String model = 'A1';
+  String? model;
+  bool get canIdentify => widget.installation || model != null;
   bool automated = false, busy = false;
   @override
   void dispose() {
@@ -364,14 +365,14 @@ class _CabinetRegisterPageState extends State<CabinetRegisterPage> {
   }
 
   Future<void> open(String raw) async {
-    if (busy) return;
+    if (busy || !canIdentify) return;
     setState(() => busy = true);
     await cabinetAction(context, () async {
       final c = context.read<CabinetController>();
       final normalized = cabinetUid(raw.trim());
       final id = widget.installation
           ? await c.findForInstallation(normalized)
-          : await c.scan(normalized, model, automated);
+          : await c.scan(normalized, model!, automated);
       if (!mounted) return;
       if (id == null) {
         await showDialog<void>(
@@ -437,12 +438,41 @@ class _CabinetRegisterPageState extends State<CabinetRegisterPage> {
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
+          if (!widget.installation) ...[
+            DropdownButtonFormField<String>(
+              initialValue: model,
+              hint: const Text('Selecciona el modelo base'),
+              decoration: const InputDecoration(labelText: 'Modelo base'),
+              items: [
+                'A1',
+                'A2',
+                'A3',
+                'A4',
+              ].map((m) => DropdownMenuItem(value: m, child: Text(m))).toList(),
+              onChanged: busy ? null : (v) => setState(() => model = v),
+            ),
+            SwitchListTile(
+              title: const Text('Incluye automatización'),
+              subtitle: Text(
+                model == null
+                    ? 'Selecciona primero el modelo base'
+                    : automated
+                    ? '$model-A'
+                    : model!,
+              ),
+              value: automated,
+              onChanged: busy || model == null
+                  ? null
+                  : (v) => setState(() => automated = v),
+            ),
+          ],
+          const SizedBox(height: 16),
           const Text(
             'Escanea el QR o escribe el UID de la placa. Una lectura repetida abre el expediente existente.',
           ),
           const SizedBox(height: 16),
           CabinetBusyButton.icon(
-            onPressed: busy
+            onPressed: busy || !canIdentify
                 ? null
                 : () async {
                     final raw = await Navigator.push<String>(
@@ -462,12 +492,16 @@ class _CabinetRegisterPageState extends State<CabinetRegisterPage> {
           const SizedBox(height: 28),
           TextField(
             controller: uid,
-            onSubmitted: busy ? null : open,
+            enabled: canIdentify && !busy,
+            onChanged: (_) => setState(() {}),
+            onSubmitted: busy || !canIdentify ? null : open,
             decoration: InputDecoration(
-              labelText: widget.installation
-                  ? 'ej: AQ26-00000-0'
-                  : 'Número de hidrante',
-              hintText: widget.installation ? null : 'Ejemplo: AQ26-00001-7',
+              labelText: uid.text.isEmpty
+                  ? 'Ej. AQ26-00000-0'
+                  : 'Numero de Hidrante',
+              floatingLabelBehavior: uid.text.isEmpty
+                  ? FloatingLabelBehavior.never
+                  : FloatingLabelBehavior.auto,
               suffixIcon: widget.installation
                   ? IconButton.filled(
                       tooltip: 'Buscar gabinete',
@@ -481,7 +515,9 @@ class _CabinetRegisterPageState extends State<CabinetRegisterPage> {
                           borderRadius: BorderRadius.circular(10),
                         ),
                       ),
-                      onPressed: busy ? null : () => open(uid.text),
+                      onPressed: busy || !canIdentify
+                          ? null
+                          : () => open(uid.text),
                       icon: Icon(
                         Icons.search,
                         size: 26,
@@ -495,33 +531,25 @@ class _CabinetRegisterPageState extends State<CabinetRegisterPage> {
             ),
           ),
           const SizedBox(height: 12),
-          if (!widget.installation) ...[
-            DropdownButtonFormField<String>(
-              initialValue: model,
-              decoration: const InputDecoration(labelText: 'Modelo base'),
-              items: [
-                'A1',
-                'A2',
-                'A3',
-                'A4',
-              ].map((m) => DropdownMenuItem(value: m, child: Text(m))).toList(),
-              onChanged: (v) => setState(() => model = v!),
-            ),
-            SwitchListTile(
-              title: const Text('Incluye automatización'),
-              subtitle: Text(automated ? '$model-A' : model),
-              value: automated,
-              onChanged: (v) => setState(() => automated = v),
-            ),
-          ],
           if (!widget.installation)
             TextButton(
-              onPressed: busy ? null : () => open(uid.text),
-              child: const Text('Continuar con UID escrito'),
+              onPressed: busy || !canIdentify ? null : () => open(uid.text),
+              style: TextButton.styleFrom(
+                minimumSize: const Size.fromHeight(48),
+                alignment: Alignment.center,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
+              ),
+              child: const Text(
+                'Continuar con UID escrito',
+                textAlign: TextAlign.center,
+              ),
             ),
           if (widget.installation)
             CabinetBusyButton.icon(
-              onPressed: busy
+              onPressed: busy || !canIdentify
                   ? null
                   : () => Navigator.push(
                       context,
@@ -1173,14 +1201,9 @@ class CabinetRegistrationPhotos extends StatelessWidget {
                           SizedBox(
                             width: 96,
                             height: 96,
-                            child: FutureBuilder(
-                              future: c.photoBytes(id, photos[index]),
-                              builder: (context, snapshot) => snapshot.hasData
-                                  ? Image.memory(
-                                      snapshot.data!,
-                                      fit: BoxFit.cover,
-                                    )
-                                  : const Icon(Icons.photo),
+                            child: CabinetPhotoImage(
+                              id: id,
+                              photo: photos[index],
                             ),
                           ),
                           const SizedBox(width: 12),
@@ -1361,22 +1384,7 @@ class CabinetRubricGallery extends StatelessWidget {
                                   CabinetPhotoPage(id: id, photo: photo),
                             ),
                           ),
-                          child: FutureBuilder(
-                            future: c.photoBytes(id, photo),
-                            builder: (context, snapshot) => snapshot.hasData
-                                ? Image.memory(
-                                    snapshot.data!,
-                                    fit: BoxFit.cover,
-                                  )
-                                : Center(
-                                    child: snapshot.hasError
-                                        ? const Text(
-                                            'Foto no disponible. Reintenta la descarga.',
-                                            textAlign: TextAlign.center,
-                                          )
-                                        : const CircularProgressIndicator(),
-                                  ),
-                          ),
+                          child: CabinetPhotoImage(id: id, photo: photo),
                         ),
                 );
               },
@@ -2718,21 +2726,17 @@ class CabinetPhotoPage extends StatelessWidget {
     if (!c.allowed) return cabinetDenied(c);
     return Scaffold(
       appBar: AppBar(title: const Text('Evidencia del gabinete')),
-      body: FutureBuilder(
-        future: c.photoBytes(id, photo, original: true),
-        builder: (context, snapshot) => snapshot.hasData
-            ? InteractiveViewer(
-                minScale: 0.5,
-                maxScale: 8,
-                child: Center(child: Image.memory(snapshot.data!)),
-              )
-            : Center(
-                child: Text(
-                  snapshot.hasError
-                      ? 'No se pudo recuperar la fotografía. Datos conservados.'
-                      : 'Cargando evidencia…',
-                ),
-              ),
+      body: InteractiveViewer(
+        minScale: 0.5,
+        maxScale: 8,
+        child: Center(
+          child: CabinetPhotoImage(
+            id: id,
+            photo: photo,
+            original: true,
+            fit: BoxFit.contain,
+          ),
+        ),
       ),
     );
   }
@@ -2932,6 +2936,78 @@ class _CabinetDeleteDialogState extends State<CabinetDeleteDialog> {
           child: const Text('Eliminar definitivamente'),
         ),
       ],
+    );
+  }
+}
+
+/// Keep a photo load stable while sync/GPS notifications rebuild its parent.
+/// Identity and file metadata changes replace the future and discard old pixels.
+class CabinetPhotoImage extends StatefulWidget {
+  const CabinetPhotoImage({
+    super.key,
+    required this.id,
+    required this.photo,
+    this.original = false,
+    this.fit = BoxFit.cover,
+  });
+  final String id;
+  final Json photo;
+  final bool original;
+  final BoxFit fit;
+  @override
+  State<CabinetPhotoImage> createState() => _CabinetPhotoImageState();
+}
+
+class _CabinetPhotoImageState extends State<CabinetPhotoImage> {
+  Object? signature;
+  Future<Uint8List>? bytes;
+  @override
+  Widget build(BuildContext context) {
+    final c = context.watch<CabinetController>();
+    if (!c.allowed) {
+      signature = null;
+      bytes = null;
+      return const SizedBox.shrink();
+    }
+    final photo =
+        c
+            .record(widget.id)
+            .photos
+            .where((p) => p['id'] == widget.photo['id'])
+            .firstOrNull ??
+        widget.photo;
+    final next = (
+      c,
+      c.actor,
+      c.app.session?.sessionId,
+      widget.id,
+      photo['id'],
+      widget.original,
+      photo['localPath'],
+      photo['thumbnailPath'],
+      photo['serverSha256'],
+      photo['sha256'],
+      photo['deleting'],
+    );
+    if (signature != next) {
+      signature = next;
+      bytes = c.photoBytes(widget.id, photo, original: widget.original);
+    }
+    return FutureBuilder<Uint8List>(
+      key: ValueKey(signature),
+      future: bytes,
+      builder: (context, snapshot) {
+        if (snapshot.hasData) {
+          return Image.memory(snapshot.data!, fit: widget.fit);
+        }
+        if (snapshot.hasError) {
+          return TextButton(
+            onPressed: () => setState(() => signature = null),
+            child: const Text('Foto no disponible. Reintentar'),
+          );
+        }
+        return const Center(child: Icon(Icons.photo));
+      },
     );
   }
 }
