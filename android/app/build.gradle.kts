@@ -33,7 +33,11 @@ if (releaseRequested) {
 
 // Explicit opt-in; leaves ordinary debug and release identities unchanged.
 val hydrostaticTest = providers.gradleProperty("hydrostaticTest").orNull == "true"
-if (hydrostaticTest && releaseRequested) {
+val hydrostaticSyncTest = providers.gradleProperty("hydrostaticSyncTest").orNull == "true"
+if (listOf(hydrostaticTest, hydrostaticSyncTest).count { it } > 1) {
+    throw GradleException("Select one isolated QA variant.")
+}
+if ((hydrostaticTest || hydrostaticSyncTest) && releaseRequested) {
     throw GradleException("Hydrostatic certification is debug-only.")
 }
 
@@ -60,6 +64,11 @@ android {
         sourceSets.getByName("debug").manifest.srcFile("src/hydrostaticTest/AndroidManifest.xml")
     }
 
+    if (hydrostaticSyncTest) {
+        sourceSets.getByName("debug").manifest.srcFile("src/hydrostaticSyncTest/AndroidManifest.xml")
+        sourceSets.getByName("debug").res.srcDir("src/hydrostaticSyncTest/res")
+    }
+
     signingConfigs {
         create("release") {
             keyAlias = keystoreProperties.getProperty("keyAlias")
@@ -71,8 +80,8 @@ android {
 
     buildTypes {
         debug {
-            applicationIdSuffix = if (hydrostaticTest) ".hydrotest" else ".test"
-            manifestPlaceholders["appLabel"] = if (hydrostaticTest) "DDR001 HIDRO TEST" else "AQ NH DDR001 TEST"
+            applicationIdSuffix = if (hydrostaticSyncTest) ".hydrosyncqa" else if (hydrostaticTest) ".hydrotest" else ".test"
+            manifestPlaceholders["appLabel"] = if (hydrostaticSyncTest) "DDR001 HIDRO SYNC TEST" else if (hydrostaticTest) "DDR001 HIDRO TEST" else "AQ NH DDR001 TEST"
         }
         release {
             signingConfig = signingConfigs.getByName("release")
