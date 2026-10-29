@@ -510,15 +510,20 @@ void main() {
           ...survey.steps.skip(2),
         ],
         remotePhotos: [
-          RemoteConstructionPhoto(
-            id: photoId,
-            surveyId: survey.id,
-            context: 'step',
-            stepNumber: 2,
-            capturedAt: DateTime.utc(2026, 8, 30),
-            uploadStatus: 'verified',
-            integrityStatus: 'confirmed',
-          ),
+          for (final entry in [
+            (photoId, 2),
+            ('dddddddd-dddd-4ddd-8ddd-dddddddddddd', 2),
+            ('eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', 3),
+          ])
+            RemoteConstructionPhoto(
+              id: entry.$1,
+              surveyId: survey.id,
+              context: 'step',
+              stepNumber: entry.$2,
+              capturedAt: DateTime.utc(2026, 8, 30),
+              uploadStatus: 'verified',
+              integrityStatus: 'confirmed',
+            ),
         ],
       ),
     ];
@@ -534,15 +539,41 @@ void main() {
     await tester.tap(find.byKey(const Key('step_2')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
-    expect(requests, hasLength(1));
-    expect(requests.single.queryParameters['size'], 'thumb');
+    expect(requests, hasLength(2));
+    expect(requests.every((r) => r.queryParameters['size'] == 'thumb'), isTrue);
 
     final remotePhoto = find.byKey(const Key('remote_photo_$photoId'));
     tester.widget<GestureDetector>(remotePhoto).onTap!();
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
-    expect(requests, hasLength(2));
+    expect(requests, hasLength(3));
     expect(requests.last.queryParameters['size'], 'original');
+    expect(find.text('1 de 2'), findsOneWidget);
+    await tester.drag(
+      find.byKey(const Key('survey_photo_pager')),
+      const Offset(-650, 0),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.text('2 de 2'), findsOneWidget);
+    expect(requests, hasLength(4));
+    expect(
+      requests.last.path,
+      contains('dddddddd-dddd-4ddd-8ddd-dddddddddddd'),
+    );
+    await tester.drag(
+      find.byKey(const Key('survey_photo_pager')),
+      const Offset(-650, 0),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.text('2 de 2'), findsOneWidget);
+    expect(
+      requests.any(
+        (r) => r.path.contains('eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'),
+      ),
+      isFalse,
+    );
   });
   testWidgets('step 6 requests cardinal directions before additional photos', (
     tester,
