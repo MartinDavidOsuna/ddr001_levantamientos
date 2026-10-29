@@ -54,6 +54,34 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
   bool _applyingGps = false;
   bool syncing = false, refreshing = false, capturing = false;
   bool _removingLocal = false;
+  String? _removingLocalId;
+  final Map<String, List<String>> _activities = {};
+  final Set<String> _removedDuringRefresh = {};
+  void _beginActivity(String id, String reason) {
+    if (_removingLocalId == id) {
+      throw StateError('Se está eliminando la copia local de este gabinete.');
+    }
+    (_activities[id] ??= []).add(reason);
+  }
+
+  void _endActivity(String id, String reason) {
+    _activities[id]?.remove(reason);
+    if (_activities[id]?.isEmpty == true) _activities.remove(id);
+  }
+
+  Future<T> _activity<T>(
+    String id,
+    String reason,
+    Future<T> Function() action,
+  ) async {
+    _beginActivity(id, reason);
+    try {
+      return await action();
+    } finally {
+      _endActivity(id, reason);
+    }
+  }
+
   String? message;
   final Set<String> _submitting = {};
   bool submitting(String id) =>
@@ -129,13 +157,17 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
     return result;
   }
 
-  Future<void> _edit(String id, void Function(Json) edit) => _serial(() async {
-    final r = store.read(id) ?? (throw StateError('Expediente ausente'));
-    final value = clone(r.json);
-    edit(value);
-    await store.save(value);
-    _notify();
-  });
+  Future<void> _edit(String id, void Function(Json) edit) => _activity(
+    id,
+    'guardado local',
+    () => _serial(() async {
+      final r = store.read(id) ?? (throw StateError('Expediente ausente'));
+      final value = clone(r.json);
+      edit(value);
+      await store.save(value);
+      _notify();
+    }),
+  );
   void _notify() {
     if (!_disposed) notifyListeners();
   }
@@ -178,6 +210,7 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
     if (!eligible || refreshing || _removingLocal) return;
     final user = actor!;
     refreshing = true;
+    _removedDuringRefresh.clear();
     var catalogAvailable = false;
     _notify();
     try {
@@ -206,7 +239,10 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
         final rows = objects(data['items']);
         for (final row in rows) {
           if (!allowed || actor != user) return;
-          await pull('${row['cabinet_id']}'.toLowerCase());
+          final rowId = '${row['cabinet_id']}'.toLowerCase();
+          if (_removedDuringRefresh.contains(rowId)) continue;
+          await pull(rowId);
+          if (_removedDuringRefresh.contains(rowId)) continue;
           if (!allowed || actor != user) return;
           await _edit('${row['cabinet_id']}'.toLowerCase(), (value) {
             value['listing'] = {
@@ -231,7 +267,9 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
-  Future<void> pull(String id) async {
+  Future<void> pull(
+    String id,
+  ) => _activity(id, 'consulta del expediente', () async {
     if (!allowed) return;
     final user = actor;
     final response = await remote.get('/$id');
@@ -263,7 +301,7 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
       await store.save(value);
     });
     _notify();
-  }
+  });
 
   /// Resolves an existing dossier without creating a draft. Only 404 means absent.
   Future<String?> findForInstallation(String raw) => _serial(() async {
@@ -664,33 +702,89 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
     _notify();
   }
 
+  String? localDeletionBlocker(String id) {
+    final r = record(id);
+    if (_removingLocal) {
+      return 'Hay una eliminación local en curso. Espera y reintenta.';
+    }
+    final active = _activities[id]?.firstOrNull;
+    if (active != null) {
+      return 'Este gabinete tiene $active en curso. Espera a que termine y reintenta.';
+    }
+    if (submitting(id)) {
+      return 'Se está preparando un envío de este gabinete. Espera y reintenta.';
+    }
+    if (_photoLoads.keys.any((key) => key.contains(':$id:')) ||
+        _evidenceLoads.keys.any((key) => key.endsWith(':$id'))) {
+      return 'Se están recuperando fotografías de este gabinete. Espera a que termine o informa el error y reintenta.';
+    }
+    if (r.pending.isNotEmpty) {
+      return 'Este gabinete tiene operaciones pendientes de sincronización. Reintenta desde Sincronización; no se eliminarán sus datos.';
+    }
+    if (r.json['dirty'] == true) {
+      return 'Hay un formulario local sin confirmar. Guarda y sincroniza antes de eliminar la copia local.';
+    }
+    if (r.photos.any(
+      (p) =>
+          p['deleting'] == true ||
+          (p['remote'] != true && p['verified'] != true),
+    )) {
+      return 'Hay fotografías pendientes de envío o verificación. Reintenta la sincronización; las fotos se conservan.';
+    }
+    if (store.media.journal.pending().any((e) => e.surveyId == id)) {
+      return 'Hay una captura pendiente de recuperación. Reabre el expediente para recuperar la foto antes de eliminarlo.';
+    }
+    for (final raw in store.media.queueBox.values) {
+      final entry = object(jsonDecode(raw));
+      if (entry['surveyId'] == id || entry['cabinetId'] == id) {
+        return 'Hay una operación multimedia pendiente. Recupera la sincronización antes de eliminar la copia local.';
+      }
+    }
+    return null;
+  }
+
   Future<void> deleteLocalRegistration(String id, String uid) async {
     _requireWritable(id, discardMissingRemote: true);
-    if (syncing ||
-        refreshing ||
-        capturing ||
-        _removingLocal ||
-        _applyingGps ||
-        _photoLoads.isNotEmpty ||
-        _evidenceLoads.isNotEmpty ||
-        _submitting.isNotEmpty) {
-      throw StateError('Espera a que terminen las operaciones actuales.');
-    }
+    final user = actor;
+    final blocked = localDeletionBlocker(id);
+    if (blocked != null) throw StateError(blocked);
     if (cabinetUid(uid) != record(id).working['uid']) {
       throw StateError('El número no coincide.');
     }
     _removingLocal = true;
-    _retry?.cancel();
+    _removingLocalId = id;
+    if (refreshing) _removedDuringRefresh.add(id);
     try {
-      await _removeLocalDossier(id);
+      await _removeLocalDossier(
+        id,
+        beforeRemove: () {
+          // Recheck after earlier serialized writes, before removing any file.
+          if (!allowed || actor != user) {
+            throw StateError('La sesión cambió. Datos conservados.');
+          }
+          _requireWritable(id, discardMissingRemote: true);
+          _removingLocal = false;
+          try {
+            final reason = localDeletionBlocker(id);
+            if (reason != null) throw StateError(reason);
+          } finally {
+            _removingLocal = true;
+          }
+        },
+      );
     } finally {
       _removingLocal = false;
+      _removingLocalId = null;
       _notify();
     }
   }
 
-  Future<void> _removeLocalDossier(String id) async {
+  Future<void> _removeLocalDossier(
+    String id, {
+    void Function()? beforeRemove,
+  }) async {
     await _serial(() async {
+      beforeRemove?.call();
       // Only the confirmed dossier directory and its own Hive rows are removed.
       final root = await camera.supportDirectory();
       if (!RegExp(r'^[0-9a-f-]{36}$').hasMatch(id)) {
@@ -929,7 +1023,10 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
-  Future<void> capture(String id, String context) async {
+  Future<void> capture(
+    String id,
+    String context,
+  ) => _activity(id, 'captura fotográfica', () async {
     if (capturing) return;
     final user = actor;
     _requireWritable(id);
@@ -967,12 +1064,15 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
             'No se obtuvo ubicación válida para esta foto. Se conserva y se reintentará automáticamente dentro de la ventana de captura.';
       }
     } finally {
-      await recoverPhotoGps();
-      capturing = false;
-      _notify();
+      try {
+        await recoverPhotoGps();
+      } finally {
+        capturing = false;
+        _notify();
+      }
     }
     if (actor == user) unawaited(synchronize());
-  }
+  });
 
   Future<void> recoverPhotoGps() async {
     if (!allowed || _applyingGps) return;
@@ -980,7 +1080,9 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
     final user = actor;
     try {
       for (final record in records) {
-        if (record.json['deletion'] != null) continue;
+        if (record.json['deletion'] != null || _removingLocalId == record.id) {
+          continue;
+        }
         for (final photo in record.photos.where(
           (p) =>
               p['actor'] == actor &&
@@ -1031,7 +1133,10 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
-  Future<void> deleteRegistrationPhoto(String id, String photoId) async {
+  Future<void> deleteRegistrationPhoto(
+    String id,
+    String photoId,
+  ) => _activity(id, 'eliminación de fotografía', () async {
     _requireWritable(id);
     if (syncing || capturing) {
       throw StateError('Espera a que termine la operación actual.');
@@ -1063,7 +1168,7 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
       r['draftActor'] = actor;
     });
     unawaited(synchronize());
-  }
+  });
 
   Future<void> _finishPhotoDeletions(String id, String user) async {
     final record = store.read(id)!;
@@ -1187,181 +1292,191 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
       // A failed dossier never blocks the remaining dossiers.
       for (final item in records) {
         if (!allowed || actor != user) break;
-        if (item.json['deletion'] != null) {
-          final d = object(item.json['deletion']);
-          if (d['code'] == 'VERSION_CONFLICT') continue;
-          if (!force &&
-              DateTime.tryParse(
-                    '${d['nextAttempt']}',
-                  )?.isAfter(DateTime.now()) ==
-                  true) {
-            continue;
-          }
-          try {
-            await _finishDeletion(item.id, user);
-          } catch (e) {
-            await _handleAccess(e, user);
-            await _edit(item.id, (value) {
-              final d = object(value['deletion']);
-              d['error'] = explain(e);
-              if (e is DioException) {
-                d['code'] = object(e.response?.data)['code'];
-              }
-              d['nextAttempt'] = DateTime.now()
-                  .add(const Duration(seconds: 30))
-                  .toIso8601String();
-              value['deletion'] = d;
-            });
-          }
+        if (store.read(item.id) == null || _removingLocalId == item.id) {
           continue;
         }
-        if (store.read(item.id)!.server.isNotEmpty &&
-            store.read(item.id)!.photos.any((p) => p['deleting'] == true)) {
-          try {
-            await _finishPhotoDeletions(item.id, user);
-          } catch (e) {
-            await _handleAccess(e, user);
-            message = explain(e);
-            // Independent identity corrections must not be held by an unused-photo deletion.
-          }
-        }
-        while (true) {
-          final r = store.read(item.id)!;
-          final op = r.pending.firstOrNull;
-          if (op == null || op['actor'] != user || op['state'] == 'conflict') {
-            break;
-          }
-          if (!force &&
-              DateTime.tryParse(
-                    '${op['nextAttempt']}',
-                  )?.isAfter(DateTime.now()) ==
-                  true) {
-            break;
-          }
-          final body = object(op['body']), operationId = body['operationId'];
-          if (!['register', 'identity_correct'].contains(body['type']) &&
-              r.photos.any((p) => p['deleting'] == true)) {
-            break;
-          }
-          try {
-            Json? result;
-            if (op['state'] == 'sending') {
-              try {
-                result = await remote.get('/${r.id}/operations/$operationId');
-              } on DioException catch (e) {
-                if (e.response?.statusCode != 404) rethrow;
-              }
-            }
-            if (!allowed || actor != user) break;
-            if (result == null) {
-              if (body['type'] != 'register') {
-                await _uploadReferences(r, body, user);
-              }
-              if (!allowed || actor != user) break;
-              await _changeOperation(
-                r.id,
-                '$operationId',
-                (o) => o['state'] = 'sending',
-              );
-              result = await remote.command(r.id, body);
-            }
-            final server = object(result['cabinet']);
-            if (server['cabinetId'].toString().toLowerCase() != r.id ||
-                server['version'] != (body['expectedVersion'] as num) + 1) {
-              throw StateError(
-                'Respuesta incompleta; se recuperará la operación.',
-              );
-            }
-            await _edit(r.id, (value) {
-              final ops = objects(value['operations']);
-              final current = ops.firstWhere(
-                (o) => object(o['body'])['operationId'] == operationId,
-              );
-              current['state'] = 'done';
-              current['result'] = result;
-              current.remove('error');
-              current.remove('diagnostic');
-              current.remove('problem');
-              value['operations'] = ops;
-              value['server'] = server;
-              if (body['type'] == 'final_review' && value['dirty'] != true) {
-                value['finalReviewDraft'] = <String, dynamic>{};
-              }
-              value['lastSent'] = DateTime.now().toUtc().toIso8601String();
-              if (CabinetRecord(value).pending.isEmpty &&
-                  value['dirty'] != true) {
-                value['working'] = server;
-              }
-            });
-          } catch (e) {
-            await _handleAccess(e, user);
-            final status = e is DioException ? e.response?.statusCode : null;
-            await _changeOperation(r.id, '$operationId', (o) {
-              final attempts = (o['attempts'] as int? ?? 0) + 1;
-              o['attempts'] = attempts;
-              o['error'] = explain(e);
-              if (e is DioException) o['diagnostic'] = diagnostic(e);
-              if (e is DioException && e.response != null) {
-                o['problem'] = problemData(e.response!.data);
-              }
-              if (status != null &&
-                  status >= 400 &&
-                  status < 500 &&
-                  status != 401 &&
-                  status != 403 &&
-                  status != 429 &&
-                  !(e is DioException &&
-                      problemData(e.response?.data)['retryable'] == true)) {
-                o['state'] = 'conflict';
-              }
-              // Keep 'sending' after ambiguous failures; recover before retransmission.
-              o['nextAttempt'] = DateTime.now()
-                  .add(Duration(seconds: (1 << attempts.clamp(0, 8)) * 2))
-                  .toIso8601String();
-            });
-            break;
-          }
-          if (!allowed || actor != user) break;
-        }
-        final latest = store.read(item.id)!;
-        if (allowed && actor == user && latest.server.isNotEmpty) {
-          for (final photo in latest.photos.where(
-            (p) =>
-                p['deleting'] != true &&
-                p['verified'] != true &&
-                p['remote'] != true &&
-                p['actor'] == user &&
-                object(p['metadata'])['accuracy'] != null,
-          )) {
+        _beginActivity(item.id, 'sincronización');
+        try {
+          if (item.json['deletion'] != null) {
+            final d = object(item.json['deletion']);
+            if (d['code'] == 'VERSION_CONFLICT') continue;
             if (!force &&
                 DateTime.tryParse(
-                      '${photo['nextAttempt']}',
+                      '${d['nextAttempt']}',
                     )?.isAfter(DateTime.now()) ==
                     true) {
               continue;
             }
             try {
-              await _uploadReferences(latest, {
-                'evidence': [
-                  {'photoId': photo['id']},
-                ],
-              }, user);
+              await _finishDeletion(item.id, user);
             } catch (e) {
               await _handleAccess(e, user);
-              await _edit(latest.id, (r) {
-                final photos = objects(r['photos']),
-                    p = photos.firstWhere((p) => p['id'] == photo['id']);
-                p['uploadError'] = explain(e);
-                final attempts = (p['attempts'] as int? ?? 0) + 1;
-                p['attempts'] = attempts;
-                p['nextAttempt'] = DateTime.now()
+              await _edit(item.id, (value) {
+                final d = object(value['deletion']);
+                d['error'] = explain(e);
+                if (e is DioException) {
+                  d['code'] = object(e.response?.data)['code'];
+                }
+                d['nextAttempt'] = DateTime.now()
+                    .add(const Duration(seconds: 30))
+                    .toIso8601String();
+                value['deletion'] = d;
+              });
+            }
+            continue;
+          }
+          if (store.read(item.id)!.server.isNotEmpty &&
+              store.read(item.id)!.photos.any((p) => p['deleting'] == true)) {
+            try {
+              await _finishPhotoDeletions(item.id, user);
+            } catch (e) {
+              await _handleAccess(e, user);
+              message = explain(e);
+              // Independent identity corrections must not be held by an unused-photo deletion.
+            }
+          }
+          while (true) {
+            final r = store.read(item.id)!;
+            final op = r.pending.firstOrNull;
+            if (op == null ||
+                op['actor'] != user ||
+                op['state'] == 'conflict') {
+              break;
+            }
+            if (!force &&
+                DateTime.tryParse(
+                      '${op['nextAttempt']}',
+                    )?.isAfter(DateTime.now()) ==
+                    true) {
+              break;
+            }
+            final body = object(op['body']), operationId = body['operationId'];
+            if (!['register', 'identity_correct'].contains(body['type']) &&
+                r.photos.any((p) => p['deleting'] == true)) {
+              break;
+            }
+            try {
+              Json? result;
+              if (op['state'] == 'sending') {
+                try {
+                  result = await remote.get('/${r.id}/operations/$operationId');
+                } on DioException catch (e) {
+                  if (e.response?.statusCode != 404) rethrow;
+                }
+              }
+              if (!allowed || actor != user) break;
+              if (result == null) {
+                if (body['type'] != 'register') {
+                  await _uploadReferences(r, body, user);
+                }
+                if (!allowed || actor != user) break;
+                await _changeOperation(
+                  r.id,
+                  '$operationId',
+                  (o) => o['state'] = 'sending',
+                );
+                result = await remote.command(r.id, body);
+              }
+              final server = object(result['cabinet']);
+              if (server['cabinetId'].toString().toLowerCase() != r.id ||
+                  server['version'] != (body['expectedVersion'] as num) + 1) {
+                throw StateError(
+                  'Respuesta incompleta; se recuperará la operación.',
+                );
+              }
+              await _edit(r.id, (value) {
+                final ops = objects(value['operations']);
+                final current = ops.firstWhere(
+                  (o) => object(o['body'])['operationId'] == operationId,
+                );
+                current['state'] = 'done';
+                current['result'] = result;
+                current.remove('error');
+                current.remove('diagnostic');
+                current.remove('problem');
+                value['operations'] = ops;
+                value['server'] = server;
+                if (body['type'] == 'final_review' && value['dirty'] != true) {
+                  value['finalReviewDraft'] = <String, dynamic>{};
+                }
+                value['lastSent'] = DateTime.now().toUtc().toIso8601String();
+                if (CabinetRecord(value).pending.isEmpty &&
+                    value['dirty'] != true) {
+                  value['working'] = server;
+                }
+              });
+            } catch (e) {
+              await _handleAccess(e, user);
+              final status = e is DioException ? e.response?.statusCode : null;
+              await _changeOperation(r.id, '$operationId', (o) {
+                final attempts = (o['attempts'] as int? ?? 0) + 1;
+                o['attempts'] = attempts;
+                o['error'] = explain(e);
+                if (e is DioException) o['diagnostic'] = diagnostic(e);
+                if (e is DioException && e.response != null) {
+                  o['problem'] = problemData(e.response!.data);
+                }
+                if (status != null &&
+                    status >= 400 &&
+                    status < 500 &&
+                    status != 401 &&
+                    status != 403 &&
+                    status != 429 &&
+                    !(e is DioException &&
+                        problemData(e.response?.data)['retryable'] == true)) {
+                  o['state'] = 'conflict';
+                }
+                // Keep 'sending' after ambiguous failures; recover before retransmission.
+                o['nextAttempt'] = DateTime.now()
                     .add(Duration(seconds: (1 << attempts.clamp(0, 8)) * 2))
                     .toIso8601String();
-                r['photos'] = photos;
               });
+              break;
             }
             if (!allowed || actor != user) break;
           }
+          final latest = store.read(item.id)!;
+          if (allowed && actor == user && latest.server.isNotEmpty) {
+            for (final photo in latest.photos.where(
+              (p) =>
+                  p['deleting'] != true &&
+                  p['verified'] != true &&
+                  p['remote'] != true &&
+                  p['actor'] == user &&
+                  object(p['metadata'])['accuracy'] != null,
+            )) {
+              if (!force &&
+                  DateTime.tryParse(
+                        '${photo['nextAttempt']}',
+                      )?.isAfter(DateTime.now()) ==
+                      true) {
+                continue;
+              }
+              try {
+                await _uploadReferences(latest, {
+                  'evidence': [
+                    {'photoId': photo['id']},
+                  ],
+                }, user);
+              } catch (e) {
+                await _handleAccess(e, user);
+                await _edit(latest.id, (r) {
+                  final photos = objects(r['photos']),
+                      p = photos.firstWhere((p) => p['id'] == photo['id']);
+                  p['uploadError'] = explain(e);
+                  final attempts = (p['attempts'] as int? ?? 0) + 1;
+                  p['attempts'] = attempts;
+                  p['nextAttempt'] = DateTime.now()
+                      .add(Duration(seconds: (1 << attempts.clamp(0, 8)) * 2))
+                      .toIso8601String();
+                  r['photos'] = photos;
+                });
+              }
+              if (!allowed || actor != user) break;
+            }
+          }
+        } finally {
+          _endActivity(item.id, 'sincronización');
         }
       }
     } finally {
@@ -1676,6 +1791,9 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
   /// Reading shared evidence never requires ownership of unsent local edits.
   /// Persist metadata first; the gallery fetches bytes only when displayed.
   Future<void> downloadEvidence(String id) {
+    if (_removingLocalId == id) {
+      throw StateError('Se está eliminando la copia local.');
+    }
     final key = '$actor:$id';
     return _evidenceLoads.putIfAbsent(
       key,
@@ -1775,22 +1893,23 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
-  Future<List<Json>> history(String id) async {
-    record(id);
-    final result = <Json>[];
-    for (var page = 1; ; page++) {
-      final rows = objects(
-        (await remote.get('/$id/history', {
-          'page': page,
-          'limit': 100,
-        }))['items'],
-      );
-      result.addAll(rows);
-      if (rows.length < 100) break;
-    }
-    await _edit(id, (r) => r['history'] = result);
-    return result;
-  }
+  Future<List<Json>> history(String id) =>
+      _activity(id, 'consulta de historial', () async {
+        record(id);
+        final result = <Json>[];
+        for (var page = 1; ; page++) {
+          final rows = objects(
+            (await remote.get('/$id/history', {
+              'page': page,
+              'limit': 100,
+            }))['items'],
+          );
+          result.addAll(rows);
+          if (rows.length < 100) break;
+        }
+        await _edit(id, (r) => r['history'] = result);
+        return result;
+      });
 
   final Map<String, Future<Uint8List>> _photoLoads = {};
   Future<Uint8List> photoBytes(
@@ -1800,6 +1919,9 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
   }) async {
     record(id);
     final user = actor;
+    if (_removingLocalId == id) {
+      throw StateError('Se está eliminando la copia local.');
+    }
     final key = '$user:$id:${photo['id']}:$original';
     final bytes = await _photoLoads.putIfAbsent(
       key,

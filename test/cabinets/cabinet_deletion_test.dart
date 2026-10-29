@@ -68,6 +68,9 @@ void main() {
     () async {
       final id = await h.controller.scan('AQ26000017', 'A1', false);
       final other = await h.controller.scan('AQ26000025', 'A2', false);
+      // Only a server-confirmed cache may be removed; pending work is protected.
+      await h.sync();
+      remote.calls.clear();
       final folder = Directory('${h.directory.path}/cabinets/$id');
       await folder.create(recursive: true);
       final photo = File('${folder.path}/original.jpg');
@@ -95,6 +98,9 @@ void main() {
     () async {
       final id = await h.controller.scan('AQ26000017', 'A1', false);
       final other = await h.controller.scan('AQ26000025', 'A2', false);
+      // Only a server-confirmed cache may be removed; pending work is protected.
+      await h.sync();
+      remote.calls.clear();
       final preserved = clone(h.store.read(other)!.json);
       final folder = Directory('${h.directory.path}/cabinets/$id');
       await folder.create(recursive: true);
