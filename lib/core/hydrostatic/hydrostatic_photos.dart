@@ -96,6 +96,16 @@ class DurableHydrostaticPhotos implements HydrostaticPhotoCoordinator {
         return null;
       }
       return await _adopt(row, result, allowGps: true);
+    } catch (_) {
+      final receipt = await broker.receipt('hydrostatic', intent.id);
+      if (receipt?['state'] == 'CANCELLED') {
+        await _save({
+          ...row,
+          'state': 'CANCELLED',
+          'reason': receipt?['reason'],
+        });
+      }
+      rethrow;
     } finally {
       _capturing = null;
     }

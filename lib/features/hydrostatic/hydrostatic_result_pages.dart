@@ -122,6 +122,9 @@ class _HydrostaticResultPageState extends State<HydrostaticResultPage> {
       t.id,
       t.revision,
       c.identity,
+      c.ready,
+      c.error,
+      c.evidenceValidationRevision,
       c.busy,
       c.draftPending,
       c.pendingCaptures(t.id),
@@ -137,7 +140,13 @@ class _HydrostaticResultPageState extends State<HydrostaticResultPage> {
       future: _closureFuture,
       builder: (context, snapshot) => Column(
         children: [
-          if (snapshot.data != null) Text(snapshot.data!),
+          if (snapshot.data != null) ...[
+            Text(snapshot.data!),
+            TextButton(
+              onPressed: c.busy ? null : c.recheckEvidence,
+              child: const Text('REVALIDAR EVIDENCIAS'),
+            ),
+          ],
           FilledButton(
             onPressed:
                 snapshot.connectionState != ConnectionState.done ||

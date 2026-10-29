@@ -12,6 +12,7 @@ class SyntheticPicker implements ConstructionImagePicker {
   final UiHarness h;
   bool cancel = false, corrupt = false, empty = false, throwAfter = false;
   bool distinctBytes = false;
+  int paddingBytes = 0;
   int captures = 0, retrievals = 0;
   Future<void> Function()? beforeReturn;
   List<XFile> lost = [];
@@ -34,6 +35,7 @@ class SyntheticPicker implements ConstructionImagePicker {
                 'test/cabinets/fixtures/evidence.jpg',
               ).readAsBytes(),
               if (distinctBytes) ...'synthetic-capture-$captures'.codeUnits,
+              ...List<int>.filled(paddingBytes, 0),
             ],
       flush: true,
     );

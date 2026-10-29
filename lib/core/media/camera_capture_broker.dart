@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/services.dart';
 import 'package:crypto/crypto.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
@@ -134,7 +135,22 @@ class CameraCaptureBroker {
     };
     await _write(id, entry);
     await _write('active', {'id': id});
-    final picked = await picker.takePhoto();
+    XFile? picked;
+    try {
+      picked = await picker.takePhoto();
+    } on PlatformException catch (e) {
+      // Explicit OS refusal means no capture was launched. Unknown failures
+      // remain recoverable/ambiguous; never infer cancellation from missing files.
+      if (e.code == 'camera_access_denied') {
+        await _write(id, {
+          ...entry,
+          'state': 'CANCELLED',
+          'reason': 'CAMERA_PERMISSION_DENIED',
+        });
+        await _write('active', {});
+      }
+      rethrow;
+    }
     if (picked == null) {
       await _write(id, {...entry, 'state': 'CANCELLED'});
       await _write('active', {});

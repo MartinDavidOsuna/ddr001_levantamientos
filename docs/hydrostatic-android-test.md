@@ -50,3 +50,43 @@ persistencia local de la declaración. La eliminación de desarrollo sigue desha
 Los originales quedan en `<ApplicationSupport>/hydrostatic/<testId>/evidence/` del
 paquete TEST. No exportar fotos personales. Force-stop sólo del paquete TEST para
 recuperación; no reiniciar el Pixel si hay trabajo de campo no verificable.
+
+## Cierre M7.1
+
+Generar QR ópticos sintéticos en macOS sin instalar dependencias:
+
+```sh
+swift tool/hydrostatic/qr_fixtures.swift /tmp/hydrostatic-qr
+```
+
+Los tres PNG contienen, respectivamente, la URL DDR001 válida del fixture
+AQ26-98001-5, un dígito inválido y un host inválido. Presentarlos uno por uno en
+una pantalla; no sustituir etiquetas de campo. La repetición válida reanuda la
+misma preparación y no consume número. La app nunca abre esas URL.
+
+Compilación **normal debug** del proyecto, sin la propiedad QA:
+
+```sh
+env -u ORG_GRADLE_PROJECT_hydrostaticTest flutter build apk --debug --no-pub \
+  -t lib/main.dart --dart-define=APP_ENV=test \
+  --dart-define=API_BASE_URL=http://127.0.0.1:3003/api/v1
+```
+
+El paquete normal debug existente es `.test`, no el package de release. Conserva
+INTERNET y autenticación normal; sólo compilar y analizar el APK, no instalarlo en
+un dispositivo de campo. Release conserva el package sin sufijo y requiere firma
+histórica/key.properties. No solicitar ni usar claves productivas para esta auditoría.
+Ambos builds escriben app-debug.apk: verificar siempre package/hash del artefacto
+justo antes de instalar exclusivamente `.hydrotest`; no asumir que es el último QA.
+
+La prevalidación fotográfica se reutiliza entre ticks. Se invalida por revisión de
+documento, sesión, recuperación, errores/estado del store y nueva inicialización
+(por ejemplo al reanudar). Tras un error existe REVALIDAR EVIDENCIAS. No se promete
+vigilancia continua del filesystem: un archivo alterado entre prevalidación y cierre
+se vuelve a verificar en el comando durable y no puede aprobarse por el caché UI.
+
+El broker registra CANCELLED/ CAMERA_PERMISSION_DENIED únicamente ante el error
+nativo explícito camera_access_denied. Errores desconocidos conservan recuperación.
+No se convierten retrospectivamente recibos ambiguos anteriores en cancelados por
+el solo hecho de no encontrar un archivo. Esa incertidumbre debe permanecer visible.
+Las pruebas de regresión cubren esta regla para hidrostáticas, bases y gabinetes.

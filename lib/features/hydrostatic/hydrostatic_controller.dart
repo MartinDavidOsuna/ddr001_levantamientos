@@ -38,6 +38,16 @@ class HydrostaticController extends ChangeNotifier {
   String? error;
   String? cameraRecoveryError;
   bool busy = false;
+  int _evidenceValidationRevision = 0;
+  int get evidenceValidationRevision => _evidenceValidationRevision;
+
+  // Invalidates only UI prevalidation; durable closure always rechecks originals.
+  void recheckEvidence() {
+    _evidenceValidationRevision++;
+    _evidenceChecks.clear();
+    _notify();
+  }
+
   String? get identity {
     try {
       final a = access();
@@ -60,6 +70,8 @@ class HydrostaticController extends ChangeNotifier {
   }
 
   void _sessionChanged() {
+    _evidenceValidationRevision++;
+    _evidenceChecks.clear();
     error = null;
     _notify();
   }
@@ -67,6 +79,8 @@ class HydrostaticController extends ChangeNotifier {
   Future<void> initialize() =>
       _initializing ??= _initialize().whenComplete(() => _initializing = null);
   Future<void> _initialize() async {
+    _evidenceValidationRevision++;
+    _evidenceChecks.clear();
     final key = identity;
     requireIdentity(key);
     await verifySession();
@@ -230,8 +244,29 @@ class HydrostaticController extends ChangeNotifier {
         .length;
   }
 
-  Future<bool> evidenceValid(HydrostaticEvidence e) async =>
-      e.ready && await _repo!.files.verify(e);
+  final Map<String, (Object, Future<bool>)> _evidenceChecks = {};
+  Future<bool> evidenceValid(HydrostaticEvidence e) {
+    final key = (
+      identity,
+      e.testId,
+      e.actorId,
+      evidenceValidationRevision,
+      ready,
+      e.originalPath,
+      e.sha256,
+      e.byteLength,
+      e.ready,
+      e.integrity,
+    );
+    final existing = _evidenceChecks[e.id];
+    if (existing != null && existing.$1 == key) return existing.$2;
+    final check = e.ready && allowed && ready
+        ? _repo!.files.verify(e)
+        : Future.value(false);
+    _evidenceChecks[e.id] = (key, check);
+    return check;
+  }
+
   HydrostaticElapsed elapsed(String id) => _repo!.elapsed(id);
   Future<void> capturePhoto(String id, HydrostaticEvidenceRole role) async {
     if (busy) return;
@@ -481,6 +516,8 @@ class HydrostaticController extends ChangeNotifier {
       }
       requireIdentity(key);
     } finally {
+      _evidenceValidationRevision++;
+      _evidenceChecks.clear();
       busy = false;
       _notify();
     }
