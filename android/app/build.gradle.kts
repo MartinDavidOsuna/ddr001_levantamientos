@@ -31,6 +31,12 @@ if (releaseRequested) {
     }
 }
 
+// Explicit opt-in; leaves ordinary debug and release identities unchanged.
+val hydrostaticTest = providers.gradleProperty("hydrostaticTest").orNull == "true"
+if (hydrostaticTest && releaseRequested) {
+    throw GradleException("Hydrostatic certification is debug-only.")
+}
+
 android {
     namespace = "com.aquafim.ddr001levantamientos"
     compileSdk = flutter.compileSdkVersion
@@ -45,8 +51,13 @@ android {
         applicationId = "com.aquafim.ddr001levantamientos"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
+        manifestPlaceholders["appLabel"] = "AQ NH DDR001"
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+    }
+
+    if (hydrostaticTest) {
+        sourceSets.getByName("debug").manifest.srcFile("src/hydrostaticTest/AndroidManifest.xml")
     }
 
     signingConfigs {
@@ -59,6 +70,10 @@ android {
     }
 
     buildTypes {
+        debug {
+            applicationIdSuffix = if (hydrostaticTest) ".hydrotest" else ".test"
+            manifestPlaceholders["appLabel"] = if (hydrostaticTest) "DDR001 HIDRO TEST" else "AQ NH DDR001 TEST"
+        }
         release {
             signingConfig = signingConfigs.getByName("release")
         }

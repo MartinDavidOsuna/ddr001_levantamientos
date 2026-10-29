@@ -56,3 +56,19 @@ durante flujos de levantamiento o ventanas pending. El buffer retiene fixes brev
 el scoring pondera delta temporal (2 puntos/s) y accuracy (1.5 puntos/m), con
 penalizaciones secundarias por salir del radio canonical/vecinos. Ventanas:
 pre-captura 60 s, post-captura 120 s, early acceptance ≤10 m y ±30 s.
+
+## Macroetapa 2 — gabinetes (2026-10-05)
+
+La rama de integración `feat/ddr001-cabinets-mobile`, versión `1.5.0+11`, añade
+registro, piezas, instalación y revisión final offline-first. Sustituye el acceso
+provisional Registrar instalación; revisión de hidrante ya tiene implementación.
+Desde 1.5.2+13, el módulo está habilitado en producción para residentes Field
+Construction autorizados. Requiere el backend de gabinetes, incluida la corrección
+de conservación de piezas compatibles (API ace958c). El despliegue del backend
+es manual; el usuario confirmó las migraciones productivas realizadas.
+No se cambia la URL productiva.
+
+El detalle vigente de alcance, contratos, migración y garantías está en
+[Gabinetes](../cabinets/README.md), con [validación](../cabinets/validation.md) y
+[ejecución TEST](../cabinets/testing.md). Esta sección actualiza las referencias
+históricas a esos accesos como Próximamente; no cambia reglas de bases.

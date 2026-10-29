@@ -298,6 +298,7 @@ int _evidenceCount(BaseSurvey survey) =>
     survey.steps.fold(0, (count, step) => count + step.photoIds.length);
 
 int _stepRank(StepState state) => switch (state) {
+  StepState.waived => 5,
   StepState.completedLocal => 4,
   StepState.completedServer => 3,
   StepState.open => 2,

@@ -4,7 +4,14 @@ Aplicación Flutter independiente para documentar bases de concreto de nuevos
 hidrantes, con operación offline, evidencia fotográfica y geográfica, y
 sincronización con el dominio Construction de DDR001.
 
-## Estado certificado
+## Artefacto actual
+
+Versión `1.5.2+13`: APK Android release firmado para producción.
+Ver [evidencia y alcance](docs/releases/1.5.2-production-20261007.md).
+Gabinetes está habilitado para residentes Field Construction autorizados también en producción.
+El primer acceso requiere el backend de gabinetes desplegado y la descarga del catálogo.
+
+## Estado certificado histórico
 
 - Versión fuente certificada: `1.3.0+4`
 - Tag: `v1.3.0+4`

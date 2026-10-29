@@ -34,6 +34,18 @@ class ApiClient {
     options.headers['X-Request-ID'] = const Uuid().v4();
     if (options.extra['skipAuth'] != true) {
       final session = await _sessions.read();
+      final actor = options.extra['expectedActor'];
+      if (actor != null &&
+          (session?.kind != SessionKind.field ||
+              session?.userId.toLowerCase() != actor)) {
+        handler.reject(
+          DioException(
+            requestOptions: options,
+            error: 'La sesión cambió; operación conservada.',
+          ),
+        );
+        return;
+      }
       if (session != null) {
         options.headers['Authorization'] = 'Bearer ${session.accessToken}';
       }
@@ -111,6 +123,11 @@ class ApiClient {
       accessToken: '${data['accessToken']}',
       refreshToken: '${data['refreshToken']}',
     );
+    final latest = await _sessions.read();
+    if (latest?.sessionId != current.sessionId ||
+        latest?.userId != current.userId) {
+      return null;
+    }
     await _sessions.save(rotated);
     return rotated;
   }
