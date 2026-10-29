@@ -7,6 +7,7 @@ import '../../core/identity/uuid_identity.dart';
 import '../../core/widgets/branded_app_bar_title.dart';
 import '../../domain/construction/construction_models.dart';
 import 'surveys_page.dart';
+import 'survey_coordinates_card.dart';
 import '../../shared/widgets/optional_comment_field.dart';
 import '../shell/main_shell.dart';
 
@@ -95,6 +96,10 @@ class _SurveyDetailPageState extends State<SurveyDetailPage>
       return const _SurveyAccessDenied();
     }
     final survey = app.survey(widget.surveyId);
+    final role = app.profile?.role;
+    final canViewCoordinates =
+        role == ConstructionRole.resident || role == ConstructionRole.admin;
+    final location = survey.canonicalLocation;
     return Scaffold(
       appBar: AppBar(title: BrandedAppBarTitle(survey.displayIdentifier)),
       body: ListView(
@@ -136,6 +141,7 @@ class _SurveyDetailPageState extends State<SurveyDetailPage>
               subtitle: Text('Empresa: ${survey.crew ?? app.currentCrew}'),
             ),
           ),
+          if (canViewCoordinates) SurveyCoordinatesCard(location: location),
           if (survey.status == SurveyStatus.rejected)
             Card(
               color: Theme.of(context).colorScheme.errorContainer,
