@@ -1,3 +1,5 @@
+import '../../data/hydrostatic/hydrostatic_media_sync.dart';
+import '../../data/hydrostatic/hydrostatic_media_store.dart';
 import 'dart:async';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
@@ -90,6 +92,15 @@ HydrostaticController createHydrostaticController({
             verifySession: authorization.verify,
             online: online ?? () => true,
           );
+          final mediaStore = await HydrostaticMediaStore.open(
+            Directory('${support.path}/hydrostatic/db'),
+          );
+          sync.media = HydrostaticMediaSync(
+            documents: sync,
+            store: mediaStore,
+            remote: HydrostaticMediaApi(api),
+            support: support,
+          )..onChanged = sync.mediaChanged;
           controller.attachSync(sync);
           final runner = HydrostaticSyncRunner(sync)..start();
           controller.disposeSyncRunner = runner.dispose;

@@ -557,6 +557,25 @@ class HydrostaticDetailPage extends StatelessWidget {
           Text('Prueba #${t.attemptNumber ?? 'provisional'}'),
           HydrostaticStatusLabel(test: t),
           Text(c.syncLabel(id)),
+          if (c.sync?.media != null)
+            for (final evidence in t.evidence)
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${hydroWire(evidence.role)} · ${switch (c.sync!.media!.view(t, evidence)?['state']) {
+                      'VERIFIED' => 'Fotografía verificada',
+                      'SENDING' => 'Enviando fotografía',
+                      'ERROR' => 'Error de evidencia · ${c.sync!.media!.view(t, evidence)?['error']}',
+                      _ => 'Fotografía pendiente',
+                    }}',
+                  ),
+                  if (c.sync!.media!.progress.containsKey(evidence.id))
+                    LinearProgressIndicator(
+                      value: c.sync!.media!.progress[evidence.id],
+                    ),
+                ],
+              ),
           if (c.sync == null && c.syncSetupError != null)
             TextButton(
               onPressed: c.retrySync,

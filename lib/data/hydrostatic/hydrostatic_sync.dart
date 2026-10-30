@@ -1,3 +1,4 @@
+import 'hydrostatic_media_sync.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
@@ -36,6 +37,8 @@ class HydrostaticSync extends ChangeNotifier {
   final bool enabled;
   final DateTime Function() now;
   final double Function() jitter;
+  HydrostaticMediaSync? media;
+  void mediaChanged() => _notify();
   Future<void>? _flight;
   bool _disposed = false;
   String? error;
@@ -97,16 +100,26 @@ class HydrostaticSync extends ChangeNotifier {
       };
     }
     return r['acceptedSourceRevision'] == test.revision
-        ? 'Documento recibido · fotos e historial pendientes de transferencia'
+        ? 'Documento recibido · ${media?.label(test) ?? 'fotos e historial pendientes de transferencia'}'
         : 'Cambios locales pendientes de envío';
   }
 
   Future<void> run({bool manual = false}) {
     if (_disposed || !enabled) return Future.value();
-    return _flight ??= store.serial(() => _run(manual)).whenComplete(() {
-      _flight = null;
-      _notify();
-    });
+    return _flight ??= store
+        .serial(() => _run(manual))
+        .then((_) async {
+          try {
+            await media?.run(manual: manual);
+          } catch (_) {
+            error =
+                'Transferencia fotográfica pendiente; originales conservados.';
+          }
+        })
+        .whenComplete(() {
+          _flight = null;
+          _notify();
+        });
   }
 
   Future<void> _run(bool manual) async {
@@ -431,6 +444,7 @@ class HydrostaticSync extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    media?.dispose();
     super.dispose();
   }
 }
