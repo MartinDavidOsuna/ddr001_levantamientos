@@ -157,7 +157,19 @@ void main() {
       await h.controller.initialize();
       await widgets.settle(tester);
       gate.complete();
-      await widgets.settle(tester);
+      // Visual idle can precede the replacement FutureBuilder's real disk I/O.
+      // Wait for the existing semantic assertion, without changing its expectation.
+      final deadline = DateTime.now().add(const Duration(seconds: 10));
+      while (tester
+                  .widget<FilledButton>(
+                    find.widgetWithText(FilledButton, 'GUARDAR APROBACIÓN'),
+                  )
+                  .onPressed ==
+              null &&
+          DateTime.now().isBefore(deadline)) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+        await tester.pump();
+      }
       expect(
         tester
             .widget<FilledButton>(

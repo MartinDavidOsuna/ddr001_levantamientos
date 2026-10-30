@@ -12,6 +12,63 @@ import 'harness.dart';
 import 'sync_test.dart' show FakeHydroRemote;
 
 void main() {
+  test(
+    'production synchronization needs both explicit flags and a valid transport',
+    () {
+      final config = AppConfig(
+        environment: 'production',
+        apiBaseUrl: Uri.parse('https://api.example.invalid/api/v1'),
+      );
+      expect(hydrostaticSyncEnabled(config, requested: true), false);
+      expect(
+        hydrostaticSyncEnabled(
+          config,
+          requested: false,
+          productionRequested: true,
+        ),
+        false,
+      );
+      expect(
+        hydrostaticSyncEnabled(
+          config,
+          requested: true,
+          productionRequested: true,
+        ),
+        true,
+      );
+      expect(
+        hydrostaticSyncEnabled(
+          AppConfig(environment: 'development', apiBaseUrl: config.apiBaseUrl),
+          requested: true,
+          productionRequested: true,
+        ),
+        false,
+      );
+      expect(
+        hydrostaticSyncEnabled(
+          AppConfig(
+            environment: 'production',
+            apiBaseUrl: Uri.parse('http://localhost:3002/api/v1'),
+          ),
+          requested: true,
+          productionRequested: true,
+        ),
+        false,
+      );
+      expect(
+        hydrostaticSyncEnabled(
+          AppConfig(
+            environment: 'production',
+            apiBaseUrl: Uri.parse(AppConfig.productionHttpApiBaseUrl),
+          ),
+          requested: true,
+          productionRequested: true,
+        ),
+        true,
+      );
+    },
+  );
+
   test('sync gate requires explicit TEST and rejects production host', () {
     for (final env in ['production', 'development', 'test']) {
       final config = AppConfig(

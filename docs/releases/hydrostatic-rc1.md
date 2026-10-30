@@ -1,0 +1,13 @@
+# HAPI-7 Android RC1 — sin instalación
+
+Versión `1.5.25-rc.1+39`. Superior al último operativo informado `1.5.24+35` y a los QA locales 36–38; **no se conoce la versión actualmente instalada porque ADB no mostró dispositivo conectado**. Antes del piloto leer package/version/certificado actuales y exigir versionCode candidato mayor y misma firma. No desinstalar ni borrar datos para resolver incompatibilidad.
+
+`flutter analyze` y `flutter test` verifican captura local, Hive/journal, gabinetes, UUID, QR/GPS, cámara, sincronización y recuperación. Se conservó la corrección de eliminación local `0ae3ab0` y toda la historia funcional. El cambio ANDROID-1 pendiente queda separado, sin commit.
+
+Nueva opción compilada `HYDROSTATIC_PRODUCTION_SYNC_ENABLED`, OFF por defecto. Producción necesita tanto `HYDROSTATIC_SYNC_ENABLED=true` como la nueva opción; TEST conserva su gate previo y no puede usar el host productivo. La captura local no depende de habilitar sync. El RC preparado mantiene ambas opciones OFF; habilitación posterior requiere reconstrucción aprobada, firma existente y nuevo hash/versionCode si corresponde. No editar outbox, Hive ni documentos para habilitar o revertir.
+
+Reproducir desde el SHA congelado: `flutter pub get --enforce-lockfile`, `flutter analyze`, `flutter test`, `python3 tool/build_hydrostatic_rc.py`. El script usa firma ya configurada, no crea claves, no instala, y restaura byte por byte cualquier overlay Gradle QA previamente preservado. Un cambio productivo sin commit bloquea la compilación. El endpoint productivo es el contrato histórico de AppConfig, sin tráfico al servidor durante build; HTTP heredado no se presenta como TLS certificado.
+
+Artefacto inicial: `build/app/outputs/flutter-apk/app-release.apk`; conservar una copia versionada en `dist/hydrostatic-rc1/`, ignorada por Git. Verificar con aapt y apksigner (JAVA_HOME del JDK de Android Studio) y comparar SHA-256 del certificado público con el APK histórico y, antes de instalar, con el operativo real. No compartir key.properties, keystores ni contraseñas.
+
+Consulta requerida antes de la futura instalación: `adb devices`, `adb shell dumpsys package <package>` y extracción de APK mediante `adb shell pm path`/`adb pull` sólo para inspección de firma. No se ejecuta `adb install` en HAPI-7. Una firma distinta, versionCode mayor o desconocido en el destino obliga a detener el piloto y reconstruir con las credenciales/versión correctas, preservando todos los datos.

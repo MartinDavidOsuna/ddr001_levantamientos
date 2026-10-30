@@ -19,10 +19,20 @@ import '../../data/hydrostatic/hydrostatic_sync_api.dart';
 import '../../data/hydrostatic/hydrostatic_sync_store.dart';
 import 'hydrostatic_sync_runner.dart';
 
-bool hydrostaticSyncEnabled(AppConfig? config, {required bool requested}) =>
-    requested &&
-    config?.environment == 'test' &&
-    config?.apiBaseUrl.host != 'cifra.aquafim.com';
+bool hydrostaticSyncEnabled(
+  AppConfig? config, {
+  required bool requested,
+  bool productionRequested = false,
+}) {
+  if (!requested || config == null) return false;
+  if (config.environment == 'test') {
+    return config.apiBaseUrl.host != 'cifra.aquafim.com';
+  }
+  return config.isProduction &&
+      productionRequested &&
+      (config.apiBaseUrl.scheme == 'https' ||
+          config.apiBaseUrl.toString() == AppConfig.productionHttpApiBaseUrl);
+}
 
 HydrostaticController createHydrostaticController({
   required HydrostaticAccessAdapter authorization,
@@ -35,6 +45,9 @@ HydrostaticController createHydrostaticController({
       hydrostaticSyncEnabled(
         config,
         requested: const bool.fromEnvironment('HYDROSTATIC_SYNC_ENABLED'),
+        productionRequested: const bool.fromEnvironment(
+          'HYDROSTATIC_PRODUCTION_SYNC_ENABLED',
+        ),
       ) &&
       api != null;
   late HydrostaticController controller;
