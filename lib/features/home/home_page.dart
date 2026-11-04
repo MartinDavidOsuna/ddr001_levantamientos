@@ -97,20 +97,35 @@ class HomePage extends StatelessWidget {
               ),
             ],
           ],
-          if (hydrostatic?.allowed == true) ...[
+          ...[
             const SizedBox(height: 12),
             _ActionCard(
               key: const Key('hydrostatic_action'),
               icon: Icons.speed,
               title: 'PRUEBAS HIDROSTÁTICAS',
-              subtitle: 'Preparación e historial local de pruebas',
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  settings: const RouteSettings(name: 'hydrostatic-list'),
-                  builder: (_) => const HydrostaticListPage(),
-                ),
-              ),
+              subtitle:
+                  hydrostatic?.accessIssue ??
+                  (hydrostatic == null
+                      ? 'Módulo no disponible. Vuelve a abrir la aplicación.'
+                      : 'Preparación e historial local de pruebas'),
+              onTap: () {
+                final issue = hydrostatic == null
+                    ? 'Módulo no disponible. Vuelve a abrir la aplicación.'
+                    : hydrostatic.accessIssue;
+                if (issue != null) {
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(SnackBar(content: Text(issue)));
+                  return;
+                }
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    settings: const RouteSettings(name: 'hydrostatic-list'),
+                    builder: (_) => const HydrostaticListPage(),
+                  ),
+                );
+              },
             ),
           ],
           const SizedBox(height: 20),

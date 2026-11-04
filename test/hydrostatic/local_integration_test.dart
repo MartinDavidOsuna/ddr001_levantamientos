@@ -59,7 +59,7 @@ void main() {
     },
   );
   for (final allowed in [true, false]) {
-    testWidgets('Home card visibility $allowed and local navigation', (
+    testWidgets('Home card always visible, authorized navigation $allowed', (
       tester,
     ) async {
       await tester.runAsync(() async {
@@ -89,10 +89,14 @@ void main() {
             find.byKey(const Key('resident_review_action')),
             findsOneWidget,
           );
-          expect(
-            find.byKey(const Key('hydrostatic_action')),
-            allowed ? findsOneWidget : findsNothing,
-          );
+          expect(find.byKey(const Key('hydrostatic_action')), findsOneWidget);
+          if (!allowed) {
+            await tester.tap(find.byKey(const Key('hydrostatic_action')));
+            await tester.pump();
+            expect(find.byType(SnackBar), findsOneWidget);
+            expect(h.controller.ready, isFalse);
+            expect(find.text('NUEVA PRUEBA'), findsNothing);
+          }
           if (allowed) {
             await tester.tap(find.byKey(const Key('hydrostatic_action')));
             await widgets.settle(tester);

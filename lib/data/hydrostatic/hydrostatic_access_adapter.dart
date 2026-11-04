@@ -34,17 +34,27 @@ class HydrostaticAccessAdapter extends ChangeNotifier {
       s != null &&
           p != null &&
           s.kind == SessionKind.field &&
-          p.role == ConstructionRole.resident &&
           p.userId.toLowerCase() == s.userId.toLowerCase() &&
-          cabinetAuthorized() &&
           identity != _rejectedIdentity,
       'NOT_AUTHORIZED',
-      'Acceso exclusivo para residentes con autorización vigente de gabinetes.',
+      'Sesión sin autorización o modificada. Vuelve a iniciar sesión.',
+    );
+    hydroRequire(
+      p!.role == ConstructionRole.resident,
+      'NOT_AUTHORIZED',
+      'Acceso exclusivo para residentes autorizados.',
+    );
+    hydroRequire(
+      cabinetAuthorized(),
+      'NOT_AUTHORIZED',
+      'No hay autorización vigente de gabinetes guardada para este residente. '
+          'Conecta y actualiza Gabinetes para verificar el permiso. '
+          'Los registros locales se conservan.',
     );
     return HydrostaticAccess(
       actor: HydrostaticActorSnapshot(
         userId: s!.userId.toLowerCase(),
-        name: p!.displayName,
+        name: p.displayName,
         sessionId: s.sessionId.toLowerCase(),
         deviceInstallationId: s.installationId.toLowerCase(),
       ),

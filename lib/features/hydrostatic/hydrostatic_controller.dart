@@ -95,6 +95,19 @@ class HydrostaticController extends ChangeNotifier {
     }
   }
 
+  /// Explain a blocked entry without opening storage or contacting the API.
+  String? get accessIssue {
+    try {
+      final value = access();
+      value.requireUser(value.actor.userId);
+      return null;
+    } on HydrostaticException catch (e) {
+      return e.message;
+    } catch (_) {
+      return 'No se pudo verificar la autorización local. Vuelve a Inicio.';
+    }
+  }
+
   bool get allowed => identity != null;
   bool get ready => _repo != null && !_repo!.store.recoveryRequired;
   void requireIdentity(String? expected) => hydroRequire(

@@ -21,13 +21,13 @@ if any(name != 'android/app/build.gradle.kts' for name in production_changes):
 gradle = root / 'android/app/build.gradle.kts'
 original = gradle.read_bytes()
 committed = subprocess.check_output(['git', 'show', 'HEAD:android/app/build.gradle.kts'])
-backup = root / 'build/hapi7-preserved-build.gradle.kts'
+backup = root / 'build/hydrostatic-menu-preserved-build.gradle.kts'
 backup.parent.mkdir(exist_ok=True)
 backup.write_bytes(original)
 # This is the existing official endpoint contract; no requests are made by the build.
 endpoint = 'http://cifra.aquafim.com:3002/api/v1'
 defines = ['APP_ENV=production', 'API_BASE_URL=' + endpoint,
-           'HYDROSTATIC_SYNC_ENABLED=false', 'HYDROSTATIC_PRODUCTION_SYNC_ENABLED=false']
+           'HYDROSTATIC_SYNC_ENABLED=true', 'HYDROSTATIC_PRODUCTION_SYNC_ENABLED=true']
 command = ['./gradlew', '--no-daemon', ':app:assembleRelease', '-Ptarget=lib/main.dart',
            '-Ptarget-platform=android-arm,android-arm64,android-x64',
            '-Pdart-defines=' + ','.join(base64.b64encode(v.encode()).decode() for v in defines)]
@@ -35,8 +35,8 @@ local = root / 'android/local.properties'
 local_original = local.read_bytes()
 lines = [line for line in local_original.decode().splitlines()
          if not line.startswith(('flutter.buildMode=', 'flutter.versionName=', 'flutter.versionCode='))]
-local_rc = ('\n'.join(lines + ['flutter.buildMode=release', 'flutter.versionName=1.5.25-rc.1',
-                             'flutter.versionCode=39']) + '\n').encode()
+local_rc = ('\n'.join(lines + ['flutter.buildMode=release', 'flutter.versionName=1.5.25-rc.3',
+                             'flutter.versionCode=41']) + '\n').encode()
 
 registrant = root / 'android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java'
 registrant_original = registrant.read_bytes()
