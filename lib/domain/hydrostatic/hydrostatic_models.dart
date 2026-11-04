@@ -25,6 +25,21 @@ String hydroUuid(String value) {
   return value;
 }
 
+/// Existing server identities are SQL GUIDs, not necessarily RFC UUID v4.
+/// Validate their canonical representation without changing identity bytes.
+/// Locally generated test/operation/evidence/installation IDs use hydroUuid.
+String hydroIdentityGuid(String value, {required String field}) {
+  hydroRequire(
+    RegExp(
+          r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+        ).hasMatch(value) &&
+        value != '00000000-0000-0000-0000-000000000000',
+    'INVALID_ID',
+    'GUID canónico requerido para $field.',
+  );
+  return value;
+}
+
 DateTime hydroDate(Object? value) {
   final date = DateTime.parse(value as String);
   hydroRequire(date.isUtc, 'INVALID_TIME', 'Se requiere timestamp UTC.');
@@ -190,8 +205,8 @@ class HydrostaticActorSnapshot {
     required this.sessionId,
     required this.deviceInstallationId,
   }) {
-    hydroUuid(userId);
-    hydroUuid(sessionId);
+    hydroIdentityGuid(userId, field: 'userId');
+    hydroIdentityGuid(sessionId, field: 'sessionId');
     hydroUuid(deviceInstallationId);
     hydroRequire(name.trim().isNotEmpty, 'INVALID_ACTOR', 'Nombre requerido.');
   }
@@ -319,7 +334,7 @@ class HydrostaticEvidence {
     hydroUuid(id);
     hydroUuid(testId);
     hydroUuid(captureIntentId);
-    hydroUuid(actorId);
+    hydroIdentityGuid(actorId, field: 'actorId');
     hydroRequire(
       RegExp(r'^[0-9a-f]{64}$').hasMatch(sha256) && byteLength > 0,
       'INVALID_EVIDENCE',
@@ -418,7 +433,7 @@ class HydrostaticVideoDeclaration {
   factory HydrostaticVideoDeclaration.fromJson(HydroJson j) {
     final state = hydroEnum(HydrostaticVideoState.values, j['state']);
     if (state == HydrostaticVideoState.declaredSent) {
-      hydroUuid(j['actorId']);
+      hydroIdentityGuid(j['actorId'], field: 'actorId');
       hydroUuid(j['operationId']);
       hydroDate(j['declaredAt']);
     }

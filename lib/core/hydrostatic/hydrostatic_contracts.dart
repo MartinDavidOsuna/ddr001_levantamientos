@@ -111,7 +111,7 @@ class HydrostaticCaptureIntent {
   }) {
     hydroUuid(id);
     hydroUuid(testId);
-    hydroUuid(actorId);
+    hydroIdentityGuid(actorId, field: 'actorId');
   }
   final String id, testId, actorId;
   final HydrostaticEvidenceRole role;

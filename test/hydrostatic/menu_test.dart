@@ -1,3 +1,5 @@
+import 'package:hive_ce/hive.dart';
+import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -12,6 +14,13 @@ import 'package:ddr001_levantamientos/domain/construction/construction_models.da
 import 'package:ddr001_levantamientos/features/home/home_page.dart';
 import 'package:ddr001_levantamientos/features/hydrostatic/hydrostatic_controller.dart';
 import 'package:ddr001_levantamientos/features/hydrostatic/hydrostatic_pages.dart';
+import 'package:ddr001_levantamientos/core/security/session_store.dart';
+import 'package:ddr001_levantamientos/core/hydrostatic/hydrostatic_contracts.dart';
+import 'package:ddr001_levantamientos/data/hydrostatic/hydrostatic_repository.dart';
+import 'package:ddr001_levantamientos/data/hydrostatic/hydrostatic_store.dart';
+import 'package:ddr001_levantamientos/data/hydrostatic/hydrostatic_sync_store.dart';
+import 'package:ddr001_levantamientos/domain/hydrostatic/hydrostatic_models.dart';
+import 'identity_guid_test.dart' show legacyUser, legacySession, installation;
 import '../cabinets/harness.dart';
 import 'ui_widgets_test.dart' show localWidgetTest, settle;
 
@@ -135,6 +144,93 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     },
   );
+
+  for (final existing in [false, true]) {
+    localWidgetTest(
+      'historical resident opens offline from menu; existing=$existing; preserves session and stores',
+      (tester) async {
+        final saved = h.sessions.value!;
+        final session = FieldSession(
+          userId: legacyUser,
+          sessionId: legacySession,
+          installationId: installation,
+          name: saved.name,
+          email: saved.email,
+          phone: saved.phone,
+          accessToken: saved.accessToken,
+          refreshToken: saved.refreshToken,
+        );
+        h.app.session = session;
+        h.sessions.value = session;
+        h.setRole(ConstructionRole.resident);
+        await h.store.authorize(legacyUser, true);
+        final sessionBefore = Map.of(session.toJson());
+        final cabinetBefore = Map.of(h.store.box.toMap());
+        final directory = Directory('${h.directory.path}/hydrostatic/db');
+        const testId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+        Map<dynamic, dynamic>? documentsBefore;
+        Map<dynamic, dynamic>? journalBefore;
+        Map<dynamic, dynamic>? outboxBefore;
+        if (existing) {
+          final store = await HydrostaticStore.open(directory);
+          final repo = HydrostaticRepository(
+            store: store,
+            clock: SystemHydrostaticClock(),
+            access: access.current,
+            files: LocalHydrostaticEvidenceFiles(h.directory),
+          );
+          await repo.prepare(
+            operationId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+            testId: testId,
+            cabinet: HydrostaticCabinetSnapshot(
+              uid: 'AQ26000017',
+              model: 'A1',
+              automated: false,
+            ),
+          );
+          documentsBefore = Map.of(store.documents.toMap());
+          journalBefore = Map.of(store.journal.toMap());
+          final outbox = await HydrostaticSyncStore.open(directory);
+          await outbox.save(testId, {
+            'schemaVersion': 1,
+            'pending': [
+              {'operationId': 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'},
+            ],
+          }, 'synthetic-pending');
+          outboxBefore = Map.of(outbox.box.toMap());
+          await outbox.close();
+          await store.close();
+        }
+        await open(tester);
+        expect(hydro.accessIssue, isNull);
+        await tester.tap(find.byKey(const Key('hydrostatic_action')));
+        await settle(tester);
+        expect(find.byType(HydrostaticListPage), findsOneWidget);
+        expect(hydro.ready, isTrue);
+        expect(hydro.documents.length, existing ? 1 : 0);
+        expect(identical(await h.sessions.read(), session), isTrue);
+        expect(h.sessions.value!.toJson(), sessionBefore);
+        expect(h.store.box.toMap(), cabinetBefore);
+        if (existing) {
+          expect(hydro.document(testId).actor.userId, legacyUser);
+          expect(hydro.document(testId).actor.sessionId, legacySession);
+          expect(
+            Hive.box<String>(HydrostaticStore.names[0]).toMap(),
+            documentsBefore,
+          );
+          expect(
+            Hive.box<String>(HydrostaticStore.names[1]).toMap(),
+            journalBefore,
+          );
+          final outbox = await HydrostaticSyncStore.open(directory);
+          expect(outbox.box.toMap(), outboxBefore);
+          await outbox.close();
+        }
+        expect(requests, 0);
+        await tester.pumpWidget(const SizedBox());
+      },
+    );
+  }
 
   for (final role in ConstructionRole.values) {
     if (role == ConstructionRole.resident) continue;
