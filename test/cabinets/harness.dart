@@ -22,7 +22,11 @@ import 'package:uuid/uuid.dart';
 CabinetCatalog fixtureCatalog() => CabinetCatalog(
   object(
     jsonDecode(
-      File('test/cabinets/fixtures/catalog-46b0265.json').readAsStringSync(),
+      const String.fromEnvironment('CABINET_QA_CATALOG').isNotEmpty
+          ? const String.fromEnvironment('CABINET_QA_CATALOG')
+          : File(
+              'test/cabinets/fixtures/catalog-46b0265.json',
+            ).readAsStringSync(),
     ),
   ),
 );
@@ -69,12 +73,16 @@ class Harness {
   final sessions = Sessions();
   Future<void> open({
     String environment = 'test',
+    Directory? storageDirectory,
     CabinetRemote? remote,
     FieldSession? session,
     LocationService? locations,
     ConstructionImagePicker? picker,
   }) async {
-    directory = await Directory.systemTemp.createTemp('cabinet-mobile-test-');
+    directory =
+        storageDirectory ??
+        await Directory.systemTemp.createTemp('cabinet-mobile-test-');
+    await directory.create(recursive: true);
     Hive.init(directory.path);
     final local = await LocalStore.open();
     store = await CabinetStore.open();
