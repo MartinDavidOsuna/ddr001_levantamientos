@@ -45,6 +45,7 @@ android {
         applicationId = "com.aquafim.ddr001levantamientos"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
+        manifestPlaceholders["appLabel"] = "AQ NH DDR001"
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
@@ -59,6 +60,10 @@ android {
     }
 
     buildTypes {
+        debug {
+            applicationIdSuffix = ".test"
+            manifestPlaceholders["appLabel"] = "AQ NH DDR001 TEST"
+        }
         release {
             signingConfig = signingConfigs.getByName("release")
         }

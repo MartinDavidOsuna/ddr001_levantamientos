@@ -1,0 +1,1086 @@
+{
+  "version": "ddr001-parts-20261019-v2",
+  "evidenceRequired": false,
+  "universalParts": [
+    {
+      "code": "A1.r11.u1",
+      "key": "1511636",
+      "description": "SOLENOIDE DOROT S-92-3 90HM N.O. LATCH S/N 0617A (VALV INYECTOR)",
+      "displayName": "SOLENOIDE VALV INYECT",
+      "canonicalPartKey": "A1.key.1511636",
+      "position": "venturi.1",
+      "serial": "none",
+      "automatedOnly": false,
+      "source": {
+        "file": "A3-A2-A1-A4 - HIDRANTES PARCELARIOS - Material para codigos QR(1).xlsx",
+        "sheet": "MATERIAL HIDR 3\" A1",
+        "row": 8,
+        "quantity": 1,
+        "version": "ddr001-cabinets-20261015-v2",
+        "key": "1511636",
+        "description": "SOLENOIDE DOROT S-92-3 90HM N.O. LATCH S/N 0617A (VALV INYECTOR)"
+      }
+    },
+    {
+      "code": "A1.r16.u1",
+      "key": "1511636",
+      "description": "SOLENOIDE DOROT S-92-3 90HM N.O. LATCH S/N 0617A (VALV ANGULAR)",
+      "displayName": "SOLENOIDE VALV ANGULAR",
+      "canonicalPartKey": "A1.key.1511636",
+      "position": "principal.1",
+      "serial": "none",
+      "automatedOnly": false,
+      "source": {
+        "file": "A3-A2-A1-A4 - HIDRANTES PARCELARIOS - Material para codigos QR(1).xlsx",
+        "sheet": "MATERIAL HIDR 3\" A1",
+        "row": 12,
+        "quantity": 1,
+        "version": "ddr001-cabinets-20261015-v2",
+        "key": "1511636",
+        "description": "SOLENOIDE DOROT S-92-3 90HM N.O. LATCH S/N 0617A (VALV ANGULAR)"
+      }
+    },
+    {
+      "code": "A1.r9.u1",
+      "key": "1511636",
+      "description": "SOLENOIDE DOROT S-92-3 90HM N.O. LATCH S/N 0617A (BLOQUE 1)",
+      "displayName": "SOLENOIDE BLOQUE 1",
+      "canonicalPartKey": "A1.key.1511636",
+      "position": "outlet_1.1",
+      "serial": "none",
+      "automatedOnly": false,
+      "source": {
+        "file": "A3-A2-A1-A4 - HIDRANTES PARCELARIOS - Material para codigos QR(1).xlsx",
+        "sheet": "MATERIAL HIDR 3\" A1",
+        "row": 22,
+        "quantity": 1,
+        "version": "ddr001-cabinets-20261015-v2",
+        "key": "1511636",
+        "description": "SOLENOIDE DOROT S-92-3 90HM N.O. LATCH S/N 0617A (BLOQUE 1)"
+      }
+    },
+    {
+      "code": "A1.r13.u1",
+      "key": "1511636",
+      "description": "SOLENOIDE DOROT S-92-3 90HM N.O. LATCH S/N 0617A (VALV FILTRO)",
+      "displayName": "SOLENOIDE VALV FILTRO",
+      "canonicalPartKey": "A1.key.1511636",
+      "position": "flushing.1",
+      "serial": "none",
+      "automatedOnly": false,
+      "source": {
+        "file": "A3-A2-A1-A4 - HIDRANTES PARCELARIOS - Material para codigos QR(1).xlsx",
+        "sheet": "MATERIAL HIDR 3\" A1",
+        "row": 24,
+        "quantity": 1,
+        "version": "ddr001-cabinets-20261015-v2",
+        "key": "1511636",
+        "description": "SOLENOIDE DOROT S-92-3 90HM N.O. LATCH S/N 0617A (VALV FILTRO)"
+      }
+    },
+    {
+      "code": "A2.r14.u1",
+      "key": "1511636",
+      "description": "SOLENOIDE DOROT S-92-3 90HM N.O. LATCH S/N 0617A (VALV INYECTOR)",
+      "displayName": "SOLENOIDE VALV INYECT",
+      "canonicalPartKey": "A2.key.1511636",
+      "position": "venturi.1",
+      "serial": "none",
+      "automatedOnly": false,
+      "source": {
+        "file": "A3-A2-A1-A4 - HIDRANTES PARCELARIOS - Material para codigos QR(1).xlsx",
+        "sheet": "MATERIAL HIDR 3\" A2",
+        "row": 8,
+        "quantity": 1,
+        "version": "ddr001-cabinets-20261015-v2",
+        "key": "1511636",
+        "description": "SOLENOIDE DOROT S-92-3 90HM N.O. LATCH S/N 0617A (VALV INYECTOR)"
+      }
+    },
+    {
+      "code": "A2.r19.u1",
+      "key": "1511636",
+      "description": "SOLENOIDE DOROT S-92-3 90HM N.O. LATCH S/N 0617A (VALV ANGULAR)",
+      "displayName": "SOLENOIDE VALV ANGULAR",
+      "canonicalPartKey": "A2.key.1511636",
+      "position": "principal.1",
+      "serial": "none",
+      "automatedOnly": false,
+      "source": {
+        "file": "A3-A2-A1-A4 - HIDRANTES PARCELARIOS - Material para codigos QR(1).xlsx",
+        "sheet": "MATERIAL HIDR 3\" A2",
+        "row": 12,
+        "quantity": 1,
+        "version": "ddr001-cabinets-20261015-v2",
+        "key": "1511636",
+        "description": "SOLENOIDE DOROT S-92-3 90HM N.O. LATCH S/N 0617A (VALV ANGULAR)"
+      }
+    },
+    {
+      "code": "A2.r9.u1",
+      "key": "1511636",
+      "description": "SOLENOIDE DOROT S-92-3 90HM N.O. LATCH S/N 0617A (BLOQUE 1)",
+      "displayName": "SOLENOIDE BLOQUE 1",
+      "canonicalPartKey": "A2.key.1511636",
+      "position": "outlet_1.1",
+      "serial": "none",
+      "automatedOnly": false,
+      "source": {
+        "file": "A3-A2-A1-A4 - HIDRANTES PARCELARIOS - Material para codigos QR(1).xlsx",
+        "sheet": "MATERIAL HIDR 3\" A2",
+        "row": 22,
+        "quantity": 1,
+        "version": "ddr001-cabinets-20261015-v2",
+        "key": "1511636",
+        "description": "SOLENOIDE DOROT S-92-3 90HM N.O. LATCH S/N 0617A (BLOQUE 1)"
+      }
+    },
+    {
+      "code": "A2.r12.u1",
+      "key": "1511636",
+      "description": "SOLENOIDE DOROT S-92-3 90HM N.O. LATCH S/N 0617A (BLOQUE 2)",
+      "displayName": "SOLENOIDE BLOQUE 2",
+      "canonicalPartKey": "A2.key.1511636",
+      "position": "outlet_2.1",
+      "serial": "none",
+      "automatedOnly": false,
+      "source": {
+        "file": "A3-A2-A1-A4 - HIDRANTES PARCELARIOS - Material para codigos QR(1).xlsx",
+        "sheet": "MATERIAL HIDR 3\" A2",
+        "row": 25,
+        "quantity": 1,
+        "version": "ddr001-cabinets-20261015-v2",
+        "key": "1511636",
+        "description": "SOLENOIDE DOROT S-92-3 90HM N.O. LATCH S/N 0617A (BLOQUE 2)"
+      }
+    },
+    {
+      "code": "A2.r16.u1",
+      "key": "1511636",
+      "description": "SOLENOIDE DOROT S-92-3 90HM N.O. LATCH S/N 0617A (VALV FILTRO)",
+      "displayName": "SOLENOIDE VALV FILTRO",
+      "canonicalPartKey": "A2.key.1511636",
+      "position": "flushing.1",
+      "serial": "none",
+      "automatedOnly": false,
+      "source": {
+        "file": "A3-A2-A1-A4 - HIDRANTES PARCELARIOS - Material para codigos QR(1).xlsx",
+        "sheet": "MATERIAL HIDR 3\" A2",
+        "row": 27,
+        "quantity": 1,
+        "version": "ddr001-cabinets-20261015-v2",
+        "key": "1511636",
+        "description": "SOLENOIDE DOROT S-92-3 90HM N.O. LATCH S/N 0617A (VALV FILTRO)"
+      }
+    },
+    {
+      "code": "A3.r17.u1",
+      "key": "1511636",
+      "description": "SOLENOIDE DOROT S-92-3 90HM N.O. LATCH S/N 0617A (VALV INYECTOR)",
+      "displayName": "SOLENOIDE VALV INYECT",
+      "canonicalPartKey": "A3.key.1511636",
+      "position": "venturi.1",
+      "serial": "none",
+      "automatedOnly": false,
+      "source": {
+        "file": "A3-A2-A1-A4 - HIDRANTES PARCELARIOS - Material para codigos QR(1).xlsx",
+        "sheet": "MATERIAL HIDR 3\" A3",
+        "row": 8,
+        "quantity": 1,
+        "version": "ddr001-cabinets-20261015-v2",
+        "key": "1511636",
+        "description": "SOLENOIDE DOROT S-92-3 90HM N.O. LATCH S/N 0617A (VALV INYECTOR)"
+      }
+    },
+    {
+      "code": "A3.r22.u1",
+      "key": "1511636",
+      "description": "SOLENOIDE DOROT S-92-3 90HM N.O. LATCH S/N 0617A (VALV ANGULAR)",
+      "displayName": "SOLENOIDE VALV ANGULAR",
+      "canonicalPartKey": "A3.key.1511636",
+      "position": "principal.1",
+      "serial": "none",
+      "automatedOnly": false,
+      "source": {
+        "file": "A3-A2-A1-A4 - HIDRANTES PARCELARIOS - Material para codigos QR(1).xlsx",
+        "sheet": "MATERIAL HIDR 3\" A3",
+        "row": 12,
+        "quantity": 1,
+        "version": "ddr001-cabinets-20261015-v2",
+        "key": "1511636",
+        "description": "SOLENOIDE DOROT S-92-3 90HM N.O. LATCH S/N 0617A (VALV ANGULAR)"
+      }
+    },
+    {
+      "code": "A3.r9.u1",
+      "key": "1511636",
+      "description": "SOLENOIDE DOROT S-92-3 90HM N.O. LATCH S/N 0617A (BLOQUE 1)",
+      "displayName": "SOLENOIDE BLOQUE 1",
+      "canonicalPartKey": "A3.key.1511636",
+      "position": "outlet_1.1",
+      "serial": "none",
+      "automatedOnly": false,
+      "source": {
+        "file": "A3-A2-A1-A4 - HIDRANTES PARCELARIOS - Material para codigos QR(1).xlsx",
+        "sheet": "MATERIAL HIDR 3\" A3",
+        "row": 22,
+        "quantity": 1,
+        "version": "ddr001-cabinets-20261015-v2",
+        "key": "1511636",
+        "description": "SOLENOIDE DOROT S-92-3 90HM N.O. LATCH S/N 0617A (BLOQUE 1)"
+      }
+    },
+    {
+      "code": "A3.r12.u1",
+      "key": "1511636",
+      "description": "SOLENOIDE DOROT S-92-3 90HM N.O. LATCH S/N 0617A (BLOQUE 2)",
+      "displayName": "SOLENOIDE BLOQUE 2",
+      "canonicalPartKey": "A3.key.1511636",
+      "position": "outlet_2.1",
+      "serial": "none",
+      "automatedOnly": false,
+      "source": {
+        "file": "A3-A2-A1-A4 - HIDRANTES PARCELARIOS - Material para codigos QR(1).xlsx",
+        "sheet": "MATERIAL HIDR 3\" A3",
+        "row": 25,
+        "quantity": 1,
+        "version": "ddr001-cabinets-20261015-v2",
+        "key": "1511636",
+        "description": "SOLENOIDE DOROT S-92-3 90HM N.O. LATCH S/N 0617A (BLOQUE 2)"
+      }
+    },
+    {
+      "code": "A3.r15.u1",
+      "key": "1511636",
+      "description": "SOLENOIDE DOROT S-92-3 90HM N.O. LATCH S/N 0617A (BLOQUE 3)",
+      "displayName": "SOLENOIDE BLOQUE 3",
+      "canonicalPartKey": "A3.key.1511636",
+      "position": "outlet_3.1",
+      "serial": "none",
+      "automatedOnly": false,
+      "source": {
+        "file": "A3-A2-A1-A4 - HIDRANTES PARCELARIOS - Material para codigos QR(1).xlsx",
+        "sheet": "MATERIAL HIDR 3\" A3",
+        "row": 28,
+        "quantity": 1,
+        "version": "ddr001-cabinets-20261015-v2",
+        "key": "1511636",
+        "description": "SOLENOIDE DOROT S-92-3 90HM N.O. LATCH S/N 0617A (BLOQUE 3)"
+      }
+    },
+    {
+      "code": "A3.r19.u1",
+      "key": "1511636",
+      "description": "SOLENOIDE DOROT S-92-3 90HM N.O. LATCH S/N 0617A (VALV FILTRO)",
+      "displayName": "SOLENOIDE VALV FILTRO",
+      "canonicalPartKey": "A3.key.1511636",
+      "position": "flushing.1",
+      "serial": "none",
+      "automatedOnly": false,
+      "source": {
+        "file": "A3-A2-A1-A4 - HIDRANTES PARCELARIOS - Material para codigos QR(1).xlsx",
+        "sheet": "MATERIAL HIDR 3\" A3",
+        "row": 30,
+        "quantity": 1,
+        "version": "ddr001-cabinets-20261015-v2",
+        "key": "1511636",
+        "description": "SOLENOIDE DOROT S-92-3 90HM N.O. LATCH S/N 0617A (VALV FILTRO)"
+      }
+    },
+    {
+      "code": "A4.r17.u1",
+      "key": "1511636",
+      "description": "SOLENOIDE DOROT S-92-3 90HM N.O. LATCH S/N 0617A (VALV INYECTOR)",
+      "displayName": "SOLENOIDE VALV INYECT",
+      "canonicalPartKey": "A4.key.1511636",
+      "position": "venturi.1",
+      "serial": "none",
+      "automatedOnly": false,
+      "source": {
+        "file": "A3-A2-A1-A4 - HIDRANTES PARCELARIOS - Material para codigos QR(1).xlsx",
+        "sheet": "MATERIAL HIDR 4\" A4",
+        "row": 8,
+        "quantity": 1,
+        "version": "ddr001-cabinets-20261015-v2",
+        "key": "1511636",
+        "description": "SOLENOIDE DOROT S-92-3 90HM N.O. LATCH S/N 0617A (VALV INYECTOR)"
+      }
+    },
+    {
+      "code": "A4.r22.u1",
+      "key": "1511636",
+      "description": "SOLENOIDE DOROT S-92-3 90HM N.O. LATCH S/N 0617A (VALV ANGULAR)",
+      "displayName": "SOLENOIDE VALV ANGULAR",
+      "canonicalPartKey": "A4.key.1511636",
+      "position": "principal.1",
+      "serial": "none",
+      "automatedOnly": false,
+      "source": {
+        "file": "A3-A2-A1-A4 - HIDRANTES PARCELARIOS - Material para codigos QR(1).xlsx",
+        "sheet": "MATERIAL HIDR 4\" A4",
+        "row": 12,
+        "quantity": 1,
+        "version": "ddr001-cabinets-20261015-v2",
+        "key": "1511636",
+        "description": "SOLENOIDE DOROT S-92-3 90HM N.O. LATCH S/N 0617A (VALV ANGULAR)"
+      }
+    },
+    {
+      "code": "A4.r9.u1",
+      "key": "1511636",
+      "description": "SOLENOIDE DOROT S-92-3 90HM N.O. LATCH S/N 0617A (BLOQUE 1)",
+      "displayName": "SOLENOIDE BLOQUE 1",
+      "canonicalPartKey": "A4.key.1511636",
+      "position": "outlet_1.1",
+      "serial": "none",
+      "automatedOnly": false,
+      "source": {
+        "file": "A3-A2-A1-A4 - HIDRANTES PARCELARIOS - Material para codigos QR(1).xlsx",
+        "sheet": "MATERIAL HIDR 4\" A4",
+        "row": 23,
+        "quantity": 1,
+        "version": "ddr001-cabinets-20261015-v2",
+        "key": "1511636",
+        "description": "SOLENOIDE DOROT S-92-3 90HM N.O. LATCH S/N 0617A (BLOQUE 1)"
+      }
+    },
+    {
+      "code": "A4.r12.u1",
+      "key": "1511636",
+      "description": "SOLENOIDE DOROT S-92-3 90HM N.O. LATCH S/N 0617A (BLOQUE 2)",
+      "displayName": "SOLENOIDE BLOQUE 2",
+      "canonicalPartKey": "A4.key.1511636",
+      "position": "outlet_2.1",
+      "serial": "none",
+      "automatedOnly": false,
+      "source": {
+        "file": "A3-A2-A1-A4 - HIDRANTES PARCELARIOS - Material para codigos QR(1).xlsx",
+        "sheet": "MATERIAL HIDR 4\" A4",
+        "row": 26,
+        "quantity": 1,
+        "version": "ddr001-cabinets-20261015-v2",
+        "key": "1511636",
+        "description": "SOLENOIDE DOROT S-92-3 90HM N.O. LATCH S/N 0617A (BLOQUE 2)"
+      }
+    },
+    {
+      "code": "A4.r15.u1",
+      "key": "1511636",
+      "description": "SOLENOIDE DOROT S-92-3 90HM N.O. LATCH S/N 0617A (BLOQUE 3)",
+      "displayName": "SOLENOIDE BLOQUE 3",
+      "canonicalPartKey": "A4.key.1511636",
+      "position": "outlet_3.1",
+      "serial": "none",
+      "automatedOnly": false,
+      "source": {
+        "file": "A3-A2-A1-A4 - HIDRANTES PARCELARIOS - Material para codigos QR(1).xlsx",
+        "sheet": "MATERIAL HIDR 4\" A4",
+        "row": 29,
+        "quantity": 1,
+        "version": "ddr001-cabinets-20261015-v2",
+        "key": "1511636",
+        "description": "SOLENOIDE DOROT S-92-3 90HM N.O. LATCH S/N 0617A (BLOQUE 3)"
+      }
+    },
+    {
+      "code": "A4.r19.u1",
+      "key": "1511636",
+      "description": "SOLENOIDE DOROT S-92-3 90HM N.O. LATCH S/N 0617A (VALV FILTRO) 1",
+      "displayName": "SOLENOIDE VALV FILTRO 1",
+      "canonicalPartKey": "A4.key.1511636",
+      "position": "flushing.1",
+      "serial": "none",
+      "automatedOnly": false,
+      "source": {
+        "file": "A3-A2-A1-A4 - HIDRANTES PARCELARIOS - Material para codigos QR(1).xlsx",
+        "sheet": "MATERIAL HIDR 4\" A4",
+        "row": 32,
+        "quantity": 1,
+        "version": "ddr001-cabinets-20261015-v2",
+        "key": "1511636",
+        "description": "SOLENOIDE DOROT S-92-3 90HM N.O. LATCH S/N 0617A (VALV FILTRO) 1"
+      }
+    },
+    {
+      "code": "A4.r19.u2",
+      "key": "1511636",
+      "description": "SOLENOIDE DOROT S-92-3 90HM N.O. LATCH S/N 0617A (VALV FILTRO) 2",
+      "displayName": "SOLENOIDE VALV FILTRO 2",
+      "canonicalPartKey": "A4.key.1511636",
+      "position": "flushing.2",
+      "serial": "none",
+      "automatedOnly": false,
+      "source": {
+        "file": "A3-A2-A1-A4 - HIDRANTES PARCELARIOS - Material para codigos QR(1).xlsx",
+        "sheet": "MATERIAL HIDR 4\" A4",
+        "row": 33,
+        "quantity": 1,
+        "version": "ddr001-cabinets-20261015-v2",
+        "key": "1511636",
+        "description": "SOLENOIDE DOROT S-92-3 90HM N.O. LATCH S/N 0617A (VALV FILTRO) 2"
+      }
+    }
+  ],
+  "parts": {
+    "A1.r5.u1": {
+      "side": "district",
+      "step": "district",
+      "order": 6,
+      "serial": "required"
+    },
+    "A1.r10.u1": {
+      "side": "district",
+      "step": "district",
+      "order": 7,
+      "serial": "none"
+    },
+    "A1.r11.u1": {
+      "side": "district",
+      "step": "district",
+      "order": 8,
+      "serial": "none"
+    },
+    "A1.r14.u1": {
+      "side": "district",
+      "step": "district",
+      "order": 9,
+      "serial": "none"
+    },
+    "A1.r15.u1": {
+      "side": "district",
+      "step": "district",
+      "order": 10,
+      "serial": "none"
+    },
+    "A1.r15.u2": {
+      "side": "district",
+      "step": "district",
+      "order": 11,
+      "serial": "none"
+    },
+    "A1.r16.u1": {
+      "side": "district",
+      "step": "district",
+      "order": 12,
+      "serial": "none"
+    },
+    "A1.r17.u1": {
+      "side": "district",
+      "step": "automation",
+      "order": 13,
+      "serial": "none"
+    },
+    "A1.r17.u2": {
+      "side": "district",
+      "step": "automation",
+      "order": 14,
+      "serial": "none"
+    },
+    "A1.r18.u1": {
+      "side": "district",
+      "step": "district",
+      "order": 15,
+      "serial": "none"
+    },
+    "A1.r22.u1": {
+      "side": "district",
+      "step": "district",
+      "order": 16,
+      "serial": "none"
+    },
+    "A1.r6.u1": {
+      "side": "producer",
+      "step": "producer",
+      "order": 19,
+      "serial": "none"
+    },
+    "A1.r7.u1": {
+      "side": "producer",
+      "step": "producer",
+      "order": 20,
+      "serial": "none"
+    },
+    "A1.r8.u1": {
+      "side": "producer",
+      "step": "producer",
+      "order": 21,
+      "serial": "none"
+    },
+    "A1.r9.u1": {
+      "side": "producer",
+      "step": "producer",
+      "order": 22,
+      "serial": "none"
+    },
+    "A1.r12.u1": {
+      "side": "producer",
+      "step": "producer",
+      "order": 23,
+      "serial": "none"
+    },
+    "A1.r13.u1": {
+      "side": "producer",
+      "step": "producer",
+      "order": 24,
+      "serial": "none"
+    },
+    "A1.r19.u1": {
+      "side": "producer",
+      "step": "producer",
+      "order": 25,
+      "serial": "none"
+    },
+    "A1.r20.u1": {
+      "side": "producer",
+      "step": "producer",
+      "order": 26,
+      "serial": "none"
+    },
+    "A1.r21.u1": {
+      "side": "producer",
+      "step": "producer",
+      "order": 27,
+      "serial": "none"
+    },
+    "omega_district_support": {
+      "side": "district",
+      "step": "automation",
+      "order": 1134,
+      "serial": "none"
+    },
+    "omega_district": {
+      "side": "district",
+      "step": "automation",
+      "order": 1135,
+      "serial": "none"
+    },
+    "omega_producer_support": {
+      "side": "producer",
+      "step": "automation",
+      "order": 1136,
+      "serial": "none"
+    },
+    "omega_producer": {
+      "side": "producer",
+      "step": "automation",
+      "order": 1137,
+      "serial": "none"
+    },
+    "door_sensor": {
+      "side": "district",
+      "step": "automation",
+      "order": 1138,
+      "serial": "none"
+    },
+    "cable_duct": {
+      "side": "district",
+      "step": "automation",
+      "order": 1139,
+      "serial": "none"
+    },
+    "solar_panel_1": {
+      "side": "district",
+      "step": "automation",
+      "order": 1140,
+      "serial": "none"
+    },
+    "solar_panel_2": {
+      "side": "district",
+      "step": "automation",
+      "order": 1141,
+      "serial": "none"
+    },
+    "solar_frame": {
+      "side": "district",
+      "step": "automation",
+      "order": 1142,
+      "serial": "none"
+    },
+    "charge_controller": {
+      "side": "district",
+      "step": "automation",
+      "order": 1143,
+      "serial": "none"
+    },
+    "battery_support": {
+      "side": "district",
+      "step": "automation",
+      "order": 1144,
+      "serial": "none"
+    },
+    "battery": {
+      "side": "district",
+      "step": "automation",
+      "order": 1145,
+      "serial": "none"
+    },
+    "A2.r5.u1": {
+      "side": "district",
+      "step": "district",
+      "order": 6,
+      "serial": "required"
+    },
+    "A2.r13.u1": {
+      "side": "district",
+      "step": "district",
+      "order": 7,
+      "serial": "none"
+    },
+    "A2.r14.u1": {
+      "side": "district",
+      "step": "district",
+      "order": 8,
+      "serial": "none"
+    },
+    "A2.r17.u1": {
+      "side": "district",
+      "step": "district",
+      "order": 9,
+      "serial": "none"
+    },
+    "A2.r18.u1": {
+      "side": "district",
+      "step": "district",
+      "order": 10,
+      "serial": "none"
+    },
+    "A2.r18.u2": {
+      "side": "district",
+      "step": "district",
+      "order": 11,
+      "serial": "none"
+    },
+    "A2.r19.u1": {
+      "side": "district",
+      "step": "district",
+      "order": 12,
+      "serial": "none"
+    },
+    "A2.r20.u1": {
+      "side": "district",
+      "step": "automation",
+      "order": 13,
+      "serial": "none"
+    },
+    "A2.r20.u2": {
+      "side": "district",
+      "step": "automation",
+      "order": 14,
+      "serial": "none"
+    },
+    "A2.r21.u1": {
+      "side": "district",
+      "step": "district",
+      "order": 15,
+      "serial": "none"
+    },
+    "A2.r25.u1": {
+      "side": "district",
+      "step": "district",
+      "order": 16,
+      "serial": "none"
+    },
+    "A2.r6.u1": {
+      "side": "producer",
+      "step": "producer",
+      "order": 19,
+      "serial": "none"
+    },
+    "A2.r7.u1": {
+      "side": "producer",
+      "step": "producer",
+      "order": 20,
+      "serial": "none"
+    },
+    "A2.r8.u1": {
+      "side": "producer",
+      "step": "producer",
+      "order": 21,
+      "serial": "none"
+    },
+    "A2.r9.u1": {
+      "side": "producer",
+      "step": "producer",
+      "order": 22,
+      "serial": "none"
+    },
+    "A2.r10.u1": {
+      "side": "producer",
+      "step": "producer",
+      "order": 23,
+      "serial": "none"
+    },
+    "A2.r11.u1": {
+      "side": "producer",
+      "step": "producer",
+      "order": 24,
+      "serial": "none"
+    },
+    "A2.r12.u1": {
+      "side": "producer",
+      "step": "producer",
+      "order": 25,
+      "serial": "none"
+    },
+    "A2.r15.u1": {
+      "side": "producer",
+      "step": "producer",
+      "order": 26,
+      "serial": "none"
+    },
+    "A2.r16.u1": {
+      "side": "producer",
+      "step": "producer",
+      "order": 27,
+      "serial": "none"
+    },
+    "A2.r22.u1": {
+      "side": "producer",
+      "step": "producer",
+      "order": 28,
+      "serial": "none"
+    },
+    "A2.r23.u1": {
+      "side": "producer",
+      "step": "producer",
+      "order": 29,
+      "serial": "none"
+    },
+    "A2.r24.u1": {
+      "side": "producer",
+      "step": "producer",
+      "order": 30,
+      "serial": "none"
+    },
+    "A3.r5.u1": {
+      "side": "district",
+      "step": "district",
+      "order": 6,
+      "serial": "required"
+    },
+    "A3.r16.u1": {
+      "side": "district",
+      "step": "district",
+      "order": 7,
+      "serial": "none"
+    },
+    "A3.r17.u1": {
+      "side": "district",
+      "step": "district",
+      "order": 8,
+      "serial": "none"
+    },
+    "A3.r20.u1": {
+      "side": "district",
+      "step": "district",
+      "order": 9,
+      "serial": "none"
+    },
+    "A3.r21.u1": {
+      "side": "district",
+      "step": "district",
+      "order": 10,
+      "serial": "none"
+    },
+    "A3.r21.u2": {
+      "side": "district",
+      "step": "district",
+      "order": 11,
+      "serial": "none"
+    },
+    "A3.r22.u1": {
+      "side": "district",
+      "step": "district",
+      "order": 12,
+      "serial": "none"
+    },
+    "A3.r23.u1": {
+      "side": "district",
+      "step": "automation",
+      "order": 13,
+      "serial": "none"
+    },
+    "A3.r23.u2": {
+      "side": "district",
+      "step": "automation",
+      "order": 14,
+      "serial": "none"
+    },
+    "A3.r24.u1": {
+      "side": "district",
+      "step": "district",
+      "order": 15,
+      "serial": "none"
+    },
+    "A3.r28.u1": {
+      "side": "district",
+      "step": "district",
+      "order": 16,
+      "serial": "none"
+    },
+    "A3.r6.u1": {
+      "side": "producer",
+      "step": "producer",
+      "order": 19,
+      "serial": "none"
+    },
+    "A3.r7.u1": {
+      "side": "producer",
+      "step": "producer",
+      "order": 20,
+      "serial": "none"
+    },
+    "A3.r8.u1": {
+      "side": "producer",
+      "step": "producer",
+      "order": 21,
+      "serial": "none"
+    },
+    "A3.r9.u1": {
+      "side": "producer",
+      "step": "producer",
+      "order": 22,
+      "serial": "none"
+    },
+    "A3.r10.u1": {
+      "side": "producer",
+      "step": "producer",
+      "order": 23,
+      "serial": "none"
+    },
+    "A3.r11.u1": {
+      "side": "producer",
+      "step": "producer",
+      "order": 24,
+      "serial": "none"
+    },
+    "A3.r12.u1": {
+      "side": "producer",
+      "step": "producer",
+      "order": 25,
+      "serial": "none"
+    },
+    "A3.r13.u1": {
+      "side": "producer",
+      "step": "producer",
+      "order": 26,
+      "serial": "none"
+    },
+    "A3.r14.u1": {
+      "side": "producer",
+      "step": "producer",
+      "order": 27,
+      "serial": "none"
+    },
+    "A3.r15.u1": {
+      "side": "producer",
+      "step": "producer",
+      "order": 28,
+      "serial": "none"
+    },
+    "A3.r18.u1": {
+      "side": "producer",
+      "step": "producer",
+      "order": 29,
+      "serial": "none"
+    },
+    "A3.r19.u1": {
+      "side": "producer",
+      "step": "producer",
+      "order": 30,
+      "serial": "none"
+    },
+    "A3.r25.u1": {
+      "side": "producer",
+      "step": "producer",
+      "order": 31,
+      "serial": "none"
+    },
+    "A3.r26.u1": {
+      "side": "producer",
+      "step": "producer",
+      "order": 32,
+      "serial": "none"
+    },
+    "A3.r27.u1": {
+      "side": "producer",
+      "step": "producer",
+      "order": 33,
+      "serial": "none"
+    },
+    "A4.k1603289.r6.u1": {
+      "side": "district",
+      "step": "district",
+      "order": 6,
+      "serial": "required"
+    },
+    "A4.r16.u1": {
+      "side": "district",
+      "step": "district",
+      "order": 7,
+      "serial": "none"
+    },
+    "A4.r17.u1": {
+      "side": "district",
+      "step": "district",
+      "order": 8,
+      "serial": "none"
+    },
+    "A4.k1512848.r9.u1": {
+      "side": "district",
+      "step": "district",
+      "order": 9,
+      "serial": "none"
+    },
+    "A4.r21.u1": {
+      "side": "district",
+      "step": "district",
+      "order": 10,
+      "serial": "none"
+    },
+    "A4.r21.u2": {
+      "side": "district",
+      "step": "district",
+      "order": 11,
+      "serial": "none"
+    },
+    "A4.r22.u1": {
+      "side": "district",
+      "step": "district",
+      "order": 12,
+      "serial": "none"
+    },
+    "A4.r23.u1": {
+      "side": "district",
+      "step": "automation",
+      "order": 13,
+      "serial": "none"
+    },
+    "A4.r23.u2": {
+      "side": "district",
+      "step": "automation",
+      "order": 14,
+      "serial": "none"
+    },
+    "A4.k1512496.r15.u1": {
+      "side": "district",
+      "step": "district",
+      "order": 15,
+      "serial": "none"
+    },
+    "A4.r28.u1": {
+      "side": "district",
+      "step": "district",
+      "order": 16,
+      "serial": "none"
+    },
+    "A4.r6.u1": {
+      "side": "producer",
+      "step": "producer",
+      "order": 19,
+      "serial": "none"
+    },
+    "A4.r6.u2": {
+      "side": "producer",
+      "step": "producer",
+      "order": 20,
+      "serial": "none"
+    },
+    "A4.r7.u1": {
+      "side": "producer",
+      "step": "producer",
+      "order": 21,
+      "serial": "none"
+    },
+    "A4.r8.u1": {
+      "side": "producer",
+      "step": "producer",
+      "order": 22,
+      "serial": "none"
+    },
+    "A4.r9.u1": {
+      "side": "producer",
+      "step": "producer",
+      "order": 23,
+      "serial": "none"
+    },
+    "A4.r10.u1": {
+      "side": "producer",
+      "step": "producer",
+      "order": 24,
+      "serial": "none"
+    },
+    "A4.r11.u1": {
+      "side": "producer",
+      "step": "producer",
+      "order": 25,
+      "serial": "none"
+    },
+    "A4.r12.u1": {
+      "side": "producer",
+      "step": "producer",
+      "order": 26,
+      "serial": "none"
+    },
+    "A4.r13.u1": {
+      "side": "producer",
+      "step": "producer",
+      "order": 27,
+      "serial": "none"
+    },
+    "A4.r14.u1": {
+      "side": "producer",
+      "step": "producer",
+      "order": 28,
+      "serial": "none"
+    },
+    "A4.r15.u1": {
+      "side": "producer",
+      "step": "producer",
+      "order": 29,
+      "serial": "none"
+    },
+    "A4.r18.u1": {
+      "side": "producer",
+      "step": "producer",
+      "order": 30,
+      "serial": "none"
+    },
+    "A4.r18.u2": {
+      "side": "producer",
+      "step": "producer",
+      "order": 31,
+      "serial": "none"
+    },
+    "A4.r19.u1": {
+      "side": "producer",
+      "step": "producer",
+      "order": 32,
+      "serial": "none"
+    },
+    "A4.r19.u2": {
+      "side": "producer",
+      "step": "producer",
+      "order": 33,
+      "serial": "none"
+    },
+    "A4.r25.u1": {
+      "side": "producer",
+      "step": "producer",
+      "order": 34,
+      "serial": "none"
+    },
+    "A4.r26.u1": {
+      "side": "producer",
+      "step": "producer",
+      "order": 35,
+      "serial": "none"
+    },
+    "A4.r27.u1": {
+      "side": "producer",
+      "step": "producer",
+      "order": 36,
+      "serial": "none"
+    }
+  }
+}

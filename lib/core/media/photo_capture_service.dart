@@ -44,11 +44,13 @@ class PhotoCaptureService {
     Future<Directory> Function()? temporaryDirectory,
     this.representationBuilder,
     this.directoryName = 'construction',
+    this.preserveOriginalUpload = false,
   }) : picker = picker ?? ImagePickerAdapter(),
        supportDirectory = supportDirectory ?? getApplicationSupportDirectory,
        temporaryDirectory = temporaryDirectory ?? getTemporaryDirectory;
 
   final String directoryName;
+  final bool preserveOriginalUpload;
   final LocalStore local;
   final ConstructionImagePicker picker;
   final Future<Directory> Function() supportDirectory;
@@ -77,7 +79,19 @@ class PhotoCaptureService {
         );
         return null;
       }
-      return _makeDurable(entry, File(picked.path));
+      var captured = entry;
+      if (directoryName == 'cabinets') {
+        final now = DateTime.now().toUtc();
+        final modified = (await picked.lastModified()).toUtc();
+        captured = entry.copyWith(
+          photoCapturedAt:
+              !modified.isBefore(entry.createdAt) && !modified.isAfter(now)
+              ? modified
+              : now,
+        );
+        await local.journal.save(captured);
+      }
+      return _makeDurable(captured, File(picked.path));
     } on Object catch (error) {
       await local.journal.save(
         entry.copyWith(
@@ -332,6 +346,11 @@ class PhotoCaptureService {
     File upload,
     File thumbnail,
   ) async {
+    if (preserveOriginalUpload && !upload.existsSync()) {
+      final partial = File('${upload.path}.part');
+      await source.copy(partial.path);
+      await partial.rename(upload.path);
+    }
     final custom = representationBuilder;
     if (custom != null) return custom(source, upload, thumbnail);
     if (!upload.existsSync()) {
@@ -366,7 +385,7 @@ class PhotoCaptureService {
         localPath: entry.uploadPath!,
         thumbnailPath: entry.thumbnailPath!,
         sha256: entry.sha256!,
-        capturedAt: entry.createdAt,
+        capturedAt: entry.photoCapturedAt ?? entry.createdAt,
         stepNumber: entry.step,
         correctionId: entry.correctionId,
         purpose: entry.purpose == null

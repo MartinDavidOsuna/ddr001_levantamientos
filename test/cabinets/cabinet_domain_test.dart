@@ -73,7 +73,7 @@ void main() {
     },
   );
   test(
-    'required serial exceptions remain incomplete; plate requires legibility',
+    'required serial exceptions remain incomplete; component photos are optional',
     () {
       final part = fixtureCatalog()
           .parts('A1', false)
@@ -106,7 +106,7 @@ void main() {
           ],
         },
       ];
-      expect(partsPending(cabinet), isNotEmpty);
+      expect(partsPending(cabinet), isEmpty);
       cabinet['parts'] = [
         {
           'code': part['code'],

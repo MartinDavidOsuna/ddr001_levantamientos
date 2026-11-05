@@ -195,6 +195,14 @@ DioException failure(int status, String code) => DioException(
 );
 
 class FakeCabinetRemote implements CabinetRemote {
+  @override
+  Future<Json> deletePhoto(String id, String photoId) async => {
+    'photoId': photoId,
+    'deleted': true,
+  };
+  @override
+  Future<Json> deleteCabinet(String id, Json body) async =>
+      throw failure(503, "DELETION_NOT_READY");
   final documents = <String, Json>{}, receipts = <String, Json>{};
   final calls = <Json>[];
   final uploads = <String, int>{};
