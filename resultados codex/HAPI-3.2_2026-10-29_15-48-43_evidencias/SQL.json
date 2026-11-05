@@ -1,0 +1,567 @@
+{
+  "A": {
+    "header": [
+      {
+        "test_id": "98E26174-3C5D-4977-8032-709EC39D4706",
+        "actor_user_id": "AE011C92-12C4-47D1-82C7-3D44229FCDCF",
+        "origin_session_id": "22862DFE-179E-4D71-83CA-926B8CF3AC3F",
+        "origin_device_id": "EE657E5C-E8D3-F111-9423-0014224FF817",
+        "origin_installation_id": "11DB0B82-9852-4DD1-A997-82CABBD5F040",
+        "execution_state": "PASSED",
+        "hydraulic_result": "PASS",
+        "validation_state": "EVIDENCE_PENDING",
+        "server_version": 1,
+        "source_revision": 8,
+        "source_hash": "eaf18b7222e547eeaff318cf62fad4f63f6ebfba4c327f91ccf5808e22255399",
+        "discarded_at": null,
+        "discard_json": null
+      }
+    ],
+    "documents": [
+      {
+        "document_id": "205D4EA5-7759-4C63-8FC0-1120E23292D4",
+        "source_revision": 8,
+        "payload_sha256": "eaf18b7222e547eeaff318cf62fad4f63f6ebfba4c327f91ccf5808e22255399",
+        "sourceState": "PASSED"
+      }
+    ],
+    "operations": [
+      {
+        "operation_id": "43E340D2-AAA9-47A5-8E66-A87FA3E36E79",
+        "command_type": "REGISTER_DOCUMENT",
+        "request_sha256": "5a5c7423796257c0cf25fe563940384e82936e2a01fc0dc6a466e81fcba30336",
+        "expected_version": 0,
+        "result_version": 1,
+        "receipt_state": "COMMITTED",
+        "response_json": {
+          "contractVersion": "hydrostatic-sync-v1",
+          "operationId": "43e340d2-aaa9-47a5-8e66-a87fa3e36e79",
+          "testId": "98e26174-3c5d-4977-8032-709ec39d4706",
+          "requestSha256": "5a5c7423796257c0cf25fe563940384e82936e2a01fc0dc6a466e81fcba30336",
+          "receiptState": "COMMITTED",
+          "serverVersion": 1,
+          "acceptedSourceRevision": 8,
+          "acceptedSourceHash": "eaf18b7222e547eeaff318cf62fad4f63f6ebfba4c327f91ccf5808e22255399",
+          "committedAt": "2026-10-29T22:33:50.468Z",
+          "documentStored": true,
+          "mutationApplied": true,
+          "validationState": "EVIDENCE_PENDING"
+        }
+      }
+    ],
+    "photos": [
+      {
+        "evidence_id": "5885B60C-7F86-48A3-ABB8-D3E56E9BB6E9",
+        "role": "INITIAL_SETUP",
+        "client_sha256": "3644490caee353825180f44f3617b3a6820a84252757a2947a8e90abed47bec6",
+        "server_sha256": null,
+        "byte_size": "102",
+        "integrity_state": "UNKNOWN",
+        "upload_state": "DECLARED",
+        "original_storage_object_id": null
+      },
+      {
+        "evidence_id": "E34FB846-DA02-4FC0-8237-DEB4CCDA223B",
+        "role": "MANOMETER5_BAR",
+        "client_sha256": "b1c3db1125fd444bfe6143a7a56088017e9db4ab2768b076b54f8afe4f644b65",
+        "server_sha256": null,
+        "byte_size": "102",
+        "integrity_state": "UNKNOWN",
+        "upload_state": "DECLARED",
+        "original_storage_object_id": null
+      },
+      {
+        "evidence_id": "093D2227-1425-456E-91E8-E34510109DD3",
+        "role": "FINAL4_BAR",
+        "client_sha256": "f2efa89e21cc25dde8c44e31dc6defe75fcfb4308d4c4f26400792320aca4032",
+        "server_sha256": null,
+        "byte_size": "102",
+        "integrity_state": "UNKNOWN",
+        "upload_state": "DECLARED",
+        "original_storage_object_id": null
+      }
+    ],
+    "leaks": [],
+    "audit": [
+      {
+        "operation_id": "43E340D2-AAA9-47A5-8E66-A87FA3E36E79",
+        "event_kind": "REGISTER_DOCUMENT",
+        "before_version": 0,
+        "after_version": 1
+      }
+    ]
+  },
+  "B": {
+    "header": [
+      {
+        "test_id": "0A929FC3-2969-4021-B8D1-97CB6C7F5E8F",
+        "actor_user_id": "AE011C92-12C4-47D1-82C7-3D44229FCDCF",
+        "origin_session_id": "22862DFE-179E-4D71-83CA-926B8CF3AC3F",
+        "origin_device_id": "EE657E5C-E8D3-F111-9423-0014224FF817",
+        "origin_installation_id": "11DB0B82-9852-4DD1-A997-82CABBD5F040",
+        "execution_state": "FAILED",
+        "hydraulic_result": "LEAK",
+        "validation_state": "EVIDENCE_PENDING",
+        "server_version": 1,
+        "source_revision": 8,
+        "source_hash": "4f9c41d7c036e0ff4cbd0d8a92c061f724a692757984320dc371e0bfc1493a4a",
+        "discarded_at": null,
+        "discard_json": null
+      }
+    ],
+    "documents": [
+      {
+        "document_id": "DE6374DB-ACDC-4735-87E2-C21697A202DC",
+        "source_revision": 8,
+        "payload_sha256": "4f9c41d7c036e0ff4cbd0d8a92c061f724a692757984320dc371e0bfc1493a4a",
+        "sourceState": "FAILED"
+      }
+    ],
+    "operations": [
+      {
+        "operation_id": "0E366BEE-23CC-42E9-A6FE-32B1EC9EC7FC",
+        "command_type": "REGISTER_DOCUMENT",
+        "request_sha256": "72ba63e024920b9243ad9e7f944a83498d6517e7a9a25c3230b52960bcc71c95",
+        "expected_version": 0,
+        "result_version": 1,
+        "receipt_state": "COMMITTED",
+        "response_json": {
+          "contractVersion": "hydrostatic-sync-v1",
+          "operationId": "0e366bee-23cc-42e9-a6fe-32b1ec9ec7fc",
+          "testId": "0a929fc3-2969-4021-b8d1-97cb6c7f5e8f",
+          "requestSha256": "72ba63e024920b9243ad9e7f944a83498d6517e7a9a25c3230b52960bcc71c95",
+          "receiptState": "COMMITTED",
+          "serverVersion": 1,
+          "acceptedSourceRevision": 8,
+          "acceptedSourceHash": "4f9c41d7c036e0ff4cbd0d8a92c061f724a692757984320dc371e0bfc1493a4a",
+          "committedAt": "2026-10-29T22:35:16.333Z",
+          "documentStored": true,
+          "mutationApplied": true,
+          "validationState": "EVIDENCE_PENDING"
+        }
+      }
+    ],
+    "photos": [
+      {
+        "evidence_id": "80FA5054-D28B-4120-B555-1556553BA6F7",
+        "role": "LEAK_EVIDENCE",
+        "client_sha256": "ce9f2f7bd1941edeb682430708b63484603595fc07208242946b407b1849095f",
+        "server_sha256": null,
+        "byte_size": "102",
+        "integrity_state": "UNKNOWN",
+        "upload_state": "DECLARED",
+        "original_storage_object_id": null
+      },
+      {
+        "evidence_id": "ED08D253-D365-47EF-A9D2-D7398B6FF371",
+        "role": "INITIAL_SETUP",
+        "client_sha256": "5da37f2382ba71ea7e01b8198759da204e527216ecb9a810c3237e0c2f2cdef0",
+        "server_sha256": null,
+        "byte_size": "102",
+        "integrity_state": "UNKNOWN",
+        "upload_state": "DECLARED",
+        "original_storage_object_id": null
+      }
+    ],
+    "leaks": [
+      {
+        "joint_code": "J01",
+        "pressure_millibar": 2345,
+        "description": ""
+      }
+    ],
+    "audit": [
+      {
+        "operation_id": "0E366BEE-23CC-42E9-A6FE-32B1EC9EC7FC",
+        "event_kind": "REGISTER_DOCUMENT",
+        "before_version": 0,
+        "after_version": 1
+      }
+    ]
+  },
+  "C": {
+    "header": [
+      {
+        "test_id": "4960AF95-D25D-44F2-9E74-1E30A136B2CB",
+        "actor_user_id": "AE011C92-12C4-47D1-82C7-3D44229FCDCF",
+        "origin_session_id": "22862DFE-179E-4D71-83CA-926B8CF3AC3F",
+        "origin_device_id": "EE657E5C-E8D3-F111-9423-0014224FF817",
+        "origin_installation_id": "11DB0B82-9852-4DD1-A997-82CABBD5F040",
+        "execution_state": "ENDED_PENDING_RESULT",
+        "hydraulic_result": "PENDING",
+        "validation_state": "EVIDENCE_PENDING",
+        "server_version": 1,
+        "source_revision": 5,
+        "source_hash": "2cc1fbf130f4aea8ac8a9a9f1c975d034909613b1107ba7b45fae034d2a05e94",
+        "discarded_at": "2026-10-29T21:05:15.042Z",
+        "discard_json": "{\"discardedAt\":\"2026-10-29T21:05:15.042230Z\",\"discardDetectedAt\":\"2026-10-29T21:05:15.043230Z\",\"reason\":\"RESULT_DEADLINE_EXCEEDED\",\"policy\":{\"maximumFinalDelayMs\":1800000,\"version\":\"hydrostatic-close-30m-v1\"},\"fromState\":\"ENDED_PENDING_RESULT\"}"
+      }
+    ],
+    "documents": [
+      {
+        "document_id": "26FF3B9D-0C06-4677-90D2-0B48699CC81E",
+        "source_revision": 5,
+        "payload_sha256": "2cc1fbf130f4aea8ac8a9a9f1c975d034909613b1107ba7b45fae034d2a05e94",
+        "sourceState": "ENDED_PENDING_RESULT"
+      }
+    ],
+    "operations": [
+      {
+        "operation_id": "67048C0C-D8E3-4158-B8C9-350FBEB67D82",
+        "command_type": "REGISTER_DOCUMENT",
+        "request_sha256": "f4c6dab7eb70acf5c8e5a940fdc5e1f52366abbecf721f4422c6448436f815d4",
+        "expected_version": 0,
+        "result_version": 1,
+        "receipt_state": "COMMITTED",
+        "response_json": {
+          "contractVersion": "hydrostatic-sync-v1",
+          "operationId": "67048c0c-d8e3-4158-b8c9-350fbeb67d82",
+          "testId": "4960af95-d25d-44f2-9e74-1e30a136b2cb",
+          "requestSha256": "f4c6dab7eb70acf5c8e5a940fdc5e1f52366abbecf721f4422c6448436f815d4",
+          "receiptState": "COMMITTED",
+          "serverVersion": 1,
+          "acceptedSourceRevision": 5,
+          "acceptedSourceHash": "2cc1fbf130f4aea8ac8a9a9f1c975d034909613b1107ba7b45fae034d2a05e94",
+          "committedAt": "2026-10-29T22:35:17.468Z",
+          "documentStored": true,
+          "mutationApplied": true,
+          "validationState": "EVIDENCE_PENDING"
+        }
+      }
+    ],
+    "photos": [
+      {
+        "evidence_id": "AA07B34C-FE7B-4CB3-8374-E0F448A586CA",
+        "role": "INITIAL_SETUP",
+        "client_sha256": "aae7b648f492d39dbda899996a716c2b964177ecc1ee456cc8533a0bcce3910e",
+        "server_sha256": null,
+        "byte_size": "102",
+        "integrity_state": "UNKNOWN",
+        "upload_state": "DECLARED",
+        "original_storage_object_id": null
+      }
+    ],
+    "leaks": [],
+    "audit": [
+      {
+        "operation_id": "67048C0C-D8E3-4158-B8C9-350FBEB67D82",
+        "event_kind": "REGISTER_DOCUMENT",
+        "before_version": 0,
+        "after_version": 1
+      }
+    ]
+  },
+  "D": {
+    "header": [
+      {
+        "test_id": "D31C3879-B166-4403-80B6-42C8C91D27A8",
+        "actor_user_id": "AE011C92-12C4-47D1-82C7-3D44229FCDCF",
+        "origin_session_id": "22862DFE-179E-4D71-83CA-926B8CF3AC3F",
+        "origin_device_id": "EE657E5C-E8D3-F111-9423-0014224FF817",
+        "origin_installation_id": "11DB0B82-9852-4DD1-A997-82CABBD5F040",
+        "execution_state": "PASSED",
+        "hydraulic_result": "PASS",
+        "validation_state": "EVIDENCE_PENDING",
+        "server_version": 2,
+        "source_revision": 9,
+        "source_hash": "b5865b60e04a2228c7db1aae0201b9a11f43e8cb3177739a005645226e9a549e",
+        "discarded_at": null,
+        "discard_json": null
+      }
+    ],
+    "documents": [
+      {
+        "document_id": "62356310-17FE-44B2-B7DF-7BCD045BC289",
+        "source_revision": 8,
+        "payload_sha256": "eeb513c6aafbda176be6744c9bd3fa5b8225e9e4795a4ea4c50ac71c77624df4",
+        "sourceState": "PASSED"
+      },
+      {
+        "document_id": "C9EF8ECE-E68C-4CA4-B72D-E50B7956D39F",
+        "source_revision": 9,
+        "payload_sha256": "b5865b60e04a2228c7db1aae0201b9a11f43e8cb3177739a005645226e9a549e",
+        "sourceState": "PASSED"
+      }
+    ],
+    "operations": [
+      {
+        "operation_id": "C2F32F6D-2B7A-4E0C-93AF-6ABA55C66F05",
+        "command_type": "REGISTER_DOCUMENT",
+        "request_sha256": "feb004e59252420c9e7873a985da127ed55f511a8a7e0d127ea7dcdf682615c5",
+        "expected_version": 0,
+        "result_version": 1,
+        "receipt_state": "COMMITTED",
+        "response_json": {
+          "contractVersion": "hydrostatic-sync-v1",
+          "operationId": "c2f32f6d-2b7a-4e0c-93af-6aba55c66f05",
+          "testId": "d31c3879-b166-4403-80b6-42c8c91d27a8",
+          "requestSha256": "feb004e59252420c9e7873a985da127ed55f511a8a7e0d127ea7dcdf682615c5",
+          "receiptState": "COMMITTED",
+          "serverVersion": 1,
+          "acceptedSourceRevision": 8,
+          "acceptedSourceHash": "eeb513c6aafbda176be6744c9bd3fa5b8225e9e4795a4ea4c50ac71c77624df4",
+          "committedAt": "2026-10-29T22:33:51.806Z",
+          "documentStored": true,
+          "mutationApplied": true,
+          "validationState": "EVIDENCE_PENDING"
+        }
+      },
+      {
+        "operation_id": "17CE51D5-A7EF-4D8A-A415-281A1F524DB3",
+        "command_type": "UPDATE_DOCUMENT",
+        "request_sha256": "b5fc4f616bb8ea96e634ec52a26051da02811962566cf94a92884a2484e4a794",
+        "expected_version": 1,
+        "result_version": 2,
+        "receipt_state": "COMMITTED",
+        "response_json": {
+          "contractVersion": "hydrostatic-sync-v1",
+          "operationId": "17ce51d5-a7ef-4d8a-a415-281a1f524db3",
+          "testId": "d31c3879-b166-4403-80b6-42c8c91d27a8",
+          "requestSha256": "b5fc4f616bb8ea96e634ec52a26051da02811962566cf94a92884a2484e4a794",
+          "receiptState": "COMMITTED",
+          "serverVersion": 2,
+          "acceptedSourceRevision": 9,
+          "acceptedSourceHash": "b5865b60e04a2228c7db1aae0201b9a11f43e8cb3177739a005645226e9a549e",
+          "committedAt": "2026-10-29T22:33:53.116Z",
+          "documentStored": true,
+          "mutationApplied": true,
+          "validationState": "EVIDENCE_PENDING"
+        }
+      }
+    ],
+    "photos": [
+      {
+        "evidence_id": "BE3D6F6D-9E20-4D2A-A589-57307D27D1AC",
+        "role": "MANOMETER5_BAR",
+        "client_sha256": "c5a6846aeeb254f2dc7448057e82ff3af74a58ecf5e8e9ab023283d90cdbda2a",
+        "server_sha256": null,
+        "byte_size": "102",
+        "integrity_state": "UNKNOWN",
+        "upload_state": "DECLARED",
+        "original_storage_object_id": null
+      },
+      {
+        "evidence_id": "A9DC6E4E-6422-4B20-9E49-D0B30C264DB2",
+        "role": "FINAL4_BAR",
+        "client_sha256": "b5672354e9aa8064e78a80fdcaf6b0c6c640b278f7abf5b0f746052b55f13079",
+        "server_sha256": null,
+        "byte_size": "102",
+        "integrity_state": "UNKNOWN",
+        "upload_state": "DECLARED",
+        "original_storage_object_id": null
+      },
+      {
+        "evidence_id": "E6DE4A87-F49B-436C-B59D-FCE8D7C5BB36",
+        "role": "INITIAL_SETUP",
+        "client_sha256": "b442f1ad9c85469ee2e51e3abd2acd09fdcae4e9f36b5a09d9d2b3257bee61b3",
+        "server_sha256": null,
+        "byte_size": "102",
+        "integrity_state": "UNKNOWN",
+        "upload_state": "DECLARED",
+        "original_storage_object_id": null
+      }
+    ],
+    "leaks": [],
+    "audit": [
+      {
+        "operation_id": "C2F32F6D-2B7A-4E0C-93AF-6ABA55C66F05",
+        "event_kind": "REGISTER_DOCUMENT",
+        "before_version": 0,
+        "after_version": 1
+      },
+      {
+        "operation_id": "17CE51D5-A7EF-4D8A-A415-281A1F524DB3",
+        "event_kind": "UPDATE_DOCUMENT",
+        "before_version": 1,
+        "after_version": 2
+      }
+    ]
+  },
+  "OFFLINE": {
+    "header": [
+      {
+        "test_id": "F4C3AE43-CFB6-49CD-8C6F-53D4E7EEB3AB",
+        "actor_user_id": "AE011C92-12C4-47D1-82C7-3D44229FCDCF",
+        "origin_session_id": "22862DFE-179E-4D71-83CA-926B8CF3AC3F",
+        "origin_device_id": "EE657E5C-E8D3-F111-9423-0014224FF817",
+        "origin_installation_id": "11DB0B82-9852-4DD1-A997-82CABBD5F040",
+        "execution_state": "PASSED",
+        "hydraulic_result": "PASS",
+        "validation_state": "EVIDENCE_PENDING",
+        "server_version": 1,
+        "source_revision": 8,
+        "source_hash": "6d0eea0c267af143e9d15a4a627e9adcc6502963fa5eef7653afd1b256526964",
+        "discarded_at": null,
+        "discard_json": null
+      }
+    ],
+    "documents": [
+      {
+        "document_id": "0CD48639-0D3C-4604-9A93-54C856126725",
+        "source_revision": 8,
+        "payload_sha256": "6d0eea0c267af143e9d15a4a627e9adcc6502963fa5eef7653afd1b256526964",
+        "sourceState": "PASSED"
+      }
+    ],
+    "operations": [
+      {
+        "operation_id": "3CDFA58B-7056-49B6-8480-E9C5D4B26224",
+        "command_type": "REGISTER_DOCUMENT",
+        "request_sha256": "cf60a98e561aeb7427cc00f619660e6da3c1bbe4af6ab3e06ca45ec7cd2c3f62",
+        "expected_version": 0,
+        "result_version": 1,
+        "receipt_state": "COMMITTED",
+        "response_json": {
+          "contractVersion": "hydrostatic-sync-v1",
+          "operationId": "3cdfa58b-7056-49b6-8480-e9c5d4b26224",
+          "testId": "f4c3ae43-cfb6-49cd-8c6f-53d4e7eeb3ab",
+          "requestSha256": "cf60a98e561aeb7427cc00f619660e6da3c1bbe4af6ab3e06ca45ec7cd2c3f62",
+          "receiptState": "COMMITTED",
+          "serverVersion": 1,
+          "acceptedSourceRevision": 8,
+          "acceptedSourceHash": "6d0eea0c267af143e9d15a4a627e9adcc6502963fa5eef7653afd1b256526964",
+          "committedAt": "2026-10-29T22:38:36.750Z",
+          "documentStored": true,
+          "mutationApplied": true,
+          "validationState": "EVIDENCE_PENDING"
+        }
+      }
+    ],
+    "photos": [
+      {
+        "evidence_id": "194C8500-C3AD-4FCB-9BDE-5256C3051842",
+        "role": "FINAL4_BAR",
+        "client_sha256": "3b29ba7759da84672715d48c041f9b3a07be62c3420fa5e2db8ade490918cbaf",
+        "server_sha256": null,
+        "byte_size": "102",
+        "integrity_state": "UNKNOWN",
+        "upload_state": "DECLARED",
+        "original_storage_object_id": null
+      },
+      {
+        "evidence_id": "62476DE6-24F0-478D-9D9E-99941F0DED36",
+        "role": "MANOMETER5_BAR",
+        "client_sha256": "35b40a6ffcd076aac53d0a249ecd362b0c4461d2b92d284397ec33b25a503cc0",
+        "server_sha256": null,
+        "byte_size": "102",
+        "integrity_state": "UNKNOWN",
+        "upload_state": "DECLARED",
+        "original_storage_object_id": null
+      },
+      {
+        "evidence_id": "4ACF4898-8888-48CE-9E8A-E15543CA6E02",
+        "role": "INITIAL_SETUP",
+        "client_sha256": "1e9bdec78721d78b9eec20f8ce3c9761d5486852358cf9a302808c654481d032",
+        "server_sha256": null,
+        "byte_size": "102",
+        "integrity_state": "UNKNOWN",
+        "upload_state": "DECLARED",
+        "original_storage_object_id": null
+      }
+    ],
+    "leaks": [],
+    "audit": [
+      {
+        "operation_id": "3CDFA58B-7056-49B6-8480-E9C5D4B26224",
+        "event_kind": "REGISTER_DOCUMENT",
+        "before_version": 0,
+        "after_version": 1
+      }
+    ]
+  },
+  "CONFLICT": {
+    "header": [
+      {
+        "test_id": "A00AABC9-D1DB-4AF4-9CB0-2776EA103094",
+        "actor_user_id": "AE011C92-12C4-47D1-82C7-3D44229FCDCF",
+        "origin_session_id": "22862DFE-179E-4D71-83CA-926B8CF3AC3F",
+        "origin_device_id": "EE657E5C-E8D3-F111-9423-0014224FF817",
+        "origin_installation_id": "11DB0B82-9852-4DD1-A997-82CABBD5F040",
+        "execution_state": "PREPARATION",
+        "hydraulic_result": "PENDING",
+        "validation_state": "HISTORY_PENDING",
+        "server_version": 2,
+        "source_revision": 1,
+        "source_hash": "02a218398d285c00ec9d524b33aed27c221271089a7b21b68f3c202b2f635847",
+        "discarded_at": null,
+        "discard_json": null
+      }
+    ],
+    "documents": [
+      {
+        "document_id": "A087AFE3-BB7E-4387-A66E-106BF0F664A6",
+        "source_revision": 0,
+        "payload_sha256": "d3bc8450e77b90bde0f0340aeb6c4c5ffb6191ddf9eb199688bec9fc9e94c92c",
+        "sourceState": "PREPARATION"
+      },
+      {
+        "document_id": "31B4A727-0F4B-4B7C-9D0D-434516A08B68",
+        "source_revision": 1,
+        "payload_sha256": "02a218398d285c00ec9d524b33aed27c221271089a7b21b68f3c202b2f635847",
+        "sourceState": "PREPARATION"
+      }
+    ],
+    "operations": [
+      {
+        "operation_id": "9142EFE9-D60F-42A1-B18E-5D954C9D9CB4",
+        "command_type": "REGISTER_DOCUMENT",
+        "request_sha256": "73a9b3f9bff18b35b8c06020499b901a34577b55cc7b919e544157937861bf3c",
+        "expected_version": 0,
+        "result_version": 1,
+        "receipt_state": "COMMITTED",
+        "response_json": {
+          "contractVersion": "hydrostatic-sync-v1",
+          "operationId": "9142efe9-d60f-42a1-b18e-5d954c9d9cb4",
+          "testId": "a00aabc9-d1db-4af4-9cb0-2776ea103094",
+          "requestSha256": "73a9b3f9bff18b35b8c06020499b901a34577b55cc7b919e544157937861bf3c",
+          "receiptState": "COMMITTED",
+          "serverVersion": 1,
+          "acceptedSourceRevision": 0,
+          "acceptedSourceHash": "d3bc8450e77b90bde0f0340aeb6c4c5ffb6191ddf9eb199688bec9fc9e94c92c",
+          "committedAt": "2026-10-29T22:37:31.250Z",
+          "documentStored": true,
+          "mutationApplied": true,
+          "validationState": "HISTORY_PENDING"
+        }
+      },
+      {
+        "operation_id": "D9677693-1680-4DF7-9E8D-CB949805825D",
+        "command_type": "UPDATE_DOCUMENT",
+        "request_sha256": "c08fe2423ebccfae1854da0a264a154ac069208113dca1d7fa9bcdd281c9ff27",
+        "expected_version": 1,
+        "result_version": 2,
+        "receipt_state": "COMMITTED",
+        "response_json": {
+          "contractVersion": "hydrostatic-sync-v1",
+          "operationId": "d9677693-1680-4df7-9e8d-cb949805825d",
+          "testId": "a00aabc9-d1db-4af4-9cb0-2776ea103094",
+          "requestSha256": "c08fe2423ebccfae1854da0a264a154ac069208113dca1d7fa9bcdd281c9ff27",
+          "receiptState": "COMMITTED",
+          "serverVersion": 2,
+          "acceptedSourceRevision": 1,
+          "acceptedSourceHash": "02a218398d285c00ec9d524b33aed27c221271089a7b21b68f3c202b2f635847",
+          "committedAt": "2026-10-29T22:37:31.790Z",
+          "documentStored": true,
+          "mutationApplied": true,
+          "validationState": "HISTORY_PENDING"
+        }
+      }
+    ],
+    "photos": [],
+    "leaks": [],
+    "audit": [
+      {
+        "operation_id": "9142EFE9-D60F-42A1-B18E-5D954C9D9CB4",
+        "event_kind": "REGISTER_DOCUMENT",
+        "before_version": 0,
+        "after_version": 1
+      },
+      {
+        "operation_id": "D9677693-1680-4DF7-9E8D-CB949805825D",
+        "event_kind": "UPDATE_DOCUMENT",
+        "before_version": 1,
+        "after_version": 2
+      }
+    ]
+  }
+}

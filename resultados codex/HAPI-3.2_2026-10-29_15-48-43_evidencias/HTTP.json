@@ -1,0 +1,400 @@
+{
+  "capabilities": {
+    "contractVersion": "hydrostatic-sync-v1",
+    "available": true,
+    "environment": "TEST",
+    "supportedDocumentSchemas": [
+      1
+    ],
+    "catalogVersion": "hydrostatic-joints-v1",
+    "joints": [
+      {
+        "code": "J01",
+        "name": "Conexión en bee principal"
+      },
+      {
+        "code": "J02",
+        "name": "Juntas vitaulic"
+      },
+      {
+        "code": "J03",
+        "name": "Conexiones v. angular"
+      },
+      {
+        "code": "J04",
+        "name": "Conexión bee usuario"
+      },
+      {
+        "code": "J05",
+        "name": "Manómetros"
+      },
+      {
+        "code": "J06",
+        "name": "Filtro"
+      },
+      {
+        "code": "J07",
+        "name": "Abrazadera venturi"
+      },
+      {
+        "code": "J08",
+        "name": "Venturi"
+      },
+      {
+        "code": "J09",
+        "name": "Accesorios"
+      },
+      {
+        "code": "J10",
+        "name": "Válvulas parcelarias"
+      },
+      {
+        "code": "J11",
+        "name": "Otro"
+      }
+    ],
+    "closurePolicy": {
+      "version": "hydrostatic-close-30m-v1",
+      "maximumFinalDelayMs": 1800000
+    },
+    "maximumCloseMs": 1800000,
+    "commands": [
+      "REGISTER_DOCUMENT",
+      "UPDATE_DOCUMENT",
+      "DECLARE_VIDEO"
+    ],
+    "limits": {
+      "checkpointBytes": 8388608,
+      "httpEnvelopeBytes": 16777216,
+      "pageSize": 100
+    },
+    "features": {
+      "documentPersistence": true,
+      "durableReceipts": true,
+      "photoUpload": false,
+      "remoteValidation": false,
+      "videoUpload": false,
+      "historySegments": false
+    },
+    "serverTime": "2026-10-29T22:37:30.812Z"
+  },
+  "results": [
+    "T1 PASS: Flutter HTTP real, capabilities TEST y catálogo",
+    "T1 PASS: Flutter HTTP real, capabilities TEST y catálogo",
+    "T2 PASS: APROBADO registrado con recibo COMMITTED HTTP",
+    "T3 PASS: replay exacto devuelve recibo original",
+    "T4 PASS: respuesta real descartada tras COMMIT, recibo recuperado por GET",
+    "T5 PASS: UPDATE_DOCUMENT durable y versión 2",
+    "T1 PASS: Flutter HTTP real, capabilities TEST y catálogo",
+    "T6 PASS: FUGA J01 a 2.345 bar declarada; fotos pendientes",
+    "T7 PASS: DESCARTADA preservada, sin convertir en FUGA",
+    "T10 PASS: segunda identidad TEST no ve ni transmite expedientes ajenos",
+    "T1 PASS: Flutter HTTP real, capabilities TEST y catálogo",
+    "T11 PASS: 409 preserva fuente y comando, sin last-write-wins",
+    "PREPARADO: quitar reverse QA y pulsar PRUEBA SIN RED",
+    "T8 PASS: HTTP sin conexión conserva outbox y fingerprint",
+    "T9 PASS: proceso nuevo recupera Hive y envío automático sin duplicados",
+    "T12 PASS: originales SHA-256 intactos; ningún binario enviado"
+  ],
+  "trace": [
+    {
+      "kind": "response",
+      "path": "/field-sessions/start",
+      "status": 201
+    },
+    {
+      "kind": "response",
+      "path": "/construction/hydrostatic-tests/capabilities",
+      "status": 200
+    },
+    {
+      "kind": "response",
+      "path": "/construction/cabinets/catalog",
+      "status": 200
+    },
+    {
+      "kind": "request",
+      "path": "/construction/cabinets/26325f30-030c-4f64-ad02-1e163f7d45d6/commands",
+      "operationId": "b946ac45-1425-42dc-a3d6-3d09918477bd",
+      "type": "register",
+      "payloadSha256": null,
+      "expectedVersion": 0
+    },
+    {
+      "kind": "response",
+      "path": "/construction/cabinets/26325f30-030c-4f64-ad02-1e163f7d45d6/commands",
+      "status": 200
+    },
+    {
+      "kind": "response",
+      "path": "/construction/hydrostatic-tests/capabilities",
+      "status": 200
+    },
+    {
+      "kind": "request",
+      "path": "/construction/hydrostatic-tests/98e26174-3c5d-4977-8032-709ec39d4706/commands",
+      "operationId": "43e340d2-aaa9-47a5-8e66-a87fa3e36e79",
+      "type": "REGISTER_DOCUMENT",
+      "payloadSha256": "eaf18b7222e547eeaff318cf62fad4f63f6ebfba4c327f91ccf5808e22255399",
+      "expectedVersion": 0
+    },
+    {
+      "kind": "response",
+      "path": "/field-sessions/start",
+      "status": 201
+    },
+    {
+      "kind": "response",
+      "path": "/construction/hydrostatic-tests/capabilities",
+      "status": 200
+    },
+    {
+      "kind": "response",
+      "path": "/construction/hydrostatic-tests/capabilities",
+      "status": 200
+    },
+    {
+      "kind": "request",
+      "path": "/construction/hydrostatic-tests/98e26174-3c5d-4977-8032-709ec39d4706/commands",
+      "operationId": "43e340d2-aaa9-47a5-8e66-a87fa3e36e79",
+      "type": "REGISTER_DOCUMENT",
+      "payloadSha256": "eaf18b7222e547eeaff318cf62fad4f63f6ebfba4c327f91ccf5808e22255399",
+      "expectedVersion": 0
+    },
+    {
+      "kind": "response",
+      "path": "/construction/hydrostatic-tests/98e26174-3c5d-4977-8032-709ec39d4706/commands",
+      "status": 200
+    },
+    {
+      "kind": "response",
+      "path": "/construction/hydrostatic-tests/98e26174-3c5d-4977-8032-709ec39d4706/sync-status",
+      "status": 200
+    },
+    {
+      "kind": "request",
+      "path": "/construction/hydrostatic-tests/98e26174-3c5d-4977-8032-709ec39d4706/commands",
+      "operationId": "43e340d2-aaa9-47a5-8e66-a87fa3e36e79",
+      "type": "REGISTER_DOCUMENT",
+      "payloadSha256": "eaf18b7222e547eeaff318cf62fad4f63f6ebfba4c327f91ccf5808e22255399",
+      "expectedVersion": 0
+    },
+    {
+      "kind": "response",
+      "path": "/construction/hydrostatic-tests/98e26174-3c5d-4977-8032-709ec39d4706/commands",
+      "status": 200
+    },
+    {
+      "kind": "response",
+      "path": "/construction/hydrostatic-tests/capabilities",
+      "status": 200
+    },
+    {
+      "kind": "request",
+      "path": "/construction/hydrostatic-tests/d31c3879-b166-4403-80b6-42c8c91d27a8/commands",
+      "operationId": "c2f32f6d-2b7a-4e0c-93af-6aba55c66f05",
+      "type": "REGISTER_DOCUMENT",
+      "payloadSha256": "eeb513c6aafbda176be6744c9bd3fa5b8225e9e4795a4ea4c50ac71c77624df4",
+      "expectedVersion": 0
+    },
+    {
+      "kind": "response",
+      "path": "/construction/hydrostatic-tests/d31c3879-b166-4403-80b6-42c8c91d27a8/commands",
+      "status": 200
+    },
+    {
+      "kind": "response",
+      "path": "/construction/hydrostatic-tests/capabilities",
+      "status": 200
+    },
+    {
+      "kind": "response",
+      "path": "/construction/hydrostatic-tests/d31c3879-b166-4403-80b6-42c8c91d27a8/operations/c2f32f6d-2b7a-4e0c-93af-6aba55c66f05",
+      "status": 200
+    },
+    {
+      "kind": "response",
+      "path": "/construction/hydrostatic-tests/d31c3879-b166-4403-80b6-42c8c91d27a8/sync-status",
+      "status": 200
+    },
+    {
+      "kind": "response",
+      "path": "/construction/hydrostatic-tests/capabilities",
+      "status": 200
+    },
+    {
+      "kind": "request",
+      "path": "/construction/hydrostatic-tests/d31c3879-b166-4403-80b6-42c8c91d27a8/commands",
+      "operationId": "17ce51d5-a7ef-4d8a-a415-281a1f524db3",
+      "type": "UPDATE_DOCUMENT",
+      "payloadSha256": "b5865b60e04a2228c7db1aae0201b9a11f43e8cb3177739a005645226e9a549e",
+      "expectedVersion": 1
+    },
+    {
+      "kind": "response",
+      "path": "/construction/hydrostatic-tests/d31c3879-b166-4403-80b6-42c8c91d27a8/commands",
+      "status": 200
+    },
+    {
+      "kind": "response",
+      "path": "/construction/hydrostatic-tests/d31c3879-b166-4403-80b6-42c8c91d27a8/sync-status",
+      "status": 200
+    },
+    {
+      "kind": "response",
+      "path": "/field-sessions/start",
+      "status": 201
+    },
+    {
+      "kind": "response",
+      "path": "/construction/hydrostatic-tests/capabilities",
+      "status": 200
+    },
+    {
+      "kind": "response",
+      "path": "/construction/hydrostatic-tests/capabilities",
+      "status": 200
+    },
+    {
+      "kind": "request",
+      "path": "/construction/hydrostatic-tests/0a929fc3-2969-4021-b8d1-97cb6c7f5e8f/commands",
+      "operationId": "0e366bee-23cc-42e9-a6fe-32b1ec9ec7fc",
+      "type": "REGISTER_DOCUMENT",
+      "payloadSha256": "4f9c41d7c036e0ff4cbd0d8a92c061f724a692757984320dc371e0bfc1493a4a",
+      "expectedVersion": 0
+    },
+    {
+      "kind": "response",
+      "path": "/construction/hydrostatic-tests/0a929fc3-2969-4021-b8d1-97cb6c7f5e8f/commands",
+      "status": 200
+    },
+    {
+      "kind": "response",
+      "path": "/construction/hydrostatic-tests/0a929fc3-2969-4021-b8d1-97cb6c7f5e8f/sync-status",
+      "status": 200
+    },
+    {
+      "kind": "response",
+      "path": "/construction/hydrostatic-tests/capabilities",
+      "status": 200
+    },
+    {
+      "kind": "request",
+      "path": "/construction/hydrostatic-tests/4960af95-d25d-44f2-9e74-1e30a136b2cb/commands",
+      "operationId": "67048c0c-d8e3-4158-b8c9-350fbeb67d82",
+      "type": "REGISTER_DOCUMENT",
+      "payloadSha256": "2cc1fbf130f4aea8ac8a9a9f1c975d034909613b1107ba7b45fae034d2a05e94",
+      "expectedVersion": 0
+    },
+    {
+      "kind": "response",
+      "path": "/construction/hydrostatic-tests/4960af95-d25d-44f2-9e74-1e30a136b2cb/commands",
+      "status": 200
+    },
+    {
+      "kind": "response",
+      "path": "/construction/hydrostatic-tests/4960af95-d25d-44f2-9e74-1e30a136b2cb/sync-status",
+      "status": 200
+    },
+    {
+      "kind": "response",
+      "path": "/field-sessions/start",
+      "status": 201
+    },
+    {
+      "kind": "request",
+      "path": "/construction/hydrostatic-tests/98e26174-3c5d-4977-8032-709ec39d4706/commands",
+      "operationId": "8c55d4e6-b0b0-42c9-86ce-135260056a9f",
+      "type": "UPDATE_DOCUMENT",
+      "payloadSha256": "81748320e8ed0caa3f5589af1db6f02ca0d5fb035d3aa33f25f64264c61e8e86",
+      "expectedVersion": 1
+    },
+    {
+      "kind": "response",
+      "path": "/field-sessions/start",
+      "status": 201
+    },
+    {
+      "kind": "response",
+      "path": "/construction/hydrostatic-tests/capabilities",
+      "status": 200
+    },
+    {
+      "kind": "response",
+      "path": "/construction/hydrostatic-tests/capabilities",
+      "status": 200
+    },
+    {
+      "kind": "request",
+      "path": "/construction/hydrostatic-tests/a00aabc9-d1db-4af4-9cb0-2776ea103094/commands",
+      "operationId": "9142efe9-d60f-42a1-b18e-5d954c9d9cb4",
+      "type": "REGISTER_DOCUMENT",
+      "payloadSha256": "d3bc8450e77b90bde0f0340aeb6c4c5ffb6191ddf9eb199688bec9fc9e94c92c",
+      "expectedVersion": 0
+    },
+    {
+      "kind": "response",
+      "path": "/construction/hydrostatic-tests/a00aabc9-d1db-4af4-9cb0-2776ea103094/commands",
+      "status": 200
+    },
+    {
+      "kind": "response",
+      "path": "/construction/hydrostatic-tests/a00aabc9-d1db-4af4-9cb0-2776ea103094/sync-status",
+      "status": 200
+    },
+    {
+      "kind": "request",
+      "path": "/construction/hydrostatic-tests/a00aabc9-d1db-4af4-9cb0-2776ea103094/commands",
+      "operationId": "d9677693-1680-4df7-9e8d-cb949805825d",
+      "type": "UPDATE_DOCUMENT",
+      "payloadSha256": "02a218398d285c00ec9d524b33aed27c221271089a7b21b68f3c202b2f635847",
+      "expectedVersion": 1
+    },
+    {
+      "kind": "response",
+      "path": "/construction/hydrostatic-tests/a00aabc9-d1db-4af4-9cb0-2776ea103094/commands",
+      "status": 200
+    },
+    {
+      "kind": "response",
+      "path": "/construction/hydrostatic-tests/capabilities",
+      "status": 200
+    },
+    {
+      "kind": "request",
+      "path": "/construction/hydrostatic-tests/a00aabc9-d1db-4af4-9cb0-2776ea103094/commands",
+      "operationId": "59af1f93-8a9e-47b1-a975-fb31f852b36a",
+      "type": "UPDATE_DOCUMENT",
+      "payloadSha256": "ba0aae378a7d353d8a08bed38679a4dc03a3e9ac40405193b6bc0b75baa91fa6",
+      "expectedVersion": 1
+    },
+    {
+      "kind": "response",
+      "path": "/construction/hydrostatic-tests/a00aabc9-d1db-4af4-9cb0-2776ea103094/sync-status",
+      "status": 200
+    },
+    {
+      "kind": "response",
+      "path": "/construction/hydrostatic-tests/capabilities",
+      "status": 200
+    },
+    {
+      "kind": "request",
+      "path": "/construction/hydrostatic-tests/f4c3ae43-cfb6-49cd-8c6f-53d4e7eeb3ab/commands",
+      "operationId": "3cdfa58b-7056-49b6-8480-e9c5d4b26224",
+      "type": "REGISTER_DOCUMENT",
+      "payloadSha256": "6d0eea0c267af143e9d15a4a627e9adcc6502963fa5eef7653afd1b256526964",
+      "expectedVersion": 0
+    },
+    {
+      "kind": "response",
+      "path": "/construction/hydrostatic-tests/f4c3ae43-cfb6-49cd-8c6f-53d4e7eeb3ab/commands",
+      "status": 200
+    },
+    {
+      "kind": "response",
+      "path": "/construction/hydrostatic-tests/f4c3ae43-cfb6-49cd-8c6f-53d4e7eeb3ab/sync-status",
+      "status": 200
+    }
+  ]
+}
