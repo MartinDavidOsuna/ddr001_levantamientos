@@ -29,8 +29,10 @@ class BusyRemote extends FakeCabinetRemote {
 class GatedStore extends CabinetStore {
   GatedStore(super.box, super.media);
   Completer<void>? gate;
+  final entered = Completer<void>();
   @override
   Future<void> save(Json value) async {
+    if (gate != null && !entered.isCompleted) entered.complete();
     await gate?.future;
     await super.save(value);
   }
@@ -125,7 +127,7 @@ void main() {
     // pull performs an ordinary durable metadata update; no unsent user edit.
     store.gate = Completer();
     final pull = h.controller.pull(id);
-    await Future<void>.delayed(const Duration(milliseconds: 10));
+    await store.entered.future;
     await expectLater(
       h.controller.deleteLocalRegistration(id, 'AQ26000017'),
       throwsStateError,
@@ -153,7 +155,7 @@ void main() {
       store.gate = Completer();
       final pull = h.controller.pull(id);
       final check = expectLater(pull, throwsStateError);
-      await Future<void>.delayed(const Duration(milliseconds: 10));
+      await store.entered.future;
       store.gate!.completeError(StateError('synthetic disk failure'));
       await check;
       store.gate = null;

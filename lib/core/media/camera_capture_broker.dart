@@ -44,8 +44,28 @@ class CameraCaptureBroker {
   final Future<Directory> Function() supportDirectory;
   final Future<Directory> Function() temporaryDirectory;
   Future<void> Function(String)? fault;
+  Object? _snapshotOwner;
+
+  /// Exclusive read snapshot: no capture or lost-result reconciliation can write.
+  void holdForSnapshot(Object owner) {
+    if (_busy || _snapshotOwner != null) {
+      throw StateError(
+        'Cámara ocupada; no se puede preservar un respaldo coherente.',
+      );
+    }
+    _snapshotOwner = owner;
+  }
+
+  void releaseSnapshot(Object owner) {
+    if (!identical(_snapshotOwner, owner)) {
+      throw StateError('SUPPORT_MEDIA_LOCK_OWNED');
+    }
+    _snapshotOwner = null;
+  }
+
   bool _busy = false;
   bool get busy => _busy;
+  bool get snapshotHeld => _snapshotOwner != null;
   Future<Directory> _root() async {
     final root = Directory(
       '${(await supportDirectory()).path}/camera_dispatch_v1',
@@ -76,7 +96,7 @@ class CameraCaptureBroker {
   }
 
   Future<T> _exclusive<T>(Future<T> Function() action) async {
-    if (_busy) {
+    if (_busy || _snapshotOwner != null) {
       throw StateError('Hay una captura o recuperación de cámara en curso.');
     }
     _busy = true;

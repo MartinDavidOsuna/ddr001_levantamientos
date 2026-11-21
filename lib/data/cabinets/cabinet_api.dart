@@ -4,6 +4,22 @@ import 'package:dio/dio.dart';
 import '../../core/network/api_client.dart';
 import '../../domain/cabinets/cabinet_models.dart';
 
+/// Same multipart for upload and read-only size inspection. No HTTP is issued.
+Future<FormData> cabinetPhotoMultipart(Json photo) async {
+  final path = photo['localPath'] as String;
+  if (!await File(path).exists()) {
+    throw StateError('Archivo local faltante; conserva el expediente.');
+  }
+  return FormData.fromMap({
+    ...object(photo['metadata']),
+    'photo': await MultipartFile.fromFile(
+      path,
+      filename: '${photo['id']}.jpg',
+      contentType: DioMediaType('image', 'jpeg'),
+    ),
+  });
+}
+
 abstract class CabinetRemote {
   Future<Json> deleteCabinet(String id, Json body);
   Future<Json> deletePhoto(String id, String photoId);
@@ -18,10 +34,21 @@ class CabinetApi implements CabinetRemote {
   CabinetApi(this.client);
   final ApiClient client;
   String? operationActor;
+  Object? recoveryPermit;
+  String? recoverySessionId;
+  Map<String, dynamic> get _extra => {
+    'expectedActor': operationActor,
+    if (recoveryPermit != null) 'cabinetRecoveryPermit': recoveryPermit,
+    if (recoverySessionId != null) 'expectedSessionId': recoverySessionId,
+  };
   static const root = '/construction/cabinets';
   @override
   Future<Json> get(String path, [Json? query]) async => object(
-    (await client.dio.get<dynamic>('$root$path', queryParameters: query)).data,
+    (await client.dio.get<dynamic>(
+      '$root$path',
+      queryParameters: query,
+      options: Options(extra: _extra),
+    )).data,
   );
   @override
   Future<Json> deleteCabinet(String id, Json body) async => object(
@@ -30,7 +57,7 @@ class CabinetApi implements CabinetRemote {
       data: body,
       options: Options(
         headers: {'Idempotency-Key': body['operationId']},
-        extra: {'expectedActor': operationActor},
+        extra: _extra,
       ),
     )).data,
   );
@@ -38,7 +65,7 @@ class CabinetApi implements CabinetRemote {
   Future<Json> deletePhoto(String id, String photoId) async => object(
     (await client.dio.delete<dynamic>(
       '$root/$id/photos/$photoId',
-      options: Options(extra: {'expectedActor': operationActor}),
+      options: Options(extra: _extra),
     )).data,
   );
   @override
@@ -48,30 +75,17 @@ class CabinetApi implements CabinetRemote {
       data: body,
       options: Options(
         headers: {'Idempotency-Key': body['operationId']},
-        extra: {'expectedActor': operationActor},
+        extra: _extra,
       ),
     )).data,
   );
   @override
   Future<Json> upload(String id, Json photo) async {
-    final path = photo['localPath'] as String;
-    if (!await File(path).exists()) {
-      throw StateError(
-        'Archivo local faltante. Conserva el expediente y recupera el archivo original.',
-      );
-    }
     return object(
       (await client.dio.post<dynamic>(
         '$root/$id/photos',
-        data: FormData.fromMap({
-          ...object(photo['metadata']),
-          'photo': await MultipartFile.fromFile(
-            path,
-            filename: '${photo['id']}.jpg',
-            contentType: DioMediaType('image', 'jpeg'),
-          ),
-        }),
-        options: Options(extra: {'expectedActor': operationActor}),
+        data: await cabinetPhotoMultipart(photo),
+        options: Options(extra: _extra),
       )).data,
     );
   }
@@ -81,7 +95,7 @@ class CabinetApi implements CabinetRemote {
     (await client.dio.post<dynamic>(
       '$root/$id/photos/verify',
       data: {'photoIds': ids},
-      options: Options(extra: {'expectedActor': operationActor}),
+      options: Options(extra: _extra),
     )).data,
   );
   @override

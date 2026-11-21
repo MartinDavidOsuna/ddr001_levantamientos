@@ -15,6 +15,7 @@ import '../../domain/cabinets/cabinet_models.dart';
 import '../../domain/cabinets/cabinet_safety.dart';
 import 'cabinet_api.dart';
 import 'cabinet_store.dart';
+import 'cabinet_legacy_scope.dart';
 
 String _stableCommand(Object? value) {
   Object? canonical(Object? item) {
@@ -28,6 +29,8 @@ String _stableCommand(Object? value) {
 
   return jsonEncode(canonical(value));
 }
+
+class _SupportSyncYield implements Exception {}
 
 class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
   CabinetController({
@@ -50,6 +53,224 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
   final CabinetRemote remote;
   final PhotoCaptureService camera;
   Timer? _retry;
+  Object? _supportOwner;
+  Object? _automaticBatch;
+  String? _automaticActor, _automaticSession;
+  bool get automaticHistoricalAvailable =>
+      allowed &&
+      (app.config.environment == 'test' ||
+          (legacyAutomaticEnabled &&
+              app.packageInfo.version == '1.5.25-rc.15' &&
+              app.packageInfo.buildNumber == '53'));
+  Object beginAutomaticHistoricalBatch() {
+    if (_automaticBatch != null) throw StateError('AUTO_BATCH_LOCK_OWNED');
+    if (!automaticHistoricalAvailable) {
+      throw StateError('AUTO_BATCH_UNAVAILABLE');
+    }
+    _automaticActor = actor;
+    _automaticSession = app.session?.sessionId;
+    return _automaticBatch = Object();
+  }
+
+  bool ownsAutomaticHistoricalBatch(Object? token) =>
+      token != null &&
+      identical(token, _automaticBatch) &&
+      actor == _automaticActor &&
+      app.session?.sessionId == _automaticSession &&
+      automaticHistoricalAvailable;
+
+  void checkAutomaticHistoricalBatch(Object token) {
+    if (!identical(token, _automaticBatch)) {
+      throw StateError('AUTO_BATCH_PERMIT_REQUIRED');
+    }
+    if (actor != _automaticActor ||
+        app.session?.sessionId != _automaticSession) {
+      throw StateError('SUPPORT_SESSION_CHANGED');
+    }
+    if (!allowed) throw StateError('SUPPORT_ROLE_DENIED');
+    if (!automaticHistoricalAvailable) {
+      throw StateError('AUTO_BATCH_UNAVAILABLE');
+    }
+  }
+
+  void endAutomaticHistoricalBatch(Object token) {
+    if (!identical(token, _automaticBatch)) {
+      throw StateError('AUTO_BATCH_OWNER_MISMATCH');
+    }
+    _automaticBatch = null;
+    _automaticActor = null;
+    _automaticSession = null;
+  }
+
+  void notifyHistoricalProgress() => _notify();
+
+  bool _recoveringPhotos = false;
+  bool get supportHeld =>
+      _supportOwner != null ||
+      store.box.get('legacy_support_hold_v1') == 'true';
+  bool get supportAvailable =>
+      allowed && (legacySupportEnabled || app.config.environment == 'test');
+  bool _supportRequested = false;
+  String _syncPhase = 'inactivo';
+  String? _syncCommand;
+  final Stopwatch _syncPhaseClock = Stopwatch();
+  int _activeWrites = 0;
+  int _syncHiveWrites = 0;
+  int _deniedSyncStarts = 0;
+
+  /// Operational counters only: no IDs, payloads, credentials or photo paths.
+  String get supportSyncDiagnostic =>
+      'fase=$_syncPhase; tipo=${_syncCommand ?? "ninguno"}; '
+      'duración=${_syncPhaseClock.elapsed.inSeconds}s; '
+      'HTTP=${app.api.cabinetRequestsInFlight}; Hive(sync)=${_syncHiveWrites > 0}; serial=${_activeWrites > 0}; '
+      'pendientes=${records.where((r) => !legacyProtected(r)).fold<int>(0, (n, r) => n + r.pending.length)}; '
+      'reserva=$_supportRequested; soporte=$supportHeld; '
+      'inicios bloqueados=$_deniedSyncStarts';
+
+  void _syncAt(String phase, [String? command]) {
+    _syncPhase = phase;
+    _syncCommand = command;
+    _syncPhaseClock
+      ..reset()
+      ..start();
+  }
+
+  Future<T> _syncHiveWrite<T>(Future<T> Function() write) async {
+    _syncHiveWrites++;
+    try {
+      return await write();
+    } finally {
+      _syncHiveWrites--;
+    }
+  }
+
+  void _yieldSyncForSupport() {
+    if (_supportRequested) throw _SupportSyncYield();
+  }
+
+  String? get supportBusyComponent {
+    if (syncing) return 'sincronización';
+    if (refreshing) return 'actualización del listado';
+    if (capturing) return 'captura fotográfica';
+    if (_removingLocal) return 'eliminación local';
+    if (_applyingGps) return 'guardado de ubicación';
+    if (_recoveringPhotos) return 'recuperación fotográfica';
+    if (_activities.isNotEmpty) return _activities.values.first.first;
+    if (_photoLoads.isNotEmpty) return 'lectura de fotografías';
+    return null;
+  }
+
+  Future<Object> beginLegacySupport(
+    String cabinetId, {
+    Duration waitTimeout = const Duration(seconds: 8),
+  }) async {
+    final initialActor = actor;
+    final initialSession = app.session?.sessionId;
+    void checkIdentity() {
+      if (actor != initialActor || app.session?.sessionId != initialSession) {
+        throw StateError(
+          'SUPPORT_SESSION_CHANGED: La sesión cambió durante la preparación.',
+        );
+      }
+      if (!supportAvailable) {
+        throw StateError(
+          'SUPPORT_ROLE_DENIED: Soporte requiere un residente autorizado y el acceso de soporte habilitado.',
+        );
+      }
+      final selected = store.read(cabinetId);
+      if (selected == null ||
+          !legacyCabinetUids.contains(selected.working['uid'])) {
+        throw StateError(
+          'SUPPORT_SCOPE_DENIED: Expediente fuera del soporte histórico.',
+        );
+      }
+      if (selected.json['actor'] != initialActor ||
+          (selected.json['draftActor'] != null &&
+              selected.json['draftActor'] != initialActor)) {
+        throw StateError(
+          'SUPPORT_ACTOR_MISMATCH: La recuperación requiere iniciar sesión con el residente que creó el gabinete.',
+        );
+      }
+    }
+
+    checkIdentity();
+    if (_supportOwner != null || _supportRequested) {
+      throw StateError(
+        'SUPPORT_LOCK_OWNED: Otra preparación de soporte mantiene la exclusión.',
+      );
+    }
+    _supportRequested = true;
+    _retry?.cancel();
+    final waiting = Stopwatch()..start();
+    try {
+      // Admission is paused, but ongoing durable work may finish normally.
+      // No HTTP/broker lock is held while draining controller work.
+      while (true) {
+        checkIdentity();
+        if (app.api.cabinetRecoveryHeld) {
+          throw StateError('SUPPORT_HTTP_LOCK_OWNED');
+        }
+        if (camera.broker.snapshotHeld) {
+          throw StateError('SUPPORT_MEDIA_LOCK_OWNED');
+        }
+        final component = supportBusyComponent;
+        final http = app.api.cabinetRequestsInFlight;
+        final media = camera.broker.busy;
+        if (component == null && !http && !media) break;
+        if (waiting.elapsed >= waitTimeout) {
+          final code = component != null
+              ? 'SUPPORT_CONTROLLER_BUSY'
+              : http
+              ? 'SUPPORT_HTTP_IN_FLIGHT'
+              : 'SUPPORT_MEDIA_BUSY';
+          throw StateError(
+            '$code: ${component ?? (http ? "Consulta HTTP de Gabinetes" : "Sistema de fotografías")} en curso. No se adquirió el respaldo; reintenta al finalizar. ${syncing ? supportSyncDiagnostic : ''}',
+          );
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 40));
+      }
+      checkIdentity();
+      // Acquisitions are synchronous in this isolate: controller -> HTTP -> broker.
+      final token = app.api.beginCabinetRecovery(cabinetIds: {cabinetId});
+      try {
+        camera.broker.holdForSnapshot(token);
+      } catch (_) {
+        app.api.endCabinetRecovery(token);
+        throw StateError(
+          'SUPPORT_MEDIA_BUSY: No se pudo adquirir exclusión del sistema de fotografías.',
+        );
+      }
+      _supportOwner = token;
+      try {
+        await flushDrafts();
+        checkIdentity();
+        await store.box.put('legacy_support_hold_v1', 'true');
+        await store.box.flush();
+        _notify();
+        return token;
+      } catch (_) {
+        _supportOwner = null;
+        camera.broker.releaseSnapshot(token);
+        app.api.endCabinetRecovery(token);
+        rethrow;
+      }
+    } finally {
+      _supportRequested = false;
+    }
+  }
+
+  bool ownsLegacySupport(Object token) =>
+      identical(_supportOwner, token) && supportHeld;
+  Future<void> endLegacySupport(Object token) async {
+    if (!ownsLegacySupport(token)) throw StateError('SUPPORT_LOCK_LOST');
+    app.api.endCabinetRecovery(token);
+    camera.broker.releaseSnapshot(token);
+    await store.box.put('legacy_support_hold_v1', 'false');
+    await store.box.flush();
+    _supportOwner = null;
+    _notify(); // No automatic sync on exit; user decides when to reconnect/retry.
+  }
+
   StreamSubscription<LocationFix>? _cabinetFixes;
   bool _applyingGps = false;
   bool syncing = false, refreshing = false, capturing = false;
@@ -83,6 +304,13 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   String? message;
+  String? refreshError;
+  int? remoteTotal;
+  int downloadedRemoteCount = 0;
+  bool refreshComplete = false;
+  final Map<String, String> refreshIssues = {};
+  String? _refreshActor;
+
   final Set<String> _submitting = {};
   bool submitting(String id) =>
       _submitting.any((key) => key.startsWith('$id:'));
@@ -120,6 +348,9 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   void _requireWritable(String id, {bool discardMissingRemote = false}) {
+    if (supportHeld || _supportRequested) {
+      throw StateError('Edición pausada durante soporte selectivo.');
+    }
     final r = record(id);
     final deletion = object(r.json['deletion']);
     final mayDiscard =
@@ -152,7 +383,14 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
         'Conecta para descargar la versión de catálogo del expediente.',
       ));
   Future<T> _serial<T>(Future<T> Function() action) {
-    final result = _writes.then((_) => action());
+    final result = _writes.then((_) async {
+      _activeWrites++;
+      try {
+        return await action();
+      } finally {
+        _activeWrites--;
+      }
+    });
     _writes = result.then((_) {}, onError: (Object _) {});
     return result;
   }
@@ -161,10 +399,13 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
     id,
     'guardado local',
     () => _serial(() async {
+      if (supportHeld) {
+        throw StateError('Guardado operativo pausado durante soporte.');
+      }
       final r = store.read(id) ?? (throw StateError('Expediente ausente'));
       final value = clone(r.json);
       edit(value);
-      await store.save(value);
+      await _syncHiveWrite(() => store.save(value));
       _notify();
     }),
   );
@@ -174,16 +415,23 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
 
   void _appChanged() {
     final identity = '$actor:$eligible:${app.online}';
+    if (_refreshActor != actor) {
+      remoteTotal = null;
+      downloadedRemoteCount = 0;
+      refreshComplete = false;
+      refreshIssues.clear();
+      refreshError = null;
+    }
     _notify();
     if (identity != _identity) {
       _identity = identity;
-      if (eligible && app.online) unawaited(refresh());
+      if (!supportHeld && eligible && app.online) unawaited(refresh());
     }
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed && eligible) {
+    if (state == AppLifecycleState.resumed && eligible && !supportHeld) {
       unawaited(recoverPhotos());
       unawaited(refresh());
     }
@@ -199,17 +447,47 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> recoverPhotos() async {
-    for (final photo in await camera.recoverPendingCaptures()) {
-      final intent = object(store.read(photo.surveyId)?.json['captureIntent']);
-      if (intent.isEmpty) continue;
-      await _adoptPhoto(photo, intent);
+    // The camera broker scans globally before returning owners. Do not let it
+    // reconcile historical originals/journals before the selective snapshot.
+    if (supportHeld ||
+        _supportRequested ||
+        _recoveringPhotos ||
+        store.all().any(legacyProtected)) {
+      return;
+    }
+    _recoveringPhotos = true;
+    try {
+      for (final photo in await camera.recoverPendingCaptures()) {
+        if (supportHeld) return;
+        final owner = store.read(photo.surveyId);
+        if (owner != null && legacyProtected(owner)) continue;
+        final intent = object(owner?.json['captureIntent']);
+        if (intent.isEmpty) continue;
+        await _adoptPhoto(photo, intent);
+      }
+    } finally {
+      _recoveringPhotos = false;
     }
   }
 
   Future<void> refresh() async {
-    if (!eligible || refreshing || _removingLocal) return;
+    if (supportHeld ||
+        _supportRequested ||
+        !eligible ||
+        refreshing ||
+        _removingLocal) {
+      return;
+    }
     final user = actor!;
     refreshing = true;
+    final previousRefreshError = refreshError;
+    _refreshActor = user;
+    refreshError = null;
+    remoteTotal = null;
+    downloadedRemoteCount = 0;
+    refreshComplete = false;
+    refreshIssues.clear();
+    final downloaded = <String>{};
     _removedDuringRefresh.clear();
     var catalogAvailable = false;
     _notify();
@@ -234,31 +512,65 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
       _notify();
       var page = 1;
       while (true) {
+        if (_supportRequested) break;
         final data = await remote.get('', {'page': page, 'limit': 100});
         if (!allowed || actor != user) return;
+        remoteTotal = (data['total'] as num?)?.toInt();
         final rows = objects(data['items']);
+        if (remoteTotal == null ||
+            (rows.isEmpty && downloaded.length < remoteTotal!)) {
+          throw StateError(
+            'Listado incompleto del servidor. Reintenta actualizar; datos locales conservados.',
+          );
+        }
         for (final row in rows) {
+          if (_supportRequested) break;
           if (!allowed || actor != user) return;
           final rowId = '${row['cabinet_id']}'.toLowerCase();
           if (_removedDuringRefresh.contains(rowId)) continue;
-          await pull(rowId);
-          if (_removedDuringRefresh.contains(rowId)) continue;
-          if (!allowed || actor != user) return;
-          await _edit('${row['cabinet_id']}'.toLowerCase(), (value) {
-            value['listing'] = {
-              'createdAt': row['created_at'],
-              'exclusiveBaseId': row['exclusive_base_id'],
-            };
-          });
+          try {
+            await pull(rowId);
+            if (_removedDuringRefresh.contains(rowId)) continue;
+            if (!allowed || actor != user) return;
+            await _edit(rowId, (value) {
+              value['listing'] = {
+                'createdAt': row['created_at'],
+                'exclusiveBaseId': row['exclusive_base_id'],
+              };
+            });
+            downloaded.add(rowId);
+            downloadedRemoteCount = downloaded.length;
+          } catch (e) {
+            if (actor != user) return;
+            await _handleAccess(e, user);
+            refreshIssues[rowId] = explain(e);
+            if (!allowed) return;
+          }
         }
         if (page * 100 >= (data['total'] as num? ?? 0) || rows.isEmpty) break;
         page++;
       }
-      message = null;
+      if (message == previousRefreshError) message = null;
+      refreshComplete =
+          refreshIssues.isEmpty && downloadedRemoteCount == remoteTotal;
+      refreshError = refreshComplete
+          ? null
+          : 'Descarga incompleta: $downloadedRemoteCount de $remoteTotal expedientes. '
+                '${refreshIssues.length} con error. Reintenta actualizar; datos locales conservados.';
     } catch (e) {
-      await _handleAccess(e, user);
-      message = explain(e);
+      if (actor == user) {
+        await _handleAccess(e, user);
+        refreshError = explain(e);
+        message = refreshError;
+      }
     } finally {
+      if (actor != user) {
+        remoteTotal = null;
+        downloadedRemoteCount = 0;
+        refreshComplete = false;
+        refreshIssues.clear();
+        refreshError = null;
+      }
       refreshing = false;
       _notify();
     }
@@ -267,44 +579,80 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
-  Future<void> pull(
-    String id,
-  ) => _activity(id, 'consulta del expediente', () async {
-    if (!allowed) return;
-    final user = actor;
-    final response = await remote.get('/$id');
-    final cabinet = object(response['cabinet']);
-    if (!allowed || actor != user) return;
-    final version = cabinet['catalogVersion'] as String;
-    if (store.catalog(version) == null ||
-        object(store.catalog(version)!.json['partsReviewPolicy'])['version'] !=
-            'ddr001-parts-20261019-v2') {
-      await store.saveCatalog(
-        CabinetCatalog(await remote.get('/catalog', {'version': version})),
-        current: false,
-      );
-    }
-    await _serial(() async {
-      final old = store.read(id);
-      final value = old == null
-          ? {
-              'id': id,
-              'actor': user,
-              'operations': <Json>[],
-              'photos': <Json>[],
-            }
-          : clone(old.json);
-      value['server'] = cabinet;
-      if (old == null || (old.pending.isEmpty && old.json['dirty'] != true)) {
-        value['working'] = cabinet;
-      }
-      await store.save(value);
-    });
-    _notify();
-  });
+  Future<void> pull(String id) =>
+      _activity(id, 'consulta del expediente', () async {
+        if (supportHeld || _supportRequested || !allowed) return;
+        final existing = store.read(id);
+        if (existing != null && legacyProtected(existing)) return;
+        final user = actor;
+        final response = await remote.get('/$id');
+        final cabinet = object(response['cabinet']);
+        if (!allowed || actor != user) return;
+        final version = cabinet['catalogVersion'] as String;
+        if (store.catalog(version) == null ||
+            object(
+                  store.catalog(version)!.json['partsReviewPolicy'],
+                )['version'] !=
+                'ddr001-parts-20261019-v2') {
+          await store.saveCatalog(
+            CabinetCatalog(await remote.get('/catalog', {'version': version})),
+            current: false,
+          );
+        }
+        await _serial(() async {
+          if (!allowed || actor != user) return;
+          if (cabinet['cabinetId']?.toString().toLowerCase() != id ||
+              cabinet['version'] is! num) {
+            throw StateError(
+              'Respuesta de expediente inválida. Datos locales conservados.',
+            );
+          }
+          final old = store.read(id);
+          if ((old?.server['version'] as num? ?? -1) >
+              (cabinet['version'] as num)) {
+            return;
+          }
+          final value = old == null
+              ? {
+                  'id': id,
+                  'actor': user,
+                  'operations': <Json>[],
+                  'photos': <Json>[],
+                }
+              : clone(old.json);
+          value['server'] = cabinet;
+          if (old == null ||
+              (old.pending.isEmpty &&
+                  old.json['dirty'] != true &&
+                  (old.working['version'] as num? ?? -1) <=
+                      (cabinet['version'] as num))) {
+            value['working'] = cabinet;
+          }
+          await store.save(value);
+        });
+        _notify();
+      });
 
-  /// Resolves an existing dossier without creating a draft. Only 404 means absent.
-  Future<String?> findForInstallation(String raw) => _serial(() async {
+  /// Refresh a clean cached snapshot before deciding which stage can be opened.
+  /// Pending local work stays local-first; only the receipt workflow may confirm it.
+  Future<String?> findForInstallation(String raw) async {
+    final uid = cabinetUid(raw.trim());
+    final local = records.where((r) => r.working['uid'] == uid).firstOrNull;
+    if (local != null && app.online && local.synchronized) {
+      try {
+        await pull(local.id);
+      } catch (e) {
+        throw StateError(
+          'No se pudo confirmar el estado actual del expediente. '
+          '${explain(e)} El expediente local y sus fotografías se conservan.',
+        );
+      }
+    }
+    return _resolveForInstallation(uid);
+  }
+
+  /// Only the contract's explicit CABINET_NOT_FOUND means confirmed absence.
+  Future<String?> _resolveForInstallation(String raw) => _serial(() async {
     if (!allowed) {
       throw StateError('Acceso exclusivo para residentes autorizados.');
     }
@@ -321,24 +669,36 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
       if (!allowed || actor != user) throw StateError('La sesión cambió.');
       final cabinet = object(data['cabinet']);
       final id = cabinet['cabinetId']?.toString().toLowerCase();
-      if (id == null || cabinet['uid'] != uid) {
+      if (id == null || id.isEmpty || cabinet['uid'] != uid) {
         throw StateError(
           'La API devolvió un expediente inválido. Reintenta la consulta.',
         );
       }
-      await store.save({
-        'id': id,
-        'actor': user,
-        'working': cabinet,
-        'server': cabinet,
-        'operations': <Json>[],
-        'photos': <Json>[],
-      });
+      final old = store.read(id);
+      final value = old == null
+          ? <String, dynamic>{
+              'id': id,
+              'actor': user,
+              'operations': <Json>[],
+              'photos': <Json>[],
+            }
+          : clone(old.json);
+      if ((old?.server['version'] as num? ?? -1) <=
+          (cabinet['version'] as num? ?? 0)) {
+        value['server'] = cabinet;
+        if (old == null || (old.pending.isEmpty && old.json['dirty'] != true)) {
+          value['working'] = cabinet;
+        }
+        await store.save(value);
+      }
       _notify();
       return id;
     } on DioException catch (e) {
       if (!allowed || actor != user) throw StateError('La sesión cambió.');
-      if (e.response?.statusCode == 404) return null;
+      if (e.response?.statusCode == 404 &&
+          problemData(e.response?.data)['code'] == 'CABINET_NOT_FOUND') {
+        return null;
+      }
       await _handleAccess(e, user);
       rethrow;
     }
@@ -349,6 +709,9 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
     String model,
     bool automated,
   ) => _serial(() async {
+    if (supportHeld || _supportRequested) {
+      throw StateError('Soporte selectivo activo.');
+    }
     if (!allowed) {
       throw StateError(
         'Conecta primero para verificar tu permiso y descargar el catálogo.',
@@ -363,18 +726,35 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
         if (!allowed || actor != user) throw StateError('La sesión cambió.');
         final c = object(data['cabinet']),
             id = c['cabinetId'].toString().toLowerCase();
-        await store.save({
-          'id': id,
-          'actor': user,
-          'working': c,
-          'server': c,
-          'operations': <Json>[],
-          'photos': <Json>[],
-        });
+        if (id == 'null' || c['uid'] != uid) {
+          throw StateError(
+            'La API devolvió un expediente inválido. Datos locales conservados.',
+          );
+        }
+        final old = store.read(id);
+        final value = old == null
+            ? <String, dynamic>{
+                'id': id,
+                'actor': user,
+                'operations': <Json>[],
+                'photos': <Json>[],
+              }
+            : clone(old.json);
+        if ((old?.server['version'] as num? ?? -1) <=
+            (c['version'] as num? ?? 0)) {
+          value['server'] = c;
+          if (old == null ||
+              (old.pending.isEmpty && old.json['dirty'] != true)) {
+            value['working'] = c;
+          }
+          await store.save(value);
+        }
         _notify();
         return id;
       } on DioException catch (e) {
-        if (e.response?.statusCode != 404 && e.response != null) {
+        if (e.response != null &&
+            !(e.response?.statusCode == 404 &&
+                problemData(e.response?.data)['code'] == 'CABINET_NOT_FOUND')) {
           await _handleAccess(e, user);
           rethrow;
         }
@@ -1075,11 +1455,12 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
   });
 
   Future<void> recoverPhotoGps() async {
+    if (supportHeld || _supportRequested) return;
     if (!allowed || _applyingGps) return;
     _applyingGps = true;
     final user = actor;
     try {
-      for (final record in records) {
+      for (final record in records.where((r) => !legacyProtected(r))) {
         if (record.json['deletion'] != null || _removingLocalId == record.id) {
           continue;
         }
@@ -1173,6 +1554,7 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
   Future<void> _finishPhotoDeletions(String id, String user) async {
     final record = store.read(id)!;
     for (final p in record.photos.where((p) => p['deleting'] == true)) {
+      if (_supportRequested) return;
       if (!allowed || actor != user || p['deleteActor'] != user) {
         throw StateError(
           'Reconecta al residente que solicitó eliminar la foto.',
@@ -1266,10 +1648,20 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
     if (gps.altitude != null) 'altitude': gps.altitude,
   };
   Future<void> synchronize({bool force = false}) async {
-    if (!allowed || (!app.online && !force) || syncing || _removingLocal) {
+    if (supportHeld || _supportRequested) {
+      _deniedSyncStarts++;
+      return;
+    }
+    if (supportHeld ||
+        _supportRequested ||
+        !allowed ||
+        (!app.online && !force) ||
+        syncing ||
+        _removingLocal) {
       return;
     }
     syncing = true;
+    _syncAt('catálogo HTTP');
     _retry?.cancel();
     final user = actor!;
     _notify();
@@ -1279,7 +1671,8 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
       try {
         final catalog = CabinetCatalog(await remote.get('/catalog'));
         if (!allowed || actor != user) return;
-        await store.saveCatalog(catalog);
+        _syncAt('guardado de catálogo Hive');
+        await _syncHiveWrite(() => store.saveCatalog(catalog));
       } catch (e) {
         await _handleAccess(e, user);
         if (e is FormatException ||
@@ -1290,7 +1683,8 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
         return;
       }
       // A failed dossier never blocks the remaining dossiers.
-      for (final item in records) {
+      for (final item in records.where((r) => !legacyProtected(r))) {
+        if (_supportRequested) break;
         if (!allowed || actor != user) break;
         if (store.read(item.id) == null || _removingLocalId == item.id) {
           continue;
@@ -1308,6 +1702,7 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
               continue;
             }
             try {
+              _syncAt('eliminación previamente solicitada');
               await _finishDeletion(item.id, user);
             } catch (e) {
               await _handleAccess(e, user);
@@ -1328,6 +1723,7 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
           if (store.read(item.id)!.server.isNotEmpty &&
               store.read(item.id)!.photos.any((p) => p['deleting'] == true)) {
             try {
+              _syncAt('eliminación fotográfica previamente solicitada');
               await _finishPhotoDeletions(item.id, user);
             } catch (e) {
               await _handleAccess(e, user);
@@ -1336,6 +1732,7 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
             }
           }
           while (true) {
+            if (_supportRequested) break;
             final r = store.read(item.id)!;
             final op = r.pending.firstOrNull;
             if (op == null ||
@@ -1357,24 +1754,47 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
             }
             try {
               Json? result;
+              final commandType =
+                  const {
+                    'register',
+                    'registration_close',
+                    'parts_save',
+                    'parts_validate',
+                    'identity_correct',
+                    'install',
+                    'final_review',
+                  }.contains(body['type'])
+                  ? '${body['type']}'
+                  : 'otro';
+              _syncAt('consulta de recibo HTTP', commandType);
               if (op['state'] == 'sending') {
                 try {
                   result = await remote.get('/${r.id}/operations/$operationId');
                 } on DioException catch (e) {
                   if (e.response?.statusCode != 404) rethrow;
+                  if (problemData(e.response?.data)['code'] !=
+                      'OPERATION_NOT_FOUND') {
+                    throw StateError(
+                      'No se pudo consultar el recibo. Se conserva la operación pendiente de confirmación sin reenviarla.',
+                    );
+                  }
                 }
               }
               if (!allowed || actor != user) break;
               if (result == null) {
+                _yieldSyncForSupport();
                 if (body['type'] != 'register') {
                   await _uploadReferences(r, body, user);
                 }
                 if (!allowed || actor != user) break;
+                _yieldSyncForSupport();
+                _syncAt('marcado durable de envío', commandType);
                 await _changeOperation(
                   r.id,
                   '$operationId',
                   (o) => o['state'] = 'sending',
                 );
+                _syncAt('comando HTTP', commandType);
                 result = await remote.command(r.id, body);
               }
               final server = object(result['cabinet']);
@@ -1384,6 +1804,7 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
                   'Respuesta incompleta; se recuperará la operación.',
                 );
               }
+              _syncAt('guardado de recibo Hive', commandType);
               await _edit(r.id, (value) {
                 final ops = objects(value['operations']);
                 final current = ops.firstWhere(
@@ -1395,17 +1816,25 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
                 current.remove('diagnostic');
                 current.remove('problem');
                 value['operations'] = ops;
-                value['server'] = server;
+                final latestVersion =
+                    object(value['server'])['version'] as num? ?? -1;
+                if ((server['version'] as num) >= latestVersion) {
+                  value['server'] = server;
+                }
                 if (body['type'] == 'final_review' && value['dirty'] != true) {
                   value['finalReviewDraft'] = <String, dynamic>{};
                 }
                 value['lastSent'] = DateTime.now().toUtc().toIso8601String();
                 if (CabinetRecord(value).pending.isEmpty &&
                     value['dirty'] != true) {
-                  value['working'] = server;
+                  value['working'] = value['server'];
                 }
               });
+            } on _SupportSyncYield {
+              // No retry/error mutation: the durable operation is untouched.
+              break;
             } catch (e) {
+              _syncAt('guardado de error durable');
               await _handleAccess(e, user);
               final status = e is DioException ? e.response?.statusCode : null;
               await _changeOperation(r.id, '$operationId', (o) {
@@ -1436,7 +1865,10 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
             if (!allowed || actor != user) break;
           }
           final latest = store.read(item.id)!;
-          if (allowed && actor == user && latest.server.isNotEmpty) {
+          if (!_supportRequested &&
+              allowed &&
+              actor == user &&
+              latest.server.isNotEmpty) {
             for (final photo in latest.photos.where(
               (p) =>
                   p['deleting'] != true &&
@@ -1445,6 +1877,7 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
                   p['actor'] == user &&
                   object(p['metadata'])['accuracy'] != null,
             )) {
+              if (_supportRequested) break;
               if (!force &&
                   DateTime.tryParse(
                         '${photo['nextAttempt']}',
@@ -1458,7 +1891,10 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
                     {'photoId': photo['id']},
                   ],
                 }, user);
+              } on _SupportSyncYield {
+                break;
               } catch (e) {
+                _syncAt('guardado de error fotográfico');
                 await _handleAccess(e, user);
                 await _edit(latest.id, (r) {
                   final photos = objects(r['photos']),
@@ -1481,26 +1917,32 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
       }
     } finally {
       syncing = false;
+      _syncAt('inactivo');
+      _syncPhaseClock.stop();
       _notify();
-      if (allowed &&
-          records.any(
-            (r) =>
-                object(r.json['deletion'])['actor'] == actor ||
-                r.photos.any(
-                  (p) => p['deleting'] == true && p['deleteActor'] == actor,
-                ) ||
-                r.pending.any(
-                  (o) => o['actor'] == actor && o['state'] != 'conflict',
-                ) ||
-                r.photos.any(
-                  (p) =>
-                      p['deleting'] != true &&
-                      p['verified'] != true &&
-                      p['remote'] != true &&
-                      p['actor'] == actor &&
-                      object(p['metadata'])['accuracy'] != null,
-                ),
-          )) {
+      if (!supportHeld &&
+          !_supportRequested &&
+          allowed &&
+          records
+              .where((r) => !legacyProtected(r))
+              .any(
+                (r) =>
+                    object(r.json['deletion'])['actor'] == actor ||
+                    r.photos.any(
+                      (p) => p['deleting'] == true && p['deleteActor'] == actor,
+                    ) ||
+                    r.pending.any(
+                      (o) => o['actor'] == actor && o['state'] != 'conflict',
+                    ) ||
+                    r.photos.any(
+                      (p) =>
+                          p['deleting'] != true &&
+                          p['verified'] != true &&
+                          p['remote'] != true &&
+                          p['actor'] == actor &&
+                          object(p['metadata'])['accuracy'] != null,
+                    ),
+              )) {
         _retry = Timer(
           const Duration(seconds: 15),
           () => unawaited(synchronize()),
@@ -1531,6 +1973,8 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
 
     walk(body);
     for (final id in ids) {
+      _yieldSyncForSupport();
+      _syncAt('integridad de fotografía');
       if (!allowed || actor != user) throw StateError('La sesión cambió.');
       final photo = store
           .read(r.id)!
@@ -1558,8 +2002,10 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
             'Archivo local faltante o alterado. Recupera el original; no se descarta evidencia.',
           );
         }
+        _syncAt('carga fotográfica HTTP');
         await remote.upload(r.id, photo);
       }
+      _syncAt('verificación fotográfica HTTP');
       var result = await remote.verify(r.id, [id]);
       bool verified(Json result) => objects(result['items']).any(
         (p) =>
@@ -1575,7 +2021,9 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
             await sha256File(file) ==
                 object(photo['metadata'])['clientSha256']) {
           if (!allowed || actor != user) throw StateError('La sesión cambió.');
+          _syncAt('carga fotográfica HTTP');
           await remote.upload(r.id, photo);
+          _syncAt('verificación fotográfica HTTP');
           result = await remote.verify(r.id, [id]);
         }
       }
@@ -1589,6 +2037,7 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
         );
       }
       if (photo != null) {
+        _syncAt('guardado fotográfico Hive');
         await _edit(r.id, (value) {
           final photos = objects(value['photos']);
           final saved = photos.firstWhere((p) => p['id'] == id);
@@ -1895,6 +2344,9 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
 
   Future<List<Json>> history(String id) =>
       _activity(id, 'consulta de historial', () async {
+        if (supportHeld || _supportRequested) {
+          throw StateError('Soporte selectivo activo.');
+        }
         record(id);
         final result = <Json>[];
         for (var page = 1; ; page++) {
@@ -1917,6 +2369,9 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
     Json photo, {
     bool original = false,
   }) async {
+    if (supportHeld || _supportRequested) {
+      throw StateError('Soporte selectivo activo.');
+    }
     record(id);
     final user = actor;
     if (_removingLocalId == id) {
@@ -2061,6 +2516,13 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
         };
       }
       final data = problemData(error.response?.data);
+      if (error.response?.statusCode == 403) {
+        return 'No accesible para esta sesión. Verifica tu autorización de residente; datos locales conservados.';
+      }
+      if (error.response?.statusCode == 404 &&
+          data['code'] != 'CABINET_NOT_FOUND') {
+        return 'La consulta no está disponible en esta API. No se ha confirmado que el gabinete no exista. Reintenta actualizar; datos locales conservados.';
+      }
       final pending = objects(data['blocking']).isNotEmpty
           ? objects(data['blocking'])
           : objects(data['pending']);

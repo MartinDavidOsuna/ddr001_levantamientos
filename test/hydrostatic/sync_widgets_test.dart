@@ -122,7 +122,14 @@ void main() {
         for (var n = 0; n < 200 && !done(); n++) {
           await Future<void>.delayed(const Duration(milliseconds: 10));
         }
-        expect(done(), true);
+        expect(
+          done(),
+          true,
+          reason:
+              'version=${box.read(id)?['serverVersion']} '
+              'active=${box.read(id)?['active'] != null} busy=${sync.busy} '
+              'online=$online requests=${remote.requests.length}',
+        );
       }
 
       try {
@@ -134,6 +141,11 @@ void main() {
         h.clock.advance(1000);
         await h.repo.finish(id, 'b0000000-0000-4000-8000-000000000001');
         await waitFor(() => box.read(id)?['serverVersion'] == 2);
+        // A durable ACK is visible before the previous run finishes draining.
+        // FakeHydroRemote has no network: changing `online` mid-flight can let
+        // that run acknowledge v3 before this test observes the offline queue.
+        // Finish the prior cycle before simulating a new offline edit.
+        await waitFor(() => !sync.busy);
         online = false;
         await h.repo.answerLeaks(
           id,

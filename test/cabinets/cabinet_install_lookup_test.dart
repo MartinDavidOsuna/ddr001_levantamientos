@@ -5,11 +5,12 @@ import 'harness.dart';
 class LookupRemote extends FakeCabinetRemote {
   int lookups = 0;
   int? error;
+  String errorCode = 'LOOKUP_FAILED';
   @override
   Future<Json> get(String path, [Json? query]) async {
     if (path != '/resolve') return super.get(path, query);
     lookups++;
-    if (error != null) throw failure(error!, 'LOOKUP_FAILED');
+    if (error != null) throw failure(error!, errorCode);
     return {
       'cabinet': {
         'cabinetId': '11111111-1111-4111-8111-111111111111',
@@ -73,10 +74,27 @@ void main() {
         throwsA(anything),
       );
       remote.error = 404;
+      await expectLater(
+        h.controller.findForInstallation('AQ26000017'),
+        throwsA(anything),
+      );
+      expect(h.controller.records, isEmpty);
+      remote.errorCode = 'CABINET_NOT_FOUND';
       expect(await h.controller.findForInstallation('AQ26000017'), isNull);
       expect(h.controller.records, isEmpty);
     },
   );
+  test('unknown resolve 404 cannot create a new registration', () async {
+    h.app.online = true;
+    remote.error = 404;
+    await expectLater(
+      h.controller.scan('AQ26000017', 'A1', false),
+      throwsA(anything),
+    );
+    expect(h.controller.records, isEmpty);
+    expect(remote.calls, isEmpty);
+  });
+
   test('invalid check digit never queries API', () async {
     h.app.online = true;
     await expectLater(

@@ -1,0 +1,31 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
+    <uses-permission android:name="android.permission.INTERNET" tools:node="remove" />
+    <uses-permission android:name="android.permission.CAMERA" tools:node="remove" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" tools:node="remove" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" tools:node="remove" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" tools:node="remove" />
+    <application android:label="DDR001 Respaldo privado" tools:replace="android:label">
+        <activity android:name="com.aquafim.ddr001levantamientos.MainActivity" tools:node="remove" />
+        <activity android:name="com.aquafim.ddr001levantamientos.RecoveryActivity"
+            android:exported="true" android:launchMode="singleTask"
+            android:theme="@style/LaunchTheme" android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <provider android:name="io.flutter.plugins.imagepicker.ImagePickerFileProvider" tools:node="remove" />
+        <provider android:name="com.google.mlkit.common.internal.MlKitInitProvider" tools:node="remove" />
+        <provider android:name="androidx.startup.InitializationProvider" tools:node="remove" />
+        <service android:name="com.google.android.gms.metadata.ModuleDependencies" tools:node="remove" />
+        <service android:name="com.baseflow.geolocator.GeolocatorLocationService" tools:node="remove" />
+        <service android:name="androidx.camera.core.impl.MetadataHolderService" tools:node="remove" />
+        <service android:name="com.google.mlkit.common.internal.MlKitComponentDiscoveryService" tools:node="remove" />
+        <service android:name="com.google.android.datatransport.runtime.backends.TransportBackendDiscovery" tools:node="remove" />
+        <service android:name="com.google.android.datatransport.runtime.scheduling.jobscheduling.JobInfoSchedulerService" tools:node="remove" />
+        <receiver android:name="androidx.profileinstaller.ProfileInstallReceiver" tools:node="remove" />
+        <receiver android:name="com.google.android.datatransport.runtime.scheduling.jobscheduling.AlarmManagerSchedulerBroadcastReceiver" tools:node="remove" />
+        <activity android:name="io.flutter.plugins.urllauncher.WebViewActivity" tools:node="remove" />
+        <activity android:name="com.google.android.gms.common.api.GoogleApiActivity" tools:node="remove" />
+    </application>
+</manifest>

@@ -33,7 +33,7 @@ class SurveyCoordinatesCard extends StatelessWidget {
         leading: const Icon(Icons.location_on_outlined),
         title: const Text('Coordenadas del levantamiento'),
         subtitle: point == null
-            ? const Text('Sin coordenadas registradas')
+            ? const Text('Ubicación no disponible')
             : Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,

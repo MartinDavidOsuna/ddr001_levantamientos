@@ -216,6 +216,11 @@ class CabinetRecord {
       .toList();
   List<Json> get photos => objects(json['photos']);
   bool get synchronized =>
+      server.isNotEmpty &&
+      working['status'] == server['status'] &&
+      operations
+          .where((o) => o['state'] == 'done')
+          .every((o) => object(o['result']).isNotEmpty) &&
       pending.isEmpty &&
       json['deletion'] == null &&
       !photos.any((p) => p['deleting'] == true) &&

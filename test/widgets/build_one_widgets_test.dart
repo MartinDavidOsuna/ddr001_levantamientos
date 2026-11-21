@@ -199,7 +199,7 @@ void main() {
     app.online = false;
     app.surveys = [survey];
     await tester.pumpWidget(page(app, SurveyDetailPage(surveyId: survey.id)));
-    expect(find.text('Sin coordenadas registradas'), findsOneWidget);
+    expect(find.text('Ubicación no disponible'), findsOneWidget);
     expect(find.textContaining('Latitud:'), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
   });

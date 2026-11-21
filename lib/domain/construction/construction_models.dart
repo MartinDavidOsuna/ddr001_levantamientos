@@ -426,6 +426,7 @@ class BaseSurvey {
     List<CorrectionRound>? corrections,
     List<RemoteConstructionPhoto>? remotePhotos,
     GeoPoint? canonicalLocation,
+    bool clearCanonicalLocation = false,
     String? rejectionReason,
     DateTime? updatedAt,
     String? accountNumber,
@@ -449,7 +450,9 @@ class BaseSurvey {
     steps: steps ?? this.steps,
     corrections: corrections ?? this.corrections,
     remotePhotos: remotePhotos ?? this.remotePhotos,
-    canonicalLocation: canonicalLocation ?? this.canonicalLocation,
+    canonicalLocation: clearCanonicalLocation
+        ? null
+        : canonicalLocation ?? this.canonicalLocation,
     rejectionReason: rejectionReason ?? this.rejectionReason,
   );
   Map<String, dynamic> toJson() => {

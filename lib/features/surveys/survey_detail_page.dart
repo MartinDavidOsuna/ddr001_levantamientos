@@ -24,6 +24,7 @@ class _SurveyDetailPageState extends State<SurveyDetailPage>
   AppController? _app;
   bool _locationActive = false;
   bool _detailRequested = false;
+  bool _detailLoading = false;
   String? _detailError;
 
   @override
@@ -51,12 +52,15 @@ class _SurveyDetailPageState extends State<SurveyDetailPage>
       return;
     }
     _detailRequested = true;
+    _detailLoading = true;
     try {
       await _app!.loadSurveyDetail(widget.surveyId);
     } catch (_) {
       if (mounted) {
         setState(() => _detailError = 'No fue posible actualizar el detalle.');
       }
+    } finally {
+      if (mounted) setState(() => _detailLoading = false);
     }
   }
 
@@ -75,7 +79,7 @@ class _SurveyDetailPageState extends State<SurveyDetailPage>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      _activateLocation();
+      if (_app?.profile?.role.canMutateEvidence == true) _activateLocation();
     } else if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.inactive ||
         state == AppLifecycleState.detached) {
@@ -142,7 +146,27 @@ class _SurveyDetailPageState extends State<SurveyDetailPage>
               subtitle: Text('Empresa: ${survey.crew ?? app.currentCrew}'),
             ),
           ),
-          if (canViewCoordinates) SurveyCoordinatesCard(location: location),
+          if (canViewCoordinates) ...[
+            SurveyCoordinatesCard(location: location),
+            TextButton.icon(
+              key: const Key('survey_refresh_coordinates'),
+              onPressed: app.online && !_detailLoading
+                  ? () {
+                      setState(() {
+                        _detailRequested = false;
+                        _detailError = null;
+                      });
+                      _loadDetail();
+                    }
+                  : null,
+              icon: const Icon(Icons.refresh),
+              label: Text(
+                app.online
+                    ? 'Actualizar detalle y ubicación'
+                    : 'Sin conexión · ubicación guardada en este teléfono',
+              ),
+            ),
+          ],
           if (survey.status == SurveyStatus.rejected)
             Card(
               color: Theme.of(context).colorScheme.errorContainer,
@@ -158,6 +182,13 @@ class _SurveyDetailPageState extends State<SurveyDetailPage>
           ...survey.steps.map(
             (step) => _StepCard(surveyId: widget.surveyId, step: step),
           ),
+          if (!canViewCoordinates)
+            const ListTile(
+              key: Key('survey_coordinates_denied'),
+              leading: Icon(Icons.lock_outline),
+              title: Text('Ubicación restringida para este rol'),
+            ),
+
           if (survey.corrections.isNotEmpty) ...[
             const Padding(
               padding: EdgeInsets.only(top: 16),

@@ -1,4 +1,6 @@
 import 'dart:io';
+import 'package:ddr001_levantamientos/domain/cabinets/cabinet_models.dart'
+    show clone;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
@@ -76,7 +78,7 @@ void main() {
       await tester.pumpAndSettle();
       var rows = tester.widget<DataTable>(find.byType(DataTable)).rows;
       expect((rows.first.cells.first.child as Text).data, 'AQ26-00002-5');
-      await tester.tap(find.text('Fecha de\nregistro'));
+      await tester.tap(find.text('Creación del\nborrador'));
       await tester.pumpAndSettle();
       rows = tester.widget<DataTable>(find.byType(DataTable)).rows;
       expect((rows.first.cells.first.child as Text).data, 'AQ26-00001-7');
@@ -220,6 +222,16 @@ void main() {
     );
     expect(find.text('Instalación'), findsNothing);
     expect(find.text('Revisión final'), findsNothing);
+    // Installation stages require a validated dossier; draft recovery is tested separately.
+    await tester.runAsync(() async {
+      final value = clone(h.store.read(id)!.json);
+      value['working'] = {
+        ...h.store.read(id)!.working,
+        'status': 'validated',
+        'partsValidated': true,
+      };
+      await h.store.save(value);
+    });
     await tester.pumpWidget(host(const HomePage()));
     await tester.tap(find.text('INSTALAR GABINETE'));
     await tester.pumpAndSettle();
@@ -245,6 +257,65 @@ void main() {
     expect(find.textContaining('Acceso exclusivo'), findsOneWidget);
     expect(find.text('AQ26-00001-7'), findsNothing);
   });
+
+  for (final state in ['draft', 'registered', 'incomplete']) {
+    testWidgets(
+      'installation offers recovery for existing $state without new dossier',
+      (tester) async {
+        final id = (await tester.runAsync(
+          () => h.controller.scan('AQ26000017', 'A1', false),
+        ))!;
+        await tester.runAsync(() async {
+          final value = clone(h.store.read(id)!.json);
+          value['working'] = {...h.store.read(id)!.working, 'status': state};
+          await h.store.save(value);
+        });
+        final before = clone(h.store.read(id)!.json);
+        await tester.pumpWidget(
+          host(const CabinetRegisterPage(installation: true)),
+        );
+        await tester.enterText(find.byType(TextField), 'AQ26-00001-7');
+        await tester.runAsync(
+          () => tester.tap(find.byTooltip('Buscar gabinete')),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('Gabinete pendiente de preparación'), findsOneWidget);
+        expect(find.text('Gabinete no encontrado'), findsNothing);
+        expect(h.store.read(id)!.json, before);
+        await tester.runAsync(
+          () => tester.tap(find.text('Continuar registro y revisión')),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('1 Registro'), findsOneWidget);
+        expect(find.text('Instalación'), findsNothing);
+        expect(h.controller.records.length, 1);
+        expect(h.store.read(id)!.json, before);
+      },
+    );
+  }
+
+  testWidgets(
+    'inventory distinguishes local pending, unknown server total and active search',
+    (tester) async {
+      await tester.runAsync(() async {
+        await h.controller.scan('AQ26000017', 'A1', false);
+        await h.controller.scan('AQ26000025', 'A1', false);
+      });
+      await tester.pumpWidget(host(const CabinetsPage()));
+      expect(
+        find.textContaining('Servidor (última consulta): sin consultar'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('Pendientes locales: 2'), findsOneWidget);
+      await tester.enterText(find.byType(TextField), 'AQ26-00001-7');
+      await tester.pump();
+      expect(
+        find.textContaining('Visibles: 1 · Filtros: AQ26-00001-7'),
+        findsOneWidget,
+      );
+      expect(h.controller.records.length, 2);
+    },
+  );
 
   testWidgets('missing cabinet explains absence and prefills registration', (
     tester,

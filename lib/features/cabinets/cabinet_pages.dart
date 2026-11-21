@@ -10,6 +10,7 @@ import '../../data/cabinets/cabinet_controller.dart';
 import '../../domain/cabinets/cabinet_models.dart';
 import '../../domain/cabinets/cabinet_safety.dart';
 import 'cabinet_safety_widgets.dart';
+import 'legacy_recovery_page.dart';
 import '../../domain/construction/construction_models.dart' as bases;
 
 final _cabinetActions = Expando<bool>();
@@ -75,6 +76,45 @@ Widget cabinetDenied(CabinetController controller) => Scaffold(
   ),
 );
 
+/// Returns the appropriate existing workflow, or null when the user cancels.
+Future<bool?> cabinetInstallationMode(
+  BuildContext context,
+  CabinetController c,
+  String id,
+) async {
+  if ([
+    'validated',
+    'installed',
+    'deliverable',
+  ].contains(c.record(id).working['status'])) {
+    return true;
+  }
+  final record = c.record(id);
+  final continueRegistration = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('Gabinete pendiente de preparación'),
+      content: Text(
+        'Estado local: ${cabinetStatus(record.working['status'])}. '
+        'Estado servidor: ${record.server.isEmpty ? "sin confirmación" : cabinetStatus(record.server['status'])}. '
+        '${record.working['status'] == "draft" ? "Continúa el registro y después revisa las piezas." : "Completa la revisión y validación de piezas antes de instalar."} '
+        '${record.pending.isNotEmpty ? "Hay operaciones pendientes de sincronización; se conservarán." : ""}',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(dialogContext, false),
+          child: const Text('Cerrar'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.pop(dialogContext, true),
+          child: const Text('Continuar registro y revisión'),
+        ),
+      ],
+    ),
+  );
+  return continueRegistration == true ? false : null;
+}
+
 class CabinetsPage extends StatefulWidget {
   const CabinetsPage({super.key, this.installation = false});
   final bool installation;
@@ -114,6 +154,12 @@ class _CabinetsPageState extends State<CabinetsPage> {
               .toLowerCase()
               .contains(search.toLowerCase());
     }).toList();
+    final activeFilters = [
+      if (widget.installation) 'instalación',
+      if (status.isNotEmpty) cabinetStatus(status),
+      if (model.isNotEmpty) model,
+      if (search.isNotEmpty) search,
+    ].join(', ');
     final pages = (records.length / 25).ceil().clamp(1, 100000);
     final current = page.clamp(1, pages);
     return Scaffold(
@@ -122,6 +168,17 @@ class _CabinetsPageState extends State<CabinetsPage> {
           widget.installation ? 'Instalar gabinete' : 'Registrar gabinete',
         ),
         actions: [
+          if (c.supportAvailable)
+            IconButton(
+              tooltip: 'Soporte de gabinetes históricos',
+              icon: const Icon(Icons.support_agent),
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => LegacyRecoveryPage(controller: c),
+                ),
+              ),
+            ),
           IconButton(
             tooltip: 'Sincronización',
             onPressed: () => Navigator.push(
@@ -139,9 +196,36 @@ class _CabinetsPageState extends State<CabinetsPage> {
       ),
       body: Column(
         children: [
+          if (c.supportHeld)
+            const Text(
+              'Gabinetes pausados por soporte; abre soporte para revisar o cerrar la pausa.',
+            ),
           if (c.refreshing) const LinearProgressIndicator(),
-          if (c.message != null)
+          if (c.refreshError != null)
+            ListTile(
+              title: Text(c.refreshError!),
+              trailing: TextButton(
+                onPressed: c.refreshing ? null : c.refresh,
+                child: const Text('Reintentar descarga'),
+              ),
+            ),
+          if (c.message != null && c.message != c.refreshError)
             Padding(padding: const EdgeInsets.all(8), child: Text(c.message!)),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            child: Text(
+              'Servidor (última consulta): ${c.remoteTotal ?? "sin consultar"} · '
+              'Descargados en esa consulta: ${c.downloadedRemoteCount} '
+              '${c.refreshComplete ? "(completa)" : "(sin completar)"}\n'
+              'En este teléfono: ${c.records.length} · '
+              'Pendientes locales: ${c.records.where((r) => !r.synchronized).length} · '
+              'Con error: ${c.records.where((r) => r.pending.any((o) => o["error"] != null)).length}\n'
+              'Visibles: ${records.length} · Filtros: '
+              '${activeFilters.isEmpty ? "ninguno" : activeFilters}',
+
+              key: const Key('cabinet_inventory_summary'),
+            ),
+          ),
           if (c.app.config.environment == 'test')
             const Padding(
               padding: EdgeInsets.all(8),
@@ -287,7 +371,7 @@ class _CabinetsPageState extends State<CabinetsPage> {
                           '${displayUid(r.working['uid'])} · ${r.working['model']}${r.working['automated'] == true ? '-A' : ''}',
                         ),
                         subtitle: Text(
-                          '${cabinetStatus(r.working['status'])}\n${r.synchronized ? 'Confirmado por servidor' : 'Guardado en este teléfono · pendiente'}',
+                          '${cabinetStatus(r.working['status'])}\n${r.synchronized ? 'Confirmado por servidor' : 'Guardado en este teléfono · pendiente'}${c.refreshIssues.containsKey(r.id) ? '\nActualización fallida · copia anterior conservada' : ''}${r.server.isNotEmpty && r.server['status'] != r.working['status'] ? '\nServidor: ${cabinetStatus(r.server['status'])} · cambios locales conservados' : ''}',
                         ),
                         trailing: Icon(
                           r.synchronized
@@ -375,23 +459,27 @@ class _CabinetRegisterPageState extends State<CabinetRegisterPage> {
           : await c.scan(normalized, model!, automated);
       if (!mounted) return;
       if (id == null) {
-        await showDialog<void>(
+        final register = await showDialog<bool>(
           context: context,
           barrierDismissible: false,
           builder: (dialogContext) => AlertDialog(
             title: const Text('Gabinete no encontrado'),
             content: Text(
-              'No se encontró el hidrante ${displayUid(normalized)}. Debes registrar el gabinete antes de instalarlo.',
+              'La API confirmó que el UID ${displayUid(normalized)} no tiene expediente. Si aparece en otro teléfono o Dashboard, verifica entorno y sincronización antes de registrarlo.',
             ),
             actions: [
               TextButton(
-                onPressed: () => Navigator.pop(dialogContext),
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('Cerrar'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
                 child: const Text('Registrar gabinete'),
               ),
             ],
           ),
         );
-        if (!mounted || !c.allowed) return;
+        if (register != true || !mounted || !c.allowed) return;
         Navigator.pushReplacement(
           context,
           MaterialPageRoute<void>(
@@ -402,7 +490,12 @@ class _CabinetRegisterPageState extends State<CabinetRegisterPage> {
         return;
       }
       if (!c.allowed) return;
-      final fieldWork = widget.installation;
+      var fieldWork = false;
+      if (widget.installation) {
+        final mode = await cabinetInstallationMode(context, c, id);
+        if (mode == null || !mounted || !c.allowed) return;
+        fieldWork = mode;
+      }
       final initialTab =
           fieldWork &&
               [
@@ -648,10 +741,12 @@ class _AvailableCabinetsPageState extends State<AvailableCabinetsPage> {
           'Este gabinete ya está instalado. Actualiza la lista.',
         );
       }
+      final mode = await cabinetInstallationMode(context, c, r.id);
+      if (mode == null || !context.mounted || !c.allowed) return;
       await Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) => CabinetDetailPage(id: r.id, fieldWork: true),
+          builder: (_) => CabinetDetailPage(id: r.id, fieldWork: mode),
         ),
       );
     });
@@ -671,7 +766,12 @@ class _AvailableCabinetsPageState extends State<AvailableCabinetsPage> {
           if (c.refreshing) const LinearProgressIndicator(),
           if (!c.app.online)
             const Text('Sin conexión: gabinetes descargados en este teléfono.'),
-          if (c.message != null) Text(c.message!),
+          if (c.refreshError != null) Text(c.refreshError!),
+          if (c.message != null && c.message != c.refreshError)
+            Text(c.message!),
+          Text(
+            'Mostrados: ${rows.length} · Validados por estado: ${rows.where((r) => r.working["status"] == "validated").length} · Filtro: ${search.isEmpty ? "ninguno" : search}',
+          ),
           Padding(
             padding: const EdgeInsets.all(12),
             child: TextField(
@@ -702,7 +802,7 @@ class _AvailableCabinetsPageState extends State<AvailableCabinetsPage> {
                           DataColumn(label: const Text('Número'), onSort: sort),
                           DataColumn(label: const Text('Modelo'), onSort: sort),
                           DataColumn(
-                            label: const Text('Fecha de\nregistro'),
+                            label: const Text('Creación del\nborrador'),
                             onSort: sort,
                           ),
                         ],

@@ -59,3 +59,12 @@ app.*.map.json
 
 # Kotlin compiler session cache
 /android/.kotlin/
+
+# Local Codex reports and artifacts
+/resultados codex/
+/.codex/
+
+# One-off planning reports and generated reference images
+/PLAN_TECNICO_PRIMER_BUILD.md
+/REPORTE_PREPARACION_SEGURA_BLOQUE_1.md
+/Imagen de ChatGPT *.png

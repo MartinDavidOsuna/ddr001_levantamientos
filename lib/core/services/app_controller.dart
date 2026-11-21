@@ -24,7 +24,7 @@ class AppController extends ChangeNotifier {
     required this.config,
     required this.local,
     required this.sessions,
-    required ApiClient api,
+    required this.api,
     required this.packageInfo,
     ConstructionRemote? remote,
     LocationService? locations,
@@ -32,6 +32,7 @@ class AppController extends ChangeNotifier {
   }) : remote = remote ?? ConstructionApi(api, sessions, packageInfo),
        locations = locations ?? LocationService(),
        camera = camera ?? PhotoCaptureService(local: local);
+  final ApiClient api;
   final AppConfig config;
   final LocalStore local;
   final SessionStore sessions;
@@ -1923,6 +1924,18 @@ class AppController extends ChangeNotifier {
             contractorUserId: remoteOwner,
             crewId: _crewIdFromServerRow(row) ?? localSurvey.crewId,
             crew: _crewFromServerRow(row) ?? localSurvey.crew,
+            clearCanonicalLocation:
+                !hasPendingLocalState &&
+                row.containsKey('canonical_latitude') &&
+                row.containsKey('canonical_longitude') &&
+                (row['canonical_latitude'] == null ||
+                    row['canonical_longitude'] == null),
+            canonicalLocation: hasPendingLocalState
+                ? localSurvey.canonicalLocation
+                : _serverCanonicalLocation(
+                    row,
+                    fallback: localSurvey.canonicalLocation,
+                  ),
             status: hasPendingLocalState ? localSurvey.status : wireStatus,
             rejectionReason: row['rejection_reason']?.toString(),
             syncState: hasPendingLocalState
@@ -2013,6 +2026,32 @@ class AppController extends ChangeNotifier {
     return value?.trim().isNotEmpty == true ? value!.trim() : null;
   }
 
+  GeoPoint? _serverCanonicalLocation(
+    Map<String, dynamic> row, {
+    GeoPoint? fallback,
+  }) {
+    final lat = row['canonical_latitude'], lng = row['canonical_longitude'];
+    if (lat is! num ||
+        lng is! num ||
+        !lat.isFinite ||
+        !lng.isFinite ||
+        lat.abs() > 90 ||
+        lng.abs() > 180) {
+      return fallback;
+    }
+    return GeoPoint(
+      latitude: lat.toDouble(),
+      longitude: lng.toDouble(),
+      accuracy: (row['canonical_accuracy'] as num?)?.toDouble() ?? 100,
+      capturedAt:
+          DateTime.tryParse(
+            '${row['canonical_set_at'] ?? row['updated_at'] ?? row['updatedAt']}',
+          ) ??
+          fallback?.capturedAt ??
+          DateTime.now().toUtc(),
+    );
+  }
+
   Future<void> loadSurveyDetail(String surveyId) async {
     final current = survey(surveyId);
     final detail = await remote.detail(current.id);
@@ -2080,6 +2119,18 @@ class AppController extends ChangeNotifier {
         })
         .toList(growable: false);
     final updated = current.copyWith(
+      clearCanonicalLocation:
+          !pending &&
+          detail.containsKey('canonical_latitude') &&
+          detail.containsKey('canonical_longitude') &&
+          (detail['canonical_latitude'] == null ||
+              detail['canonical_longitude'] == null),
+      canonicalLocation: pending
+          ? current.canonicalLocation
+          : _serverCanonicalLocation(
+              detail,
+              fallback: current.canonicalLocation,
+            ),
       contractorUserId: wireOwner,
       crewId: wireCrewId,
       crew: wireCrew,

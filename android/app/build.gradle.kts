@@ -32,9 +32,10 @@ if (releaseRequested) {
 }
 
 // Explicit opt-in; leaves ordinary debug and release identities unchanged.
+val cabinetRecovery = providers.gradleProperty("cabinetRecovery").orNull == "true"
 val hydrostaticTest = providers.gradleProperty("hydrostaticTest").orNull == "true"
 val hydrostaticSyncTest = providers.gradleProperty("hydrostaticSyncTest").orNull == "true"
-if (listOf(hydrostaticTest, hydrostaticSyncTest).count { it } > 1) {
+if (listOf(hydrostaticTest, hydrostaticSyncTest, cabinetRecovery).count { it } > 1) {
     throw GradleException("Select one isolated QA variant.")
 }
 if ((hydrostaticTest || hydrostaticSyncTest) && releaseRequested) {
@@ -67,6 +68,14 @@ android {
     if (hydrostaticSyncTest) {
         sourceSets.getByName("debug").manifest.srcFile("src/hydrostaticSyncTest/AndroidManifest.xml")
         sourceSets.getByName("debug").res.srcDir("src/hydrostaticSyncTest/res")
+    }
+
+    if (cabinetRecovery) {
+        if (providers.gradleProperty("target").orNull != "lib/recovery_main.dart") {
+            throw GradleException("Recovery requires the dedicated entrypoint")
+        }
+        sourceSets.getByName("release").manifest.srcFile("src/recovery/AndroidManifest.xml")
+        sourceSets.getByName("release").java.srcDir("src/recovery/kotlin")
     }
 
     signingConfigs {

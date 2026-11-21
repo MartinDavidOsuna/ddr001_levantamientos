@@ -64,7 +64,7 @@ void main() {
         home: Scaffold(body: SurveyCoordinatesCard(location: null)),
       ),
     );
-    expect(find.text('Sin coordenadas registradas'), findsOneWidget);
+    expect(find.text('Ubicación no disponible'), findsOneWidget);
     expect(find.text('Abrir en Google Maps'), findsNothing);
     expect(tester.widget<ListTile>(find.byType(ListTile)).onTap, isNull);
     expect(launcher.urls, isEmpty);
