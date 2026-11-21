@@ -44,6 +44,7 @@ String cabinetStatus(String? status) =>
       'registered': 'Registrado',
       'incomplete': 'Incompleto',
       'validated': 'Validado',
+      'installed_incomplete': 'Instalado · incompleto',
       'installed': 'Instalado',
       'deliverable': 'Entregable',
     }[status] ??
@@ -147,7 +148,7 @@ List<Json> installationPending(Json cabinet, CabinetCatalog catalog) {
     } else if (a.isEmpty) {
       reason = 'Sin comprobar';
     } else if (a['answer'] == 'yes') {
-      if (code == 'CI031') {
+      if (code == 'CI031' && cabinet['installationValid'] != true) {
         for (final p in objects(
           cabinet['parts'],
         ).where((p) => (p['serial'] ?? '').toString().isNotEmpty)) {
@@ -267,4 +268,40 @@ List<Json> cabinetReviewDefinitions(Json cabinet, Json policy) {
     }
   }
   return result;
+}
+
+bool hasClosedCabinetInstallation(Json cabinet) =>
+    cabinet['installationOperationId'] != null ||
+    const [
+      'installed_incomplete',
+      'installed',
+      'deliverable',
+    ].contains(cabinet['status']);
+
+/// Parts readiness never erases a physical installation or its original operation.
+void updateCabinetCompletion(Json cabinet) {
+  if (!hasClosedCabinetInstallation(cabinet)) return;
+  cabinet['status'] =
+      cabinet['partsValidated'] == true &&
+          partsPending(cabinet).isEmpty &&
+          cabinet['installationValid'] == true
+      ? 'installed'
+      : 'installed_incomplete';
+}
+
+/// Keep pending drafts, photos and commands; retain the newer server's closed-installation fact.
+void preserveClosedCabinetInstallation(Json working, Json server) {
+  if (!hasClosedCabinetInstallation(server)) return;
+  working['installationOperationId'] ??= server['installationOperationId'];
+  if (working['installation'] == null && server['installation'] != null) {
+    working['installation'] = clone(object(server['installation']));
+    working['installationValid'] = server['installationValid'];
+  }
+  if (!const [
+    'installed_incomplete',
+    'installed',
+    'deliverable',
+  ].contains(working['status'])) {
+    working['status'] = 'installed_incomplete';
+  }
 }

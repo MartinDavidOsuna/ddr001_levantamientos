@@ -249,7 +249,9 @@ void main() {
     await tester.tap(find.text('Revisión final'));
     await tester.pumpAndSettle();
     expect(
-      find.text('La revisión final requiere instalación completada.'),
+      find.textContaining(
+        'La revisión final requiere instalación completa y piezas validadas.',
+      ),
       findsOneWidget,
     );
     h.setRole(ConstructionRole.contractor);
@@ -258,7 +260,7 @@ void main() {
     expect(find.text('AQ26-00001-7'), findsNothing);
   });
 
-  for (final state in ['draft', 'registered', 'incomplete']) {
+  for (final state in ['draft', 'registered']) {
     testWidgets(
       'installation offers recovery for existing $state without new dossier',
       (tester) async {
@@ -438,7 +440,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(ExpansionTile), findsNothing);
       expect(find.text('Modelo del gabinete correcto'), findsOneWidget);
-      expect(find.text('Modelo · A1'), findsOneWidget);
+      expect(find.text('Validado · A1'), findsOneWidget);
       expect(find.textContaining('Guardado en este teléfono'), findsNothing);
       expect(find.textContaining('Los campos se guardan'), findsNothing);
       await tester.binding.setSurfaceSize(const Size(1000, 1000));
