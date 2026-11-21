@@ -628,6 +628,9 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
                       (cabinet['version'] as num))) {
             value['working'] = cabinet;
           }
+          final working = object(value['working']);
+          preserveClosedCabinetInstallation(working, cabinet);
+          value['working'] = working;
           await store.save(value);
         });
         _notify();
@@ -839,8 +842,8 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
         review['fieldChecked'] = false;
         review['dossierConsulted'] = false;
         r['finalReviewDraft'] = review;
-        w['installationValid'] = false;
-        if (w['status'] == 'deliverable') w['status'] = 'installed';
+        if (field == 'installation') w['installationValid'] = false;
+        updateCabinetCompletion(w);
         w['approval'] = null;
       }
       r['working'] = w;
@@ -876,7 +879,7 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
       w['installation'] = installation;
       w['installationValid'] = false;
       w['approval'] = null;
-      if (w['status'] == 'deliverable') w['status'] = 'installed';
+      updateCabinetCompletion(w);
       r['working'] = w;
       r['dirty'] = true;
       r['draftActor'] = user;
@@ -945,9 +948,8 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
       parts.add({...old, ...clone(patch), 'code': code});
       w['parts'] = parts;
       w['partsValidated'] = false;
-      w['installationValid'] = false;
       w['approval'] = null;
-      if (w['status'] == 'deliverable') w['status'] = 'installed';
+      updateCabinetCompletion(w);
       r['working'] = w;
       r['dirty'] = true;
       r['draftActor'] = user;
@@ -1022,8 +1024,16 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
       }
       if (r.working['installation'] != null ||
           r.server['installation'] != null ||
-          ['installed', 'deliverable'].contains(r.working['status']) ||
-          ['installed', 'deliverable'].contains(r.server['status'])) {
+          [
+            'installed_incomplete',
+            'installed',
+            'deliverable',
+          ].contains(r.working['status']) ||
+          [
+            'installed_incomplete',
+            'installed',
+            'deliverable',
+          ].contains(r.server['status'])) {
         throw StateError(
           'No se puede borrar un gabinete vinculado a instalación.',
         );
@@ -1291,15 +1301,19 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
             }
             w['parts'] = extra['parts'];
             w['partsValidated'] = false;
-            if (!['installed', 'deliverable'].contains(w['status'])) {
+            if (!hasClosedCabinetInstallation(w)) {
               w['status'] = 'incomplete';
+            } else {
+              updateCabinetCompletion(w);
             }
           case 'parts_validate':
             final pending = partsPending(w);
             w['partsValidated'] = pending.isEmpty;
             w['pending'] = pending;
-            if (!['installed', 'deliverable'].contains(w['status'])) {
+            if (!hasClosedCabinetInstallation(w)) {
               w['status'] = pending.isEmpty ? 'validated' : 'incomplete';
+            } else {
+              updateCabinetCompletion(w);
             }
           case 'identity_correct':
             final catalog = catalogFor(current);
@@ -1325,27 +1339,22 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
             w['installationValid'] = false;
             w['approval'] = null;
             w['pending'] = partsPending(w);
-            if (!['installed', 'deliverable'].contains(w['status'])) {
+            if (!hasClosedCabinetInstallation(w)) {
               w['status'] = 'incomplete';
-            }
-            if (w['installation'] != null) {
-              final i = object(w['installation']);
-              i['answers'] = <Json>[];
-              i['evidence'] = <String, dynamic>{};
-              w['installation'] = i;
+            } else {
+              updateCabinetCompletion(w);
             }
           case 'installation_save':
-            if (w['partsValidated'] != true) {
-              throw StateError('Valida las piezas antes de instalar.');
+            if (w['status'] == 'draft') {
+              throw StateError('Completa primero el registro.');
             }
             w['installation'] = extra['installation'];
           case 'installation_close':
-            if (w['partsValidated'] != true ||
-                partsPending(w).isNotEmpty ||
+            if (w['status'] == 'draft' ||
                 object(w['installation'])['gps'] == null ||
                 object(w['installation'])['baseId'] == null) {
               throw StateError(
-                'Faltan piezas validadas, base o GPS propio de instalación.',
+                'Falta registro, base o GPS propio de instalación.',
               );
             }
             final pending = installationPending(w, catalogFor(current));
@@ -1358,6 +1367,10 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
             w['installationOperationId'] = body['operationId'];
             w['pending'] = pending;
             w['installationValid'] = true;
+            updateCabinetCompletion(w);
+            if (w['status'] == 'installed_incomplete') {
+              w['pending'] = [...partsPending(w), ...pending];
+            }
           case 'final_review':
             if (w['installationValid'] != true) {
               throw StateError(
@@ -1368,7 +1381,8 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
               throw StateError('Primero completa la instalación.');
             }
             if (extra['verdict'] == 'approve' &&
-                (partsPending(w).isNotEmpty ||
+                (w['partsValidated'] != true ||
+                    partsPending(w).isNotEmpty ||
                     installationPending(w, catalogFor(current)).isNotEmpty)) {
               throw StateError('Quedan incumplimientos o pruebas pendientes.');
             }
@@ -1379,15 +1393,11 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
           'installation_save',
           'identity_correct',
         ].contains(type)) {
-          if (['installed', 'deliverable'].contains(w['status'])) {
-            if ((extra['reason'] ?? '').toString().trim().length < 3) {
-              throw StateError('Explica la corrección de datos instalados.');
-            }
-            w['status'] = 'installed';
-            w['approval'] = null;
-            w['installationValid'] = false;
-          }
+          w['approval'] = null;
+          if (type != 'parts_save') w['installationValid'] = false;
+          updateCabinetCompletion(w);
         }
+        preserveClosedCabinetInstallation(w, current.server);
         r['working'] = w;
         r['dirty'] = false;
         if (type == 'final_review') r['finalReviewDraft'] = <String, dynamic>{};
@@ -1824,10 +1834,25 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
                 if (body['type'] == 'final_review' && value['dirty'] != true) {
                   value['finalReviewDraft'] = <String, dynamic>{};
                 }
+                if (body['type'] == 'installation_close' &&
+                    server['status'] == 'installed_incomplete') {
+                  message = 'Gabinete instalado con pendientes.';
+                } else if (body['type'] == 'parts_validate' &&
+                    server['status'] == 'installed' &&
+                    message == 'Gabinete instalado con pendientes.') {
+                  message = null;
+                }
                 value['lastSent'] = DateTime.now().toUtc().toIso8601String();
                 if (CabinetRecord(value).pending.isEmpty &&
                     value['dirty'] != true) {
                   value['working'] = value['server'];
+                } else {
+                  final working = object(value['working']);
+                  preserveClosedCabinetInstallation(
+                    working,
+                    object(value['server']),
+                  );
+                  value['working'] = working;
                 }
               });
             } on _SupportSyncYield {

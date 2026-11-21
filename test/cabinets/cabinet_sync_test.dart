@@ -83,6 +83,11 @@ void main() {
     () async {
       final id = await h.controller.scan('AQ26000017', 'A1', false);
       await h.sync();
+      final registration = await h.photo(id, 'registration');
+      await h.controller.enqueue(id, 'registration_close', {
+        'evidence': evidence(registration),
+      });
+      await h.sync();
       final photo = await h.photo(id, 'installation');
       // The server can reject a base that appeared available in the offline cache.
       await h.controller.saveDraft(id, 'partsValidated', true);
@@ -106,7 +111,7 @@ void main() {
         installation['baseId'],
       );
       expect(File(photo['localPath']).existsSync(), isTrue);
-      expect(record.photos.single['id'], photo['id']);
+      expect(record.photos.map((p) => p['id']), contains(photo['id']));
       final calls = remote.calls.length;
       await h.sync();
       expect(remote.calls.length, calls);
@@ -259,17 +264,20 @@ void main() {
     expect(h.store.read(id)!.photos.length, 1);
     expect(objects(h.store.read(id)!.working['parts']).length, 14);
   });
-  test('installation and approval cannot bypass incomplete parts', () async {
-    final id = await h.controller.scan('AQ26000017', 'A1', false);
-    await expectLater(
-      h.controller.enqueue(id, 'installation_close', {}),
-      throwsStateError,
-    );
-    await expectLater(
-      h.controller.enqueue(id, 'final_review', {'verdict': 'approve'}),
-      throwsStateError,
-    );
-  });
+  test(
+    'installation requires registration/base/GPS and approval cannot bypass pending pieces',
+    () async {
+      final id = await h.controller.scan('AQ26000017', 'A1', false);
+      await expectLater(
+        h.controller.enqueue(id, 'installation_close', {}),
+        throwsStateError,
+      );
+      await expectLater(
+        h.controller.enqueue(id, 'final_review', {'verdict': 'approve'}),
+        throwsStateError,
+      );
+    },
+  );
 }
 
 class PagedCabinetRemote extends FakeCabinetRemote {

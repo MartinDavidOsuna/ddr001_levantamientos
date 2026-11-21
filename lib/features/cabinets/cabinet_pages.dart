@@ -83,7 +83,9 @@ Future<bool?> cabinetInstallationMode(
   String id,
 ) async {
   if ([
+    'incomplete',
     'validated',
+    'installed_incomplete',
     'installed',
     'deliverable',
   ].contains(c.record(id).working['status'])) {
@@ -143,7 +145,9 @@ class _CabinetsPageState extends State<CabinetsPage> {
           .firstOrNull;
       return (!widget.installation ||
               [
+                'incomplete',
                 'validated',
+                'installed_incomplete',
                 'installed',
                 'deliverable',
               ].contains(w['status'])) &&
@@ -279,6 +283,7 @@ class _CabinetsPageState extends State<CabinetsPage> {
                               'registered',
                               'incomplete',
                               'validated',
+                              'installed_incomplete',
                               'installed',
                               'deliverable',
                             ]
@@ -387,6 +392,7 @@ class _CabinetsPageState extends State<CabinetsPage> {
                               initialTab:
                                   widget.installation &&
                                       [
+                                        'installed_incomplete',
                                         'installed',
                                         'deliverable',
                                       ].contains(r.working['status'])
@@ -499,6 +505,7 @@ class _CabinetRegisterPageState extends State<CabinetRegisterPage> {
       final initialTab =
           fieldWork &&
               [
+                'installed_incomplete',
                 'installed',
                 'deliverable',
               ].contains(c.record(id).working['status'])
@@ -707,7 +714,11 @@ class _AvailableCabinetsPageState extends State<AvailableCabinetsPage> {
                 'incomplete',
                 'validated',
               ].contains(r.working['status']) ||
-              ['installed', 'deliverable'].contains(r.server['status']) ||
+              [
+                'installed_incomplete',
+                'installed',
+                'deliverable',
+              ].contains(r.server['status']) ||
               object(r.json['listing'])['exclusiveBaseId'] != null) {
             return false;
           }
@@ -734,6 +745,7 @@ class _AvailableCabinetsPageState extends State<AvailableCabinetsPage> {
       if (c.app.online) await c.pull(r.id);
       if (!context.mounted || !c.allowed) return;
       if ([
+        'installed_incomplete',
         'installed',
         'deliverable',
       ].contains(c.record(r.id).server['status'])) {
@@ -1024,12 +1036,24 @@ class _CabinetDetailPageState extends State<CabinetDetailPage> {
                   child: ListTile(
                     isThreeLine: false,
                     title: Text(
-                      '${fieldWork ? "Modelo" : cabinetStatus(r.working['status'])} · ${r.working['model']}${r.working['automated'] == true ? '-A' : ''}',
+                      '${cabinetStatus(r.working['status'])} · ${r.working['model']}${r.working['automated'] == true ? '-A' : ''}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 ),
+                if (fieldWork && r.working['status'] == 'installed_incomplete')
+                  OutlinedButton.icon(
+                    icon: const Icon(Icons.build_outlined),
+                    label: const Text('Completar piezas pendientes'),
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            CabinetDetailPage(id: id, initialTab: 1),
+                      ),
+                    ),
+                  ),
                 if (c.message != null &&
                     !c.message!.startsWith('No se obtuvo ubicación válida'))
                   Text(c.message!),
@@ -1162,7 +1186,11 @@ class CabinetRegistration extends StatelessWidget {
         if (r.working['status'] != 'draft')
           FilledButton(onPressed: onNext, child: const Text('Siguiente')),
         if (r.working['installation'] == null &&
-            !['installed', 'deliverable'].contains(r.working['status']))
+            ![
+              'installed_incomplete',
+              'installed',
+              'deliverable',
+            ].contains(r.working['status']))
           OutlinedButton.icon(
             key: const Key('delete_cabinet'),
             icon: const Icon(Icons.delete_forever),
@@ -1661,7 +1689,8 @@ class _CorrectionReason extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.watch<CabinetController>(), w = c.record(id).working;
-    if (!['installed', 'deliverable'].contains(w['status'])) {
+    if (!['installed', 'deliverable'].contains(w['status']) &&
+        !['installed', 'deliverable'].contains(c.record(id).server['status'])) {
       return const SizedBox.shrink();
     }
     return TextFormField(
@@ -1711,9 +1740,9 @@ class _CabinetInstallationState extends State<CabinetInstallation> {
     final c = context.watch<CabinetController>(),
         r = c.record(widget.id),
         w = r.working;
-    if (w['partsValidated'] != true) {
+    if (w['status'] == 'draft') {
       return const Center(
-        child: Text('Completa y valida las piezas antes de instalar.'),
+        child: Text('Completa primero el registro del gabinete.'),
       );
     }
     final catalog = c.catalogFor(r),
@@ -1760,6 +1789,10 @@ class _CabinetInstallationState extends State<CabinetInstallation> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              if (w['partsValidated'] != true)
+                const Text(
+                  'Este gabinete tiene piezas pendientes. Puedes registrar su instalación y completarlas posteriormente.',
+                ),
               Text(
                 'Paso ${step + 1} de ${groups.length + 1} · ${step == 0 ? "Ubicación y base" : groups[step - 1].value}',
                 style: Theme.of(context).textTheme.titleLarge,
@@ -2075,6 +2108,15 @@ class _CabinetInstallationState extends State<CabinetInstallation> {
                         'reason': now['correctionReason'],
                     });
                     await c.enqueue(widget.id, 'installation_close', {});
+                    if (context.mounted &&
+                        c.record(widget.id).working['status'] ==
+                            'installed_incomplete') {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Gabinete instalado con pendientes.'),
+                        ),
+                      );
+                    }
                   }),
                   child: const Text('Completar instalación en este teléfono'),
                 ),
@@ -2345,7 +2387,9 @@ class CabinetFinalReview extends StatelessWidget {
         review = object(r.json['finalReviewDraft']);
     if (!['installed', 'deliverable'].contains(w['status'])) {
       return const Center(
-        child: Text('La revisión final requiere instalación completada.'),
+        child: Text(
+          'La revisión final requiere instalación completa y piezas validadas. Si está instalado con pendientes, completa primero las piezas.',
+        ),
       );
     }
     Future<void> update(String field, Object? value) =>
