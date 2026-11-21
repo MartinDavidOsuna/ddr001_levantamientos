@@ -1,0 +1,1071 @@
+{
+  "version": "ddr001-cabinets-20261015-v2",
+  "base": [
+    {
+      "code": "A3.r5.u1",
+      "key": "1603289",
+      "description": "MEDIDOR ELECTROMAGNETICO BERMAD MUT7000 3\" VIC -16BAR",
+      "displayName": "FLUJOMETRO MUT7000",
+      "canonicalPartKey": "A3.key.1603289",
+      "position": "cabinet.1",
+      "serial": "required",
+      "automatedOnly": false,
+      "source": {
+        "file": "A3-A2-A1-A4 - HIDRANTES PARCELARIOS - Material para codigos QR(1).xlsx",
+        "sheet": "MATERIAL HIDR 3\" A3",
+        "row": 6,
+        "quantity": 1,
+        "version": "ddr001-cabinets-20261015-v2",
+        "key": "1603289",
+        "description": "MEDIDOR ELECTROMAGNETICO BERMAD MUT7000 3\" VIC -16BAR"
+      }
+    },
+    {
+      "code": "A3.r16.u1",
+      "key": "1508108",
+      "description": "VALV HIDR PLAST 1 1/2\" RH OPER-MANUAL MOD 75 DOROT",
+      "displayName": "VALV 1 1/2 OPER MAN",
+      "canonicalPartKey": "A3.key.1508108",
+      "position": "cabinet.1",
+      "serial": "none",
+      "automatedOnly": false,
+      "source": {
+        "file": "A3-A2-A1-A4 - HIDRANTES PARCELARIOS - Material para codigos QR(1).xlsx",
+        "sheet": "MATERIAL HIDR 3\" A3",
+        "row": 7,
+        "quantity": 1,
+        "version": "ddr001-cabinets-20261015-v2",
+        "key": "1508108",
+        "description": "VALV HIDR PLAST 1 1/2\" RH OPER-MANUAL MOD 75 DOROT"
+      }
+    },
+    {
+      "code": "A3.r20.u1",
+      "key": "1512848",
+      "description": "VALV HIDR PLAST 3\" ANGULAR RH MAN MOD 80 DOROT",
+      "displayName": "VALVULA 3\" ANGULAR",
+      "canonicalPartKey": "A3.key.1512848",
+      "position": "cabinet.1",
+      "serial": "none",
+      "automatedOnly": false,
+      "source": {
+        "file": "A3-A2-A1-A4 - HIDRANTES PARCELARIOS - Material para codigos QR(1).xlsx",
+        "sheet": "MATERIAL HIDR 3\" A3",
+        "row": 9,
+        "quantity": 1,
+        "version": "ddr001-cabinets-20261015-v2",
+        "key": "1512848",
+        "description": "VALV HIDR PLAST 3\" ANGULAR RH MAN MOD 80 DOROT"
+      }
+    },
+    {
+      "code": "A3.r21.u1",
+      "key": "1510606",
+      "description": "VALV PILOTO PLAST 29-50M 3VIAS MUL.PROP.RESORTE ROJO(10-75M) 1",
+      "displayName": "VALV PILOTO",
+      "canonicalPartKey": "A3.key.1510606",
+      "position": "cabinet.1",
+      "serial": "none",
+      "automatedOnly": false,
+      "source": {
+        "file": "A3-A2-A1-A4 - HIDRANTES PARCELARIOS - Material para codigos QR(1).xlsx",
+        "sheet": "MATERIAL HIDR 3\" A3",
+        "row": 10,
+        "quantity": 1,
+        "version": "ddr001-cabinets-20261015-v2",
+        "key": "1510606",
+        "description": "VALV PILOTO PLAST 29-50M 3VIAS MUL.PROP.RESORTE ROJO(10-75M) 1"
+      }
+    },
+    {
+      "code": "A3.r21.u2",
+      "key": "1510606",
+      "description": "VALV PILOTO PLAST 29-50M 3VIAS MUL.PROP.RESORTE ROJO(10-75M) 2",
+      "displayName": "VALV PILOTO 2",
+      "canonicalPartKey": "A3.key.1510606",
+      "position": "cabinet.2",
+      "serial": "none",
+      "automatedOnly": false,
+      "source": {
+        "file": "A3-A2-A1-A4 - HIDRANTES PARCELARIOS - Material para codigos QR(1).xlsx",
+        "sheet": "MATERIAL HIDR 3\" A3",
+        "row": 11,
+        "quantity": 1,
+        "version": "ddr001-cabinets-20261015-v2",
+        "key": "1510606",
+        "description": "VALV PILOTO PLAST 29-50M 3VIAS MUL.PROP.RESORTE ROJO(10-75M) 2"
+      }
+    },
+    {
+      "code": "A3.r24.u1",
+      "key": "1512496",
+      "description": "VALV BEE POLIPROP BOLA 3\" RH (DISTRITO)",
+      "displayName": "VALV BEE 3\"",
+      "canonicalPartKey": "A3.key.1512496",
+      "position": "district.1",
+      "serial": "none",
+      "automatedOnly": false,
+      "source": {
+        "file": "A3-A2-A1-A4 - HIDRANTES PARCELARIOS - Material para codigos QR(1).xlsx",
+        "sheet": "MATERIAL HIDR 3\" A3",
+        "row": 15,
+        "quantity": 1,
+        "version": "ddr001-cabinets-20261015-v2",
+        "key": "1512496",
+        "description": "VALV BEE POLIPROP BOLA 3\" RH (DISTRITO)"
+      }
+    },
+    {
+      "code": "A3.r28.u1",
+      "key": "1503263",
+      "description": "VALV ADM Y EXP CONTINUA BARAK 1\" RM-NPT(DG10-PN10) ",
+      "displayName": "VALV ADM",
+      "canonicalPartKey": "A3.key.1503263",
+      "position": "cabinet.1",
+      "serial": "none",
+      "automatedOnly": false,
+      "source": {
+        "file": "A3-A2-A1-A4 - HIDRANTES PARCELARIOS - Material para codigos QR(1).xlsx",
+        "sheet": "MATERIAL HIDR 3\" A3",
+        "row": 16,
+        "quantity": 1,
+        "version": "ddr001-cabinets-20261015-v2",
+        "key": "1503263",
+        "description": "VALV ADM Y EXP CONTINUA BARAK 1\" RM-NPT(DG10-PN10) "
+      }
+    },
+    {
+      "code": "A3.r6.u1",
+      "key": "1206881",
+      "description": "FILTRO DISCOS BALDR 3\" T VIC 120 MESH",
+      "displayName": "FILTRO 3\"",
+      "canonicalPartKey": "A3.key.1206881",
+      "position": "cabinet.1",
+      "serial": "optional",
+      "automatedOnly": false,
+      "source": {
+        "file": "A3-A2-A1-A4 - HIDRANTES PARCELARIOS - Material para codigos QR(1).xlsx",
+        "sheet": "MATERIAL HIDR 3\" A3",
+        "row": 19,
+        "quantity": 1,
+        "version": "ddr001-cabinets-20261015-v2",
+        "key": "1206881",
+        "description": "FILTRO DISCOS BALDR 3\" T VIC 120 MESH"
+      }
+    },
+    {
+      "code": "A3.r7.u1",
+      "key": "1512800",
+      "description": "VALV HIDR PLAST 3\" RH MAN MOD 75 DOROT (BLOQUE 1)",
+      "displayName": "VALV HIDR 3\" BLOQUE 1",
+      "canonicalPartKey": "A3.key.1512800",
+      "position": "outlet_1.1",
+      "serial": "none",
+      "automatedOnly": false,
+      "source": {
+        "file": "A3-A2-A1-A4 - HIDRANTES PARCELARIOS - Material para codigos QR(1).xlsx",
+        "sheet": "MATERIAL HIDR 3\" A3",
+        "row": 20,
+        "quantity": 1,
+        "version": "ddr001-cabinets-20261015-v2",
+        "key": "1512800",
+        "description": "VALV HIDR PLAST 3\" RH MAN MOD 75 DOROT (BLOQUE 1)"
+      }
+    },
+    {
+      "code": "A3.r8.u1",
+      "key": "1512824",
+      "description": "VALV PILOTO DOROT 29-50M C/RESORTE AMARILLO(3-30M) (BLOQUE 1)",
+      "displayName": "VALV PILOTO BLOQUE 1",
+      "canonicalPartKey": "A3.key.1512824",
+      "position": "outlet_1.1",
+      "serial": "none",
+      "automatedOnly": false,
+      "source": {
+        "file": "A3-A2-A1-A4 - HIDRANTES PARCELARIOS - Material para codigos QR(1).xlsx",
+        "sheet": "MATERIAL HIDR 3\" A3",
+        "row": 21,
+        "quantity": 1,
+        "version": "ddr001-cabinets-20261015-v2",
+        "key": "1512824",
+        "description": "VALV PILOTO DOROT 29-50M C/RESORTE AMARILLO(3-30M) (BLOQUE 1)"
+      }
+    },
+    {
+      "code": "A3.r10.u1",
+      "key": "1512800",
+      "description": "VALV HIDR PLAST 3\" RH MAN MOD 75 DOROT (BLOQUE 2)",
+      "displayName": "VALV HIDR 3\" BLOQUE 2",
+      "canonicalPartKey": "A3.key.1512800",
+      "position": "outlet_2.1",
+      "serial": "none",
+      "automatedOnly": false,
+      "source": {
+        "file": "A3-A2-A1-A4 - HIDRANTES PARCELARIOS - Material para codigos QR(1).xlsx",
+        "sheet": "MATERIAL HIDR 3\" A3",
+        "row": 23,
+        "quantity": 1,
+        "version": "ddr001-cabinets-20261015-v2",
+        "key": "1512800",
+        "description": "VALV HIDR PLAST 3\" RH MAN MOD 75 DOROT (BLOQUE 2)"
+      }
+    },
+    {
+      "code": "A3.r11.u1",
+      "key": "1512824",
+      "description": "VALV PILOTO DOROT 29-50M C/RESORTE AMARILLO(3-30M) (BLOQUE 2)",
+      "displayName": "VALV PILOTO BLOQUE 2",
+      "canonicalPartKey": "A3.key.1512824",
+      "position": "outlet_2.1",
+      "serial": "none",
+      "automatedOnly": false,
+      "source": {
+        "file": "A3-A2-A1-A4 - HIDRANTES PARCELARIOS - Material para codigos QR(1).xlsx",
+        "sheet": "MATERIAL HIDR 3\" A3",
+        "row": 24,
+        "quantity": 1,
+        "version": "ddr001-cabinets-20261015-v2",
+        "key": "1512824",
+        "description": "VALV PILOTO DOROT 29-50M C/RESORTE AMARILLO(3-30M) (BLOQUE 2)"
+      }
+    },
+    {
+      "code": "A3.r13.u1",
+      "key": "1512800",
+      "description": "VALV HIDR PLAST 3\" RH MAN MOD 75 DOROT (BLOQUE 3)",
+      "displayName": "VALV HIDR 3\" BLOQUE 3",
+      "canonicalPartKey": "A3.key.1512800",
+      "position": "outlet_3.1",
+      "serial": "none",
+      "automatedOnly": false,
+      "source": {
+        "file": "A3-A2-A1-A4 - HIDRANTES PARCELARIOS - Material para codigos QR(1).xlsx",
+        "sheet": "MATERIAL HIDR 3\" A3",
+        "row": 26,
+        "quantity": 1,
+        "version": "ddr001-cabinets-20261015-v2",
+        "key": "1512800",
+        "description": "VALV HIDR PLAST 3\" RH MAN MOD 75 DOROT (BLOQUE 3)"
+      }
+    },
+    {
+      "code": "A3.r14.u1",
+      "key": "1512824",
+      "description": "VALV PILOTO DOROT 29-50M C/RESORTE AMARILLO(3-30M) (BLOQUE 3)",
+      "displayName": "VALV PILOTO BLOQUE 3",
+      "canonicalPartKey": "A3.key.1512824",
+      "position": "outlet_3.1",
+      "serial": "none",
+      "automatedOnly": false,
+      "source": {
+        "file": "A3-A2-A1-A4 - HIDRANTES PARCELARIOS - Material para codigos QR(1).xlsx",
+        "sheet": "MATERIAL HIDR 3\" A3",
+        "row": 27,
+        "quantity": 1,
+        "version": "ddr001-cabinets-20261015-v2",
+        "key": "1512824",
+        "description": "VALV PILOTO DOROT 29-50M C/RESORTE AMARILLO(3-30M) (BLOQUE 3)"
+      }
+    },
+    {
+      "code": "A3.r18.u1",
+      "key": "1511868",
+      "description": "VALV HIDR PLAST 1\" RH OPER-MANUAL MOD 75 DOROT ",
+      "displayName": "VALV 1\" OPER MAN",
+      "canonicalPartKey": "A3.key.1511868",
+      "position": "cabinet.1",
+      "serial": "none",
+      "automatedOnly": false,
+      "source": {
+        "file": "A3-A2-A1-A4 - HIDRANTES PARCELARIOS - Material para codigos QR(1).xlsx",
+        "sheet": "MATERIAL HIDR 3\" A3",
+        "row": 29,
+        "quantity": 1,
+        "version": "ddr001-cabinets-20261015-v2",
+        "key": "1511868",
+        "description": "VALV HIDR PLAST 1\" RH OPER-MANUAL MOD 75 DOROT "
+      }
+    },
+    {
+      "code": "A3.r25.u1",
+      "key": "1512496",
+      "description": "VALV BEE POLIPROP BOLA 3\" RH (USUARIO)",
+      "displayName": "VALV BEE 3\"",
+      "canonicalPartKey": "A3.key.1512496",
+      "position": "producer.1",
+      "serial": "none",
+      "automatedOnly": false,
+      "source": {
+        "file": "A3-A2-A1-A4 - HIDRANTES PARCELARIOS - Material para codigos QR(1).xlsx",
+        "sheet": "MATERIAL HIDR 3\" A3",
+        "row": 31,
+        "quantity": 1,
+        "version": "ddr001-cabinets-20261015-v2",
+        "key": "1512496",
+        "description": "VALV BEE POLIPROP BOLA 3\" RH (USUARIO)"
+      }
+    },
+    {
+      "code": "A3.r26.u1",
+      "key": "1300346",
+      "description": "VENTURI MAZZEI  1\" RM MOD 1078 ",
+      "displayName": "VENTURI",
+      "canonicalPartKey": "A3.key.1300346",
+      "position": "cabinet.1",
+      "serial": "none",
+      "automatedOnly": false,
+      "source": {
+        "file": "A3-A2-A1-A4 - HIDRANTES PARCELARIOS - Material para codigos QR(1).xlsx",
+        "sheet": "MATERIAL HIDR 3\" A3",
+        "row": 32,
+        "quantity": 1,
+        "version": "ddr001-cabinets-20261015-v2",
+        "key": "1300346",
+        "description": "VENTURI MAZZEI  1\" RM MOD 1078 "
+      }
+    },
+    {
+      "code": "A3.r27.u1",
+      "key": "1300437",
+      "description": "LINEA DE SUCCION MOD K-183 INY 1\" Y 1 1/2\" ",
+      "displayName": "LINEA DE SUCCION",
+      "canonicalPartKey": "A3.key.1300437",
+      "position": "cabinet.1",
+      "serial": "none",
+      "automatedOnly": false,
+      "source": {
+        "file": "A3-A2-A1-A4 - HIDRANTES PARCELARIOS - Material para codigos QR(1).xlsx",
+        "sheet": "MATERIAL HIDR 3\" A3",
+        "row": 33,
+        "quantity": 1,
+        "version": "ddr001-cabinets-20261015-v2",
+        "key": "1300437",
+        "description": "LINEA DE SUCCION MOD K-183 INY 1\" Y 1 1/2\" "
+      }
+    }
+  ],
+  "definitions": [
+    {
+      "code": "A3.r5.u1",
+      "key": "1603289",
+      "description": "MEDIDOR ELECTROMAGNETICO BERMAD MUT7000 3\" VIC -16BAR",
+      "displayName": "FLUJOMETRO MUT7000",
+      "canonicalPartKey": "A3.key.1603289",
+      "position": "cabinet.1",
+      "serial": "required",
+      "automatedOnly": false,
+      "source": {
+        "file": "A3-A2-A1-A4 - HIDRANTES PARCELARIOS - Material para codigos QR(1).xlsx",
+        "sheet": "MATERIAL HIDR 3\" A3",
+        "row": 6,
+        "quantity": 1,
+        "version": "ddr001-cabinets-20261015-v2",
+        "key": "1603289",
+        "description": "MEDIDOR ELECTROMAGNETICO BERMAD MUT7000 3\" VIC -16BAR"
+      }
+    },
+    {
+      "code": "A3.r16.u1",
+      "key": "1508108",
+      "description": "VALV HIDR PLAST 1 1/2\" RH OPER-MANUAL MOD 75 DOROT",
+      "displayName": "VALV 1 1/2 OPER MAN",
+      "canonicalPartKey": "A3.key.1508108",
+      "position": "cabinet.1",
+      "serial": "none",
+      "automatedOnly": false,
+      "source": {
+        "file": "A3-A2-A1-A4 - HIDRANTES PARCELARIOS - Material para codigos QR(1).xlsx",
+        "sheet": "MATERIAL HIDR 3\" A3",
+        "row": 7,
+        "quantity": 1,
+        "version": "ddr001-cabinets-20261015-v2",
+        "key": "1508108",
+        "description": "VALV HIDR PLAST 1 1/2\" RH OPER-MANUAL MOD 75 DOROT"
+      }
+    },
+    {
+      "code": "A3.r20.u1",
+      "key": "1512848",
+      "description": "VALV HIDR PLAST 3\" ANGULAR RH MAN MOD 80 DOROT",
+      "displayName": "VALVULA 3\" ANGULAR",
+      "canonicalPartKey": "A3.key.1512848",
+      "position": "cabinet.1",
+      "serial": "none",
+      "automatedOnly": false,
+      "source": {
+        "file": "A3-A2-A1-A4 - HIDRANTES PARCELARIOS - Material para codigos QR(1).xlsx",
+        "sheet": "MATERIAL HIDR 3\" A3",
+        "row": 9,
+        "quantity": 1,
+        "version": "ddr001-cabinets-20261015-v2",
+        "key": "1512848",
+        "description": "VALV HIDR PLAST 3\" ANGULAR RH MAN MOD 80 DOROT"
+      }
+    },
+    {
+      "code": "A3.r21.u1",
+      "key": "1510606",
+      "description": "VALV PILOTO PLAST 29-50M 3VIAS MUL.PROP.RESORTE ROJO(10-75M) 1",
+      "displayName": "VALV PILOTO",
+      "canonicalPartKey": "A3.key.1510606",
+      "position": "cabinet.1",
+      "serial": "none",
+      "automatedOnly": false,
+      "source": {
+        "file": "A3-A2-A1-A4 - HIDRANTES PARCELARIOS - Material para codigos QR(1).xlsx",
+        "sheet": "MATERIAL HIDR 3\" A3",
+        "row": 10,
+        "quantity": 1,
+        "version": "ddr001-cabinets-20261015-v2",
+        "key": "1510606",
+        "description": "VALV PILOTO PLAST 29-50M 3VIAS MUL.PROP.RESORTE ROJO(10-75M) 1"
+      }
+    },
+    {
+      "code": "A3.r21.u2",
+      "key": "1510606",
+      "description": "VALV PILOTO PLAST 29-50M 3VIAS MUL.PROP.RESORTE ROJO(10-75M) 2",
+      "displayName": "VALV PILOTO 2",
+      "canonicalPartKey": "A3.key.1510606",
+      "position": "cabinet.2",
+      "serial": "none",
+      "automatedOnly": false,
+      "source": {
+        "file": "A3-A2-A1-A4 - HIDRANTES PARCELARIOS - Material para codigos QR(1).xlsx",
+        "sheet": "MATERIAL HIDR 3\" A3",
+        "row": 11,
+        "quantity": 1,
+        "version": "ddr001-cabinets-20261015-v2",
+        "key": "1510606",
+        "description": "VALV PILOTO PLAST 29-50M 3VIAS MUL.PROP.RESORTE ROJO(10-75M) 2"
+      }
+    },
+    {
+      "code": "A3.r24.u1",
+      "key": "1512496",
+      "description": "VALV BEE POLIPROP BOLA 3\" RH (DISTRITO)",
+      "displayName": "VALV BEE 3\"",
+      "canonicalPartKey": "A3.key.1512496",
+      "position": "district.1",
+      "serial": "none",
+      "automatedOnly": false,
+      "source": {
+        "file": "A3-A2-A1-A4 - HIDRANTES PARCELARIOS - Material para codigos QR(1).xlsx",
+        "sheet": "MATERIAL HIDR 3\" A3",
+        "row": 15,
+        "quantity": 1,
+        "version": "ddr001-cabinets-20261015-v2",
+        "key": "1512496",
+        "description": "VALV BEE POLIPROP BOLA 3\" RH (DISTRITO)"
+      }
+    },
+    {
+      "code": "A3.r28.u1",
+      "key": "1503263",
+      "description": "VALV ADM Y EXP CONTINUA BARAK 1\" RM-NPT(DG10-PN10) ",
+      "displayName": "VALV ADM",
+      "canonicalPartKey": "A3.key.1503263",
+      "position": "cabinet.1",
+      "serial": "none",
+      "automatedOnly": false,
+      "source": {
+        "file": "A3-A2-A1-A4 - HIDRANTES PARCELARIOS - Material para codigos QR(1).xlsx",
+        "sheet": "MATERIAL HIDR 3\" A3",
+        "row": 16,
+        "quantity": 1,
+        "version": "ddr001-cabinets-20261015-v2",
+        "key": "1503263",
+        "description": "VALV ADM Y EXP CONTINUA BARAK 1\" RM-NPT(DG10-PN10) "
+      }
+    },
+    {
+      "code": "A3.r6.u1",
+      "key": "1206881",
+      "description": "FILTRO DISCOS BALDR 3\" T VIC 120 MESH",
+      "displayName": "FILTRO 3\"",
+      "canonicalPartKey": "A3.key.1206881",
+      "position": "cabinet.1",
+      "serial": "optional",
+      "automatedOnly": false,
+      "source": {
+        "file": "A3-A2-A1-A4 - HIDRANTES PARCELARIOS - Material para codigos QR(1).xlsx",
+        "sheet": "MATERIAL HIDR 3\" A3",
+        "row": 19,
+        "quantity": 1,
+        "version": "ddr001-cabinets-20261015-v2",
+        "key": "1206881",
+        "description": "FILTRO DISCOS BALDR 3\" T VIC 120 MESH"
+      }
+    },
+    {
+      "code": "A3.r7.u1",
+      "key": "1512800",
+      "description": "VALV HIDR PLAST 3\" RH MAN MOD 75 DOROT (BLOQUE 1)",
+      "displayName": "VALV HIDR 3\" BLOQUE 1",
+      "canonicalPartKey": "A3.key.1512800",
+      "position": "outlet_1.1",
+      "serial": "none",
+      "automatedOnly": false,
+      "source": {
+        "file": "A3-A2-A1-A4 - HIDRANTES PARCELARIOS - Material para codigos QR(1).xlsx",
+        "sheet": "MATERIAL HIDR 3\" A3",
+        "row": 20,
+        "quantity": 1,
+        "version": "ddr001-cabinets-20261015-v2",
+        "key": "1512800",
+        "description": "VALV HIDR PLAST 3\" RH MAN MOD 75 DOROT (BLOQUE 1)"
+      }
+    },
+    {
+      "code": "A3.r8.u1",
+      "key": "1512824",
+      "description": "VALV PILOTO DOROT 29-50M C/RESORTE AMARILLO(3-30M) (BLOQUE 1)",
+      "displayName": "VALV PILOTO BLOQUE 1",
+      "canonicalPartKey": "A3.key.1512824",
+      "position": "outlet_1.1",
+      "serial": "none",
+      "automatedOnly": false,
+      "source": {
+        "file": "A3-A2-A1-A4 - HIDRANTES PARCELARIOS - Material para codigos QR(1).xlsx",
+        "sheet": "MATERIAL HIDR 3\" A3",
+        "row": 21,
+        "quantity": 1,
+        "version": "ddr001-cabinets-20261015-v2",
+        "key": "1512824",
+        "description": "VALV PILOTO DOROT 29-50M C/RESORTE AMARILLO(3-30M) (BLOQUE 1)"
+      }
+    },
+    {
+      "code": "A3.r10.u1",
+      "key": "1512800",
+      "description": "VALV HIDR PLAST 3\" RH MAN MOD 75 DOROT (BLOQUE 2)",
+      "displayName": "VALV HIDR 3\" BLOQUE 2",
+      "canonicalPartKey": "A3.key.1512800",
+      "position": "outlet_2.1",
+      "serial": "none",
+      "automatedOnly": false,
+      "source": {
+        "file": "A3-A2-A1-A4 - HIDRANTES PARCELARIOS - Material para codigos QR(1).xlsx",
+        "sheet": "MATERIAL HIDR 3\" A3",
+        "row": 23,
+        "quantity": 1,
+        "version": "ddr001-cabinets-20261015-v2",
+        "key": "1512800",
+        "description": "VALV HIDR PLAST 3\" RH MAN MOD 75 DOROT (BLOQUE 2)"
+      }
+    },
+    {
+      "code": "A3.r11.u1",
+      "key": "1512824",
+      "description": "VALV PILOTO DOROT 29-50M C/RESORTE AMARILLO(3-30M) (BLOQUE 2)",
+      "displayName": "VALV PILOTO BLOQUE 2",
+      "canonicalPartKey": "A3.key.1512824",
+      "position": "outlet_2.1",
+      "serial": "none",
+      "automatedOnly": false,
+      "source": {
+        "file": "A3-A2-A1-A4 - HIDRANTES PARCELARIOS - Material para codigos QR(1).xlsx",
+        "sheet": "MATERIAL HIDR 3\" A3",
+        "row": 24,
+        "quantity": 1,
+        "version": "ddr001-cabinets-20261015-v2",
+        "key": "1512824",
+        "description": "VALV PILOTO DOROT 29-50M C/RESORTE AMARILLO(3-30M) (BLOQUE 2)"
+      }
+    },
+    {
+      "code": "A3.r13.u1",
+      "key": "1512800",
+      "description": "VALV HIDR PLAST 3\" RH MAN MOD 75 DOROT (BLOQUE 3)",
+      "displayName": "VALV HIDR 3\" BLOQUE 3",
+      "canonicalPartKey": "A3.key.1512800",
+      "position": "outlet_3.1",
+      "serial": "none",
+      "automatedOnly": false,
+      "source": {
+        "file": "A3-A2-A1-A4 - HIDRANTES PARCELARIOS - Material para codigos QR(1).xlsx",
+        "sheet": "MATERIAL HIDR 3\" A3",
+        "row": 26,
+        "quantity": 1,
+        "version": "ddr001-cabinets-20261015-v2",
+        "key": "1512800",
+        "description": "VALV HIDR PLAST 3\" RH MAN MOD 75 DOROT (BLOQUE 3)"
+      }
+    },
+    {
+      "code": "A3.r14.u1",
+      "key": "1512824",
+      "description": "VALV PILOTO DOROT 29-50M C/RESORTE AMARILLO(3-30M) (BLOQUE 3)",
+      "displayName": "VALV PILOTO BLOQUE 3",
+      "canonicalPartKey": "A3.key.1512824",
+      "position": "outlet_3.1",
+      "serial": "none",
+      "automatedOnly": false,
+      "source": {
+        "file": "A3-A2-A1-A4 - HIDRANTES PARCELARIOS - Material para codigos QR(1).xlsx",
+        "sheet": "MATERIAL HIDR 3\" A3",
+        "row": 27,
+        "quantity": 1,
+        "version": "ddr001-cabinets-20261015-v2",
+        "key": "1512824",
+        "description": "VALV PILOTO DOROT 29-50M C/RESORTE AMARILLO(3-30M) (BLOQUE 3)"
+      }
+    },
+    {
+      "code": "A3.r18.u1",
+      "key": "1511868",
+      "description": "VALV HIDR PLAST 1\" RH OPER-MANUAL MOD 75 DOROT ",
+      "displayName": "VALV 1\" OPER MAN",
+      "canonicalPartKey": "A3.key.1511868",
+      "position": "cabinet.1",
+      "serial": "none",
+      "automatedOnly": false,
+      "source": {
+        "file": "A3-A2-A1-A4 - HIDRANTES PARCELARIOS - Material para codigos QR(1).xlsx",
+        "sheet": "MATERIAL HIDR 3\" A3",
+        "row": 29,
+        "quantity": 1,
+        "version": "ddr001-cabinets-20261015-v2",
+        "key": "1511868",
+        "description": "VALV HIDR PLAST 1\" RH OPER-MANUAL MOD 75 DOROT "
+      }
+    },
+    {
+      "code": "A3.r25.u1",
+      "key": "1512496",
+      "description": "VALV BEE POLIPROP BOLA 3\" RH (USUARIO)",
+      "displayName": "VALV BEE 3\"",
+      "canonicalPartKey": "A3.key.1512496",
+      "position": "producer.1",
+      "serial": "none",
+      "automatedOnly": false,
+      "source": {
+        "file": "A3-A2-A1-A4 - HIDRANTES PARCELARIOS - Material para codigos QR(1).xlsx",
+        "sheet": "MATERIAL HIDR 3\" A3",
+        "row": 31,
+        "quantity": 1,
+        "version": "ddr001-cabinets-20261015-v2",
+        "key": "1512496",
+        "description": "VALV BEE POLIPROP BOLA 3\" RH (USUARIO)"
+      }
+    },
+    {
+      "code": "A3.r26.u1",
+      "key": "1300346",
+      "description": "VENTURI MAZZEI  1\" RM MOD 1078 ",
+      "displayName": "VENTURI",
+      "canonicalPartKey": "A3.key.1300346",
+      "position": "cabinet.1",
+      "serial": "none",
+      "automatedOnly": false,
+      "source": {
+        "file": "A3-A2-A1-A4 - HIDRANTES PARCELARIOS - Material para codigos QR(1).xlsx",
+        "sheet": "MATERIAL HIDR 3\" A3",
+        "row": 32,
+        "quantity": 1,
+        "version": "ddr001-cabinets-20261015-v2",
+        "key": "1300346",
+        "description": "VENTURI MAZZEI  1\" RM MOD 1078 "
+      }
+    },
+    {
+      "code": "A3.r27.u1",
+      "key": "1300437",
+      "description": "LINEA DE SUCCION MOD K-183 INY 1\" Y 1 1/2\" ",
+      "displayName": "LINEA DE SUCCION",
+      "canonicalPartKey": "A3.key.1300437",
+      "position": "cabinet.1",
+      "serial": "none",
+      "automatedOnly": false,
+      "source": {
+        "file": "A3-A2-A1-A4 - HIDRANTES PARCELARIOS - Material para codigos QR(1).xlsx",
+        "sheet": "MATERIAL HIDR 3\" A3",
+        "row": 33,
+        "quantity": 1,
+        "version": "ddr001-cabinets-20261015-v2",
+        "key": "1300437",
+        "description": "LINEA DE SUCCION MOD K-183 INY 1\" Y 1 1/2\" "
+      }
+    },
+    {
+      "code": "A3.r17.u1",
+      "key": "1511636",
+      "description": "SOLENOIDE DOROT S-92-3 90HM N.O. LATCH S/N 0617A (VALV INYECTOR)",
+      "displayName": "SOLENOIDE VALV INYECT",
+      "canonicalPartKey": "A3.key.1511636",
+      "position": "venturi.1",
+      "serial": "none",
+      "automatedOnly": false,
+      "source": {
+        "file": "A3-A2-A1-A4 - HIDRANTES PARCELARIOS - Material para codigos QR(1).xlsx",
+        "sheet": "MATERIAL HIDR 3\" A3",
+        "row": 8,
+        "quantity": 1,
+        "version": "ddr001-cabinets-20261015-v2",
+        "key": "1511636",
+        "description": "SOLENOIDE DOROT S-92-3 90HM N.O. LATCH S/N 0617A (VALV INYECTOR)"
+      }
+    },
+    {
+      "code": "A3.r22.u1",
+      "key": "1511636",
+      "description": "SOLENOIDE DOROT S-92-3 90HM N.O. LATCH S/N 0617A (VALV ANGULAR)",
+      "displayName": "SOLENOIDE VALV ANGULAR",
+      "canonicalPartKey": "A3.key.1511636",
+      "position": "principal.1",
+      "serial": "none",
+      "automatedOnly": false,
+      "source": {
+        "file": "A3-A2-A1-A4 - HIDRANTES PARCELARIOS - Material para codigos QR(1).xlsx",
+        "sheet": "MATERIAL HIDR 3\" A3",
+        "row": 12,
+        "quantity": 1,
+        "version": "ddr001-cabinets-20261015-v2",
+        "key": "1511636",
+        "description": "SOLENOIDE DOROT S-92-3 90HM N.O. LATCH S/N 0617A (VALV ANGULAR)"
+      }
+    },
+    {
+      "code": "A3.r9.u1",
+      "key": "1511636",
+      "description": "SOLENOIDE DOROT S-92-3 90HM N.O. LATCH S/N 0617A (BLOQUE 1)",
+      "displayName": "SOLENOIDE BLOQUE 1",
+      "canonicalPartKey": "A3.key.1511636",
+      "position": "outlet_1.1",
+      "serial": "none",
+      "automatedOnly": false,
+      "source": {
+        "file": "A3-A2-A1-A4 - HIDRANTES PARCELARIOS - Material para codigos QR(1).xlsx",
+        "sheet": "MATERIAL HIDR 3\" A3",
+        "row": 22,
+        "quantity": 1,
+        "version": "ddr001-cabinets-20261015-v2",
+        "key": "1511636",
+        "description": "SOLENOIDE DOROT S-92-3 90HM N.O. LATCH S/N 0617A (BLOQUE 1)"
+      }
+    },
+    {
+      "code": "A3.r12.u1",
+      "key": "1511636",
+      "description": "SOLENOIDE DOROT S-92-3 90HM N.O. LATCH S/N 0617A (BLOQUE 2)",
+      "displayName": "SOLENOIDE BLOQUE 2",
+      "canonicalPartKey": "A3.key.1511636",
+      "position": "outlet_2.1",
+      "serial": "none",
+      "automatedOnly": false,
+      "source": {
+        "file": "A3-A2-A1-A4 - HIDRANTES PARCELARIOS - Material para codigos QR(1).xlsx",
+        "sheet": "MATERIAL HIDR 3\" A3",
+        "row": 25,
+        "quantity": 1,
+        "version": "ddr001-cabinets-20261015-v2",
+        "key": "1511636",
+        "description": "SOLENOIDE DOROT S-92-3 90HM N.O. LATCH S/N 0617A (BLOQUE 2)"
+      }
+    },
+    {
+      "code": "A3.r15.u1",
+      "key": "1511636",
+      "description": "SOLENOIDE DOROT S-92-3 90HM N.O. LATCH S/N 0617A (BLOQUE 3)",
+      "displayName": "SOLENOIDE BLOQUE 3",
+      "canonicalPartKey": "A3.key.1511636",
+      "position": "outlet_3.1",
+      "serial": "none",
+      "automatedOnly": false,
+      "source": {
+        "file": "A3-A2-A1-A4 - HIDRANTES PARCELARIOS - Material para codigos QR(1).xlsx",
+        "sheet": "MATERIAL HIDR 3\" A3",
+        "row": 28,
+        "quantity": 1,
+        "version": "ddr001-cabinets-20261015-v2",
+        "key": "1511636",
+        "description": "SOLENOIDE DOROT S-92-3 90HM N.O. LATCH S/N 0617A (BLOQUE 3)"
+      }
+    },
+    {
+      "code": "A3.r19.u1",
+      "key": "1511636",
+      "description": "SOLENOIDE DOROT S-92-3 90HM N.O. LATCH S/N 0617A (VALV FILTRO)",
+      "displayName": "SOLENOIDE VALV FILTRO",
+      "canonicalPartKey": "A3.key.1511636",
+      "position": "flushing.1",
+      "serial": "none",
+      "automatedOnly": false,
+      "source": {
+        "file": "A3-A2-A1-A4 - HIDRANTES PARCELARIOS - Material para codigos QR(1).xlsx",
+        "sheet": "MATERIAL HIDR 3\" A3",
+        "row": 30,
+        "quantity": 1,
+        "version": "ddr001-cabinets-20261015-v2",
+        "key": "1511636",
+        "description": "SOLENOIDE DOROT S-92-3 90HM N.O. LATCH S/N 0617A (VALV FILTRO)"
+      }
+    }
+  ],
+  "policy": {
+    "version": "ddr001-parts-20261019-v2",
+    "evidenceRequired": false,
+    "universalParts": [
+      {
+        "code": "A3.r17.u1",
+        "key": "1511636",
+        "description": "SOLENOIDE DOROT S-92-3 90HM N.O. LATCH S/N 0617A (VALV INYECTOR)",
+        "displayName": "SOLENOIDE VALV INYECT",
+        "canonicalPartKey": "A3.key.1511636",
+        "position": "venturi.1",
+        "serial": "none",
+        "automatedOnly": false,
+        "source": {
+          "file": "A3-A2-A1-A4 - HIDRANTES PARCELARIOS - Material para codigos QR(1).xlsx",
+          "sheet": "MATERIAL HIDR 3\" A3",
+          "row": 8,
+          "quantity": 1,
+          "version": "ddr001-cabinets-20261015-v2",
+          "key": "1511636",
+          "description": "SOLENOIDE DOROT S-92-3 90HM N.O. LATCH S/N 0617A (VALV INYECTOR)"
+        }
+      },
+      {
+        "code": "A3.r22.u1",
+        "key": "1511636",
+        "description": "SOLENOIDE DOROT S-92-3 90HM N.O. LATCH S/N 0617A (VALV ANGULAR)",
+        "displayName": "SOLENOIDE VALV ANGULAR",
+        "canonicalPartKey": "A3.key.1511636",
+        "position": "principal.1",
+        "serial": "none",
+        "automatedOnly": false,
+        "source": {
+          "file": "A3-A2-A1-A4 - HIDRANTES PARCELARIOS - Material para codigos QR(1).xlsx",
+          "sheet": "MATERIAL HIDR 3\" A3",
+          "row": 12,
+          "quantity": 1,
+          "version": "ddr001-cabinets-20261015-v2",
+          "key": "1511636",
+          "description": "SOLENOIDE DOROT S-92-3 90HM N.O. LATCH S/N 0617A (VALV ANGULAR)"
+        }
+      },
+      {
+        "code": "A3.r9.u1",
+        "key": "1511636",
+        "description": "SOLENOIDE DOROT S-92-3 90HM N.O. LATCH S/N 0617A (BLOQUE 1)",
+        "displayName": "SOLENOIDE BLOQUE 1",
+        "canonicalPartKey": "A3.key.1511636",
+        "position": "outlet_1.1",
+        "serial": "none",
+        "automatedOnly": false,
+        "source": {
+          "file": "A3-A2-A1-A4 - HIDRANTES PARCELARIOS - Material para codigos QR(1).xlsx",
+          "sheet": "MATERIAL HIDR 3\" A3",
+          "row": 22,
+          "quantity": 1,
+          "version": "ddr001-cabinets-20261015-v2",
+          "key": "1511636",
+          "description": "SOLENOIDE DOROT S-92-3 90HM N.O. LATCH S/N 0617A (BLOQUE 1)"
+        }
+      },
+      {
+        "code": "A3.r12.u1",
+        "key": "1511636",
+        "description": "SOLENOIDE DOROT S-92-3 90HM N.O. LATCH S/N 0617A (BLOQUE 2)",
+        "displayName": "SOLENOIDE BLOQUE 2",
+        "canonicalPartKey": "A3.key.1511636",
+        "position": "outlet_2.1",
+        "serial": "none",
+        "automatedOnly": false,
+        "source": {
+          "file": "A3-A2-A1-A4 - HIDRANTES PARCELARIOS - Material para codigos QR(1).xlsx",
+          "sheet": "MATERIAL HIDR 3\" A3",
+          "row": 25,
+          "quantity": 1,
+          "version": "ddr001-cabinets-20261015-v2",
+          "key": "1511636",
+          "description": "SOLENOIDE DOROT S-92-3 90HM N.O. LATCH S/N 0617A (BLOQUE 2)"
+        }
+      },
+      {
+        "code": "A3.r15.u1",
+        "key": "1511636",
+        "description": "SOLENOIDE DOROT S-92-3 90HM N.O. LATCH S/N 0617A (BLOQUE 3)",
+        "displayName": "SOLENOIDE BLOQUE 3",
+        "canonicalPartKey": "A3.key.1511636",
+        "position": "outlet_3.1",
+        "serial": "none",
+        "automatedOnly": false,
+        "source": {
+          "file": "A3-A2-A1-A4 - HIDRANTES PARCELARIOS - Material para codigos QR(1).xlsx",
+          "sheet": "MATERIAL HIDR 3\" A3",
+          "row": 28,
+          "quantity": 1,
+          "version": "ddr001-cabinets-20261015-v2",
+          "key": "1511636",
+          "description": "SOLENOIDE DOROT S-92-3 90HM N.O. LATCH S/N 0617A (BLOQUE 3)"
+        }
+      },
+      {
+        "code": "A3.r19.u1",
+        "key": "1511636",
+        "description": "SOLENOIDE DOROT S-92-3 90HM N.O. LATCH S/N 0617A (VALV FILTRO)",
+        "displayName": "SOLENOIDE VALV FILTRO",
+        "canonicalPartKey": "A3.key.1511636",
+        "position": "flushing.1",
+        "serial": "none",
+        "automatedOnly": false,
+        "source": {
+          "file": "A3-A2-A1-A4 - HIDRANTES PARCELARIOS - Material para codigos QR(1).xlsx",
+          "sheet": "MATERIAL HIDR 3\" A3",
+          "row": 30,
+          "quantity": 1,
+          "version": "ddr001-cabinets-20261015-v2",
+          "key": "1511636",
+          "description": "SOLENOIDE DOROT S-92-3 90HM N.O. LATCH S/N 0617A (VALV FILTRO)"
+        }
+      }
+    ],
+    "parts": {
+      "A3.r5.u1": {
+        "side": "district",
+        "step": "district",
+        "order": 6,
+        "serial": "required"
+      },
+      "A3.r16.u1": {
+        "side": "district",
+        "step": "district",
+        "order": 7,
+        "serial": "none"
+      },
+      "A3.r20.u1": {
+        "side": "district",
+        "step": "district",
+        "order": 9,
+        "serial": "none"
+      },
+      "A3.r21.u1": {
+        "side": "district",
+        "step": "district",
+        "order": 10,
+        "serial": "none"
+      },
+      "A3.r21.u2": {
+        "side": "district",
+        "step": "district",
+        "order": 11,
+        "serial": "none"
+      },
+      "A3.r24.u1": {
+        "side": "district",
+        "step": "district",
+        "order": 15,
+        "serial": "none"
+      },
+      "A3.r28.u1": {
+        "side": "district",
+        "step": "district",
+        "order": 16,
+        "serial": "none"
+      },
+      "A3.r6.u1": {
+        "side": "producer",
+        "step": "producer",
+        "order": 19,
+        "serial": "none"
+      },
+      "A3.r7.u1": {
+        "side": "producer",
+        "step": "producer",
+        "order": 20,
+        "serial": "none"
+      },
+      "A3.r8.u1": {
+        "side": "producer",
+        "step": "producer",
+        "order": 21,
+        "serial": "none"
+      },
+      "A3.r10.u1": {
+        "side": "producer",
+        "step": "producer",
+        "order": 23,
+        "serial": "none"
+      },
+      "A3.r11.u1": {
+        "side": "producer",
+        "step": "producer",
+        "order": 24,
+        "serial": "none"
+      },
+      "A3.r13.u1": {
+        "side": "producer",
+        "step": "producer",
+        "order": 26,
+        "serial": "none"
+      },
+      "A3.r14.u1": {
+        "side": "producer",
+        "step": "producer",
+        "order": 27,
+        "serial": "none"
+      },
+      "A3.r18.u1": {
+        "side": "producer",
+        "step": "producer",
+        "order": 29,
+        "serial": "none"
+      },
+      "A3.r25.u1": {
+        "side": "producer",
+        "step": "producer",
+        "order": 31,
+        "serial": "none"
+      },
+      "A3.r26.u1": {
+        "side": "producer",
+        "step": "producer",
+        "order": 32,
+        "serial": "none"
+      },
+      "A3.r27.u1": {
+        "side": "producer",
+        "step": "producer",
+        "order": 33,
+        "serial": "none"
+      },
+      "A3.r17.u1": {
+        "side": "district",
+        "step": "district",
+        "order": 8,
+        "serial": "none"
+      },
+      "A3.r22.u1": {
+        "side": "district",
+        "step": "district",
+        "order": 12,
+        "serial": "none"
+      },
+      "A3.r9.u1": {
+        "side": "producer",
+        "step": "producer",
+        "order": 22,
+        "serial": "none"
+      },
+      "A3.r12.u1": {
+        "side": "producer",
+        "step": "producer",
+        "order": 25,
+        "serial": "none"
+      },
+      "A3.r15.u1": {
+        "side": "producer",
+        "step": "producer",
+        "order": 28,
+        "serial": "none"
+      },
+      "A3.r19.u1": {
+        "side": "producer",
+        "step": "producer",
+        "order": 30,
+        "serial": "none"
+      }
+    }
+  }
+}

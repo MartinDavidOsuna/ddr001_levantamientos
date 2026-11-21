@@ -119,7 +119,7 @@ void main() {
   });
 
   test(
-    'process restart consumes lost camera result into durable paths',
+    'legacy lost result without global owner is quarantined, not misattributed',
     () async {
       final cameraResult = File('${root.path}/picker-cache.jpg')
         ..writeAsBytesSync(List<int>.generate(8192, (index) => index & 0xff));
@@ -152,20 +152,20 @@ void main() {
 
       final recovered = await service.recoverPendingCaptures();
 
-      expect(recovered, hasLength(1));
-      expect(recovered.single.id, photoId);
-      expect(File('${evidence.path}/$photoId.source.jpg').lengthSync(), 8192);
-      expect(File(recovered.single.localPath).lengthSync(), 8192);
+      expect(recovered, isEmpty);
+      final quarantine = await service.broker.quarantined();
+      expect(quarantine, hasLength(1));
+      expect(File(quarantine.single['originalPath']).lengthSync(), 8192);
       expect(
-        recovered.single.sha256,
-        await sha256File(File(recovered.single.localPath)),
+        File('${evidence.path}/$photoId.source.jpg').existsSync(),
+        isFalse,
       );
       expect(cameraResult.existsSync(), isTrue);
     },
   );
 
   test(
-    'prepared journal recovers recent picker cache when lost data is empty',
+    'ambiguous cache is preserved in quarantine without choosing latest intent',
     () async {
       final cache = Directory('${root.path}/cache')..createSync();
       final cached = File('${cache.path}/picker-result.jpg')
@@ -219,8 +219,10 @@ void main() {
 
       final recovered = await service.recoverPendingCaptures();
 
-      expect(recovered, hasLength(1));
-      expect(File(recovered.single.localPath).lengthSync(), 4096);
+      expect(recovered, isEmpty);
+      final quarantine = await service.broker.quarantined();
+      expect(quarantine, hasLength(1));
+      expect(File(quarantine.single['originalPath']).lengthSync(), 4096);
       expect(cached.existsSync(), isTrue);
       await service.advance(photoId, ConstructionJournalState.committed);
       await service.recoverPendingCaptures();

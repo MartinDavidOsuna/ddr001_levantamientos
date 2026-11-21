@@ -1,0 +1,62 @@
+[
+  {
+    "input": {
+      "code": "SYNTHETIC-01",
+      "present": true,
+      "evidence": [],
+      "serial": "  SERIAL-01  ",
+      "reason": "  motivo sintético  ",
+      "observations": " sin recortar "
+    },
+    "output": {
+      "code": "SYNTHETIC-01",
+      "present": true,
+      "serial": "SERIAL-01",
+      "reason": "motivo sintético",
+      "observations": " sin recortar ",
+      "evidence": []
+    }
+  },
+  {
+    "input": {
+      "evidence": [
+        {
+          "legible": true,
+          "confirmed": true,
+          "photoId": "7B233347-8B2D-448F-8EBB-0F4FB41AF98D"
+        }
+      ],
+      "present": false,
+      "code": "SYNTHETIC-02",
+      "reason": "  pieza ausente  ",
+      "serial": null,
+      "serialException": null
+    },
+    "output": {
+      "code": "SYNTHETIC-02",
+      "present": false,
+      "serial": null,
+      "serialException": null,
+      "reason": "pieza ausente",
+      "evidence": [
+        {
+          "photoId": "7B233347-8B2D-448F-8EBB-0F4FB41AF98D",
+          "confirmed": true,
+          "legible": true
+        }
+      ]
+    }
+  },
+  {
+    "input": {
+      "code": "SYNTHETIC-03",
+      "present": null,
+      "evidence": []
+    },
+    "output": {
+      "code": "SYNTHETIC-03",
+      "present": null,
+      "evidence": []
+    }
+  }
+]

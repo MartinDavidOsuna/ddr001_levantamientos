@@ -21,9 +21,103 @@ class ApiClient {
             ),
           ) {
     this.dio.interceptors.add(
-      InterceptorsWrapper(onRequest: _request, onError: _error),
+      InterceptorsWrapper(
+        onRequest: _request,
+        onError: _error,
+        onResponse: (response, handler) {
+          _finishCabinetRequest(response.requestOptions);
+          handler.next(response);
+        },
+      ),
     );
   }
+  Object? _cabinetRecoveryPermit;
+  int _cabinetRequests = 0;
+  bool get cabinetRequestsInFlight => _cabinetRequests != 0;
+  Set<String> _recoveryCabinets = {},
+      _recoveryOperations = {},
+      _recoveryPhotos = {};
+  void authorizeCabinetRecovery(
+    Object permit, {
+    required Set<String> operations,
+    required Set<String> photos,
+  }) {
+    if (!identical(permit, _cabinetRecoveryPermit)) {
+      throw StateError('Permiso de soporte no vigente.');
+    }
+    _recoveryOperations = Set.of(operations);
+    _recoveryPhotos = Set.of(photos);
+  }
+
+  bool _recoveryRequestAllowed(RequestOptions options) {
+    final path = Uri.parse(options.path).path;
+    final prefix = '/construction/cabinets';
+    final index = path.indexOf(prefix);
+    final suffix = index < 0 ? '' : path.substring(index + prefix.length);
+    if (options.method == 'GET' && ['/catalog', '/resolve'].contains(suffix)) {
+      return true;
+    }
+    final segments = suffix.split('/').where((s) => s.isNotEmpty).toList();
+    if (segments.isEmpty || !_recoveryCabinets.contains(segments.first)) {
+      return false;
+    }
+    if (options.method == 'GET') return true;
+    if (options.method != 'POST') return false;
+    final data = options.data;
+    if (segments.length == 2 && segments[1] == 'commands' && data is Map) {
+      return data['type'] != 'register' &&
+          _recoveryOperations.contains(data['operationId']);
+    }
+    if (segments.length == 2 && segments[1] == 'photos' && data is FormData) {
+      final ids = data.fields
+          .where((f) => f.key == 'photoId')
+          .map((f) => f.value)
+          .toList();
+      return ids.length == 1 && _recoveryPhotos.contains(ids.single);
+    }
+    if (segments.length == 3 &&
+        segments[1] == 'photos' &&
+        segments[2] == 'verify' &&
+        data is Map) {
+      final ids = data['photoIds'];
+      return ids is List &&
+          ids.isNotEmpty &&
+          ids.every(_recoveryPhotos.contains);
+    }
+    return false;
+  }
+
+  bool get cabinetRecoveryHeld => _cabinetRecoveryPermit != null;
+
+  Object beginCabinetRecovery({required Set<String> cabinetIds}) {
+    if (_cabinetRecoveryPermit != null) {
+      throw StateError('SUPPORT_HTTP_LOCK_OWNED');
+    }
+    if (_cabinetRequests != 0) throw StateError('SUPPORT_HTTP_IN_FLIGHT');
+    if (cabinetIds.length != 1) {
+      throw StateError('Soporte limitado a un expediente.');
+    }
+    _recoveryCabinets = Set.of(cabinetIds);
+    _recoveryOperations = {};
+    _recoveryPhotos = {};
+    return _cabinetRecoveryPermit = Object();
+  }
+
+  void endCabinetRecovery(Object permit) {
+    if (!identical(permit, _cabinetRecoveryPermit)) {
+      throw StateError('SUPPORT_HTTP_LOCK_OWNED');
+    }
+    if (_cabinetRequests != 0) throw StateError('SUPPORT_HTTP_IN_FLIGHT');
+    _cabinetRecoveryPermit = null;
+    _recoveryCabinets = {};
+    _recoveryOperations = {};
+    _recoveryPhotos = {};
+  }
+
+  void _finishCabinetRequest(RequestOptions request) {
+    if (request.extra.remove('_cabinetInFlight') == true) _cabinetRequests--;
+  }
+
   final Dio dio;
   final SessionStore _sessions;
   Future<FieldSession?>? _refreshing;
@@ -31,6 +125,25 @@ class ApiClient {
     RequestOptions options,
     RequestInterceptorHandler handler,
   ) async {
+    if (options.path.contains('/construction/cabinets')) {
+      if (_cabinetRecoveryPermit != null &&
+          (!identical(
+                options.extra['cabinetRecoveryPermit'],
+                _cabinetRecoveryPermit,
+              ) ||
+              !_recoveryRequestAllowed(options))) {
+        _finishCabinetRequest(options);
+        handler.reject(
+          DioException(
+            requestOptions: options,
+            error: 'Gabinetes en soporte selectivo.',
+          ),
+        );
+        return;
+      }
+      _cabinetRequests++;
+      options.extra['_cabinetInFlight'] = true;
+    }
     options.headers['X-Request-ID'] = const Uuid().v4();
     if (options.extra['skipAuth'] != true) {
       final session = await _sessions.read();
@@ -38,10 +151,26 @@ class ApiClient {
       if (actor != null &&
           (session?.kind != SessionKind.field ||
               session?.userId.toLowerCase() != actor)) {
+        _finishCabinetRequest(options);
         handler.reject(
           DioException(
             requestOptions: options,
             error: 'La sesión cambió; operación conservada.',
+          ),
+        );
+        return;
+      }
+      final expectedSession = options.extra['expectedSessionId'];
+      final expectedInstallation = options.extra['expectedInstallationId'];
+      if ((expectedSession != null &&
+              session?.sessionId.toLowerCase() != expectedSession) ||
+          (expectedInstallation != null &&
+              session?.installationId.toLowerCase() != expectedInstallation)) {
+        _finishCabinetRequest(options);
+        handler.reject(
+          DioException(
+            requestOptions: options,
+            error: 'La sesión o instalación cambió; operación conservada.',
           ),
         );
         return;
@@ -63,6 +192,7 @@ class ApiClient {
     ErrorInterceptorHandler handler,
   ) async {
     final request = error.requestOptions;
+    _finishCabinetRequest(request);
     if (error.response?.statusCode != 401 ||
         request.extra['skipAuth'] == true ||
         request.extra['refreshed'] == true ||

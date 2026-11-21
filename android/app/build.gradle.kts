@@ -31,6 +31,17 @@ if (releaseRequested) {
     }
 }
 
+// Explicit opt-in; leaves ordinary debug and release identities unchanged.
+val cabinetRecovery = providers.gradleProperty("cabinetRecovery").orNull == "true"
+val hydrostaticTest = providers.gradleProperty("hydrostaticTest").orNull == "true"
+val hydrostaticSyncTest = providers.gradleProperty("hydrostaticSyncTest").orNull == "true"
+if (listOf(hydrostaticTest, hydrostaticSyncTest, cabinetRecovery).count { it } > 1) {
+    throw GradleException("Select one isolated QA variant.")
+}
+if ((hydrostaticTest || hydrostaticSyncTest) && releaseRequested) {
+    throw GradleException("Hydrostatic certification is debug-only.")
+}
+
 android {
     namespace = "com.aquafim.ddr001levantamientos"
     compileSdk = flutter.compileSdkVersion
@@ -45,8 +56,26 @@ android {
         applicationId = "com.aquafim.ddr001levantamientos"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
+        manifestPlaceholders["appLabel"] = "AQ NH DDR001"
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+    }
+
+    if (hydrostaticTest) {
+        sourceSets.getByName("debug").manifest.srcFile("src/hydrostaticTest/AndroidManifest.xml")
+    }
+
+    if (hydrostaticSyncTest) {
+        sourceSets.getByName("debug").manifest.srcFile("src/hydrostaticSyncTest/AndroidManifest.xml")
+        sourceSets.getByName("debug").res.srcDir("src/hydrostaticSyncTest/res")
+    }
+
+    if (cabinetRecovery) {
+        if (providers.gradleProperty("target").orNull != "lib/recovery_main.dart") {
+            throw GradleException("Recovery requires the dedicated entrypoint")
+        }
+        sourceSets.getByName("release").manifest.srcFile("src/recovery/AndroidManifest.xml")
+        sourceSets.getByName("release").java.srcDir("src/recovery/kotlin")
     }
 
     signingConfigs {
@@ -59,6 +88,10 @@ android {
     }
 
     buildTypes {
+        debug {
+            applicationIdSuffix = if (hydrostaticSyncTest) ".hydrosyncqa" else if (hydrostaticTest) ".hydrotest" else ".test"
+            manifestPlaceholders["appLabel"] = if (hydrostaticSyncTest) "DDR001 HIDRO SYNC TEST" else if (hydrostaticTest) "DDR001 HIDRO TEST" else "AQ NH DDR001 TEST"
+        }
         release {
             signingConfig = signingConfigs.getByName("release")
         }
