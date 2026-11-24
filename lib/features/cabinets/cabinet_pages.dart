@@ -10,7 +10,6 @@ import '../../data/cabinets/cabinet_controller.dart';
 import '../../domain/cabinets/cabinet_models.dart';
 import '../../domain/cabinets/cabinet_safety.dart';
 import 'cabinet_safety_widgets.dart';
-import 'legacy_recovery_page.dart';
 import '../../domain/construction/construction_models.dart' as bases;
 
 final _cabinetActions = Expando<bool>();
@@ -172,17 +171,6 @@ class _CabinetsPageState extends State<CabinetsPage> {
           widget.installation ? 'Instalar gabinete' : 'Registrar gabinete',
         ),
         actions: [
-          if (c.supportAvailable)
-            IconButton(
-              tooltip: 'Soporte de gabinetes históricos',
-              icon: const Icon(Icons.support_agent),
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => LegacyRecoveryPage(controller: c),
-                ),
-              ),
-            ),
           IconButton(
             tooltip: 'Sincronización',
             onPressed: () => Navigator.push(
@@ -200,10 +188,6 @@ class _CabinetsPageState extends State<CabinetsPage> {
       ),
       body: Column(
         children: [
-          if (c.supportHeld)
-            const Text(
-              'Gabinetes pausados por soporte; abre soporte para revisar o cerrar la pausa.',
-            ),
           if (c.refreshing) const LinearProgressIndicator(),
           if (c.refreshError != null)
             ListTile(
