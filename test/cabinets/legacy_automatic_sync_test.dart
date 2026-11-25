@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:ddr001_levantamientos/features/home/home_page.dart';
@@ -491,41 +492,98 @@ void main() {
       );
     },
   );
-  testWidgets(
-    'only main sync gesture starts batch; offline run shows pending and transmits nothing',
-    (tester) async {
-      h.app.online = false;
-      final batch = LegacyAutomaticSync.forController(h.controller);
-      await tester.pumpWidget(
-        MultiProvider(
-          providers: [
-            ChangeNotifierProvider.value(value: h.app),
-            ChangeNotifierProvider.value(value: h.controller),
-          ],
-          child: const MaterialApp(home: HomePage()),
-        ),
-      );
-      expect(batch.result, isNull);
-      final sync = find.byTooltip('Intentar sincronizar');
-      await tester.scrollUntilVisible(sync, 300);
-      await tester.runAsync(() async {
-        await tester.tap(sync);
-        for (var i = 0; i < 100 && batch.busy; i++) {
-          await Future<void>.delayed(const Duration(milliseconds: 10));
+  for (final connected in [true, false]) {
+    testWidgets(
+      'home retries ordinary sync with connection=$connected without historical recovery',
+      (tester) async {
+        h.app.online = false;
+        final batch = LegacyAutomaticSync.forController(h.controller);
+        final before = {
+          for (final id in ids) id: jsonEncode(h.store.read(id)!.json),
+        };
+        final requests = <RequestOptions>[];
+        h.client.dio.interceptors.add(
+          InterceptorsWrapper(
+            onRequest: (options, handler) {
+              requests.add(options);
+              if (connected) {
+                handler.resolve(
+                  Response(
+                    requestOptions: options,
+                    statusCode: 200,
+                    data: {'items': [], 'total': 0},
+                  ),
+                );
+              } else {
+                handler.reject(
+                  DioException(
+                    requestOptions: options,
+                    type: DioExceptionType.connectionError,
+                    message: 'Simulated offline connection',
+                  ),
+                );
+              }
+            },
+          ),
+        );
+        try {
+          await tester.pumpWidget(
+            MultiProvider(
+              providers: [
+                ChangeNotifierProvider.value(value: h.app),
+                ChangeNotifierProvider.value(value: h.controller),
+              ],
+              child: const MaterialApp(home: HomePage()),
+            ),
+          );
+          expect(batch.result, isNull);
+          final sync = find.byTooltip('Intentar sincronizar');
+          await tester.scrollUntilVisible(sync, 300);
+          expect(requests, isEmpty);
+          final button = tester.widget<IconButton>(
+            find.ancestor(of: sync, matching: find.byType(IconButton)),
+          );
+          await tester.runAsync(() async {
+            // Await the button's async handler through both ordinary syncs,
+            // including Hive writes, before disposing either controller.
+            await (button.onPressed! as Future<void> Function())();
+            // Reconnecting refreshes cabinets and can start another ordinary
+            // sync. Drain that background work before closing the Hive store.
+            final deadline = Stopwatch()..start();
+            do {
+              await Future<void>.delayed(const Duration(milliseconds: 10));
+              if (deadline.elapsed > const Duration(seconds: 10)) {
+                fail('Ordinary synchronization did not finish');
+              }
+            } while (h.app.syncing ||
+                h.controller.refreshing ||
+                h.controller.syncing);
+          });
+          await tester.pumpAndSettle();
+          expect(requests, hasLength(1));
+          expect(requests.single.method, 'GET');
+          expect(requests.single.path, endsWith('/resident/base-surveys'));
+          expect(h.app.online, connected);
+          expect(h.app.syncing, isFalse);
+          expect(h.controller.syncing, isFalse);
+          expect(batch.busy, isFalse);
+          expect(batch.result, isNull);
+          expect(remote.calls, isEmpty);
+          expect(remote.uploads, isEmpty);
+          for (final id in ids) {
+            expect(jsonEncode(h.store.read(id)!.json), before[id]);
+          }
+          expect(
+            find.text(connected ? 'Información pendiente' : 'Sin conexión'),
+            findsOneWidget,
+          );
+          expect(find.textContaining('Históricos procesados:'), findsNothing);
+        } finally {
+          await tester.pumpWidget(const SizedBox());
         }
-      });
-      await tester.pumpAndSettle();
-      expect(batch.result?['globalCode'], 'OFFLINE');
-      expect(remote.calls, isEmpty);
-      expect(remote.uploads, isEmpty);
-      expect(find.text('Sincronización con pendientes'), findsOneWidget);
-      expect(
-        find.textContaining('Históricos procesados: 0 de 10'),
-        findsOneWidget,
-      );
-      await tester.pumpWidget(const SizedBox());
-    },
-  );
+      },
+    );
+  }
   test(
     'default engine blocks incomplete originals without uploading and preserves all ten',
     () async {
