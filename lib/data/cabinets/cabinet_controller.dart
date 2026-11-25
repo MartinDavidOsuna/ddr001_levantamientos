@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart' show kReleaseMode;
 import 'package:flutter/widgets.dart';
 import 'package:uuid/uuid.dart';
 import '../../core/media/photo_capture_service.dart';
@@ -57,6 +58,7 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
   Object? _automaticBatch;
   String? _automaticActor, _automaticSession;
   bool get automaticHistoricalAvailable =>
+      !kReleaseMode &&
       allowed &&
       (app.config.environment == 'test' ||
           (legacyAutomaticEnabled &&
@@ -106,10 +108,13 @@ class CabinetController extends ChangeNotifier with WidgetsBindingObserver {
 
   bool _recoveringPhotos = false;
   bool get supportHeld =>
-      _supportOwner != null ||
-      store.box.get('legacy_support_hold_v1') == 'true';
+      !kReleaseMode &&
+      (_supportOwner != null ||
+          store.box.get('legacy_support_hold_v1') == 'true');
   bool get supportAvailable =>
-      allowed && (legacySupportEnabled || app.config.environment == 'test');
+      !kReleaseMode &&
+      allowed &&
+      (legacySupportEnabled || app.config.environment == 'test');
   bool _supportRequested = false;
   String _syncPhase = 'inactivo';
   String? _syncCommand;

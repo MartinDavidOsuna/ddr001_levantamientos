@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart' show kReleaseMode;
+
 import '../../domain/cabinets/cabinet_models.dart';
 
 const legacyCabinetUids = {
@@ -30,6 +32,8 @@ const legacyPilotUid = 'AQ26000068';
 const legacySupportEnabled = bool.fromEnvironment(
   'CABINET_LEGACY_RECOVERY_ENABLED',
 );
+// Release builds do not apply incident-specific UID filtering.
 bool legacyProtected(CabinetRecord r) =>
+    !kReleaseMode &&
     legacyCabinetUids.contains(r.working['uid']) &&
     (legacyAutomaticEnabled || r.json['legacyRecoveryCompleted'] != true);

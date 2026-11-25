@@ -5,8 +5,6 @@ import '../../core/widgets/branded_app_bar_title.dart';
 import '../../domain/construction/construction_models.dart';
 import '../surveys/new_survey_page.dart';
 import '../../data/cabinets/cabinet_controller.dart';
-import '../../data/cabinets/legacy_automatic_sync.dart';
-import '../../domain/cabinets/cabinet_models.dart' show objects;
 import '../cabinets/cabinet_pages.dart';
 import '../resident/resident_review_page.dart';
 import '../hydrostatic/hydrostatic_controller.dart';
@@ -23,13 +21,7 @@ class HomePage extends StatelessWidget {
     final hydrostatic = context.watch<HydrostaticController?>();
     final cabinetPending =
         cabinets?.records.where((r) => !r.synchronized).length ?? 0;
-    final automatic = cabinets == null
-        ? null
-        : LegacyAutomaticSync.forController(cabinets);
-    final allSyncing =
-        app.syncing ||
-        (cabinets?.syncing ?? false) ||
-        (automatic?.busy ?? false);
+    final allSyncing = app.syncing || (cabinets?.syncing ?? false);
     return Scaffold(
       appBar: AppBar(title: const BrandedAppBarTitle('DDR001 Levantamientos')),
       body: ListView(
@@ -154,9 +146,6 @@ class HomePage extends StatelessWidget {
               title: Text(
                 allSyncing
                     ? 'Sincronizando'
-                    : (automatic?.hasVisibleResult ?? false) &&
-                          automatic!.result!['status'] != 'complete'
-                    ? 'Sincronización con pendientes'
                     : app.online
                     ? app.visibleQueue.isEmpty && cabinetPending == 0
                           ? 'Sincronizado'
@@ -170,17 +159,9 @@ class HomePage extends StatelessWidget {
                 tooltip: 'Intentar sincronizar',
                 onPressed: app.session != null && !allSyncing
                     ? () async {
-                        Future<void> ordinary() async {
-                          await app.synchronize(force: true);
-                          if (cabinets?.allowed ?? false) {
-                            await cabinets!.synchronize(force: true);
-                          }
-                        }
-
-                        if (automatic != null) {
-                          await automatic.runFromHome(ordinary);
-                        } else {
-                          await ordinary();
+                        await app.synchronize(force: true);
+                        if (cabinets?.allowed ?? false) {
+                          await cabinets!.synchronize(force: true);
                         }
                       }
                     : null,
@@ -188,22 +169,6 @@ class HomePage extends StatelessWidget {
               ),
             ),
           ),
-          if (automatic?.hasVisibleResult ?? false)
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(automatic!.summary),
-                    for (final row in objects(
-                      automatic.result?['rows'],
-                    ).where((r) => r['status'] == 'blocked'))
-                      Text('${row['uid']}: ${row['message']}'),
-                  ],
-                ),
-              ),
-            ),
         ],
       ),
     );
